@@ -1,0 +1,30 @@
+{
+  "_template": true,
+  "_note": "请按此模板填充2023年全国卷化学真题数据",
+  "paper_name": "2023年普通高等学校招生全国统一考试化学",
+  "region": "全国卷",
+  "year": 2023,
+  "total_score": 100,
+  "exam_date": "2023-06-08",
+  "questions": [
+    {
+      "exam_id": "nat_2023_tODO",
+      "source": "全国卷2023",
+      "year": 2023,
+      "region": "全国卷",
+      "paper_name": "2023年普通高等学校招生全国统一考试化学",
+      "question_number": "T1",
+      "original_number": "1",
+      "question_type": "single_choice",
+      "content": "【待填充真题内容】",
+      "options": ["A.", "B.", "C.", "D."],
+      "answer": "A",
+      "analysis": "【待填充解析】",
+      "knowledge_points": ["知识点1", "知识点2"],
+      "difficulty": "easy/medium/hard",
+      "discrimination": 0.5,
+      "score": 6,
+      "chapter": "章节名称"
+    }
+  ]
+}

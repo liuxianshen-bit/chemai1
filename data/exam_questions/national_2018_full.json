@@ -1,0 +1,278 @@
+{
+  "paper_name": "2018年全国卷高考化学试卷",
+  "region": "全国卷",
+  "year": 2018,
+  "total_score": 100,
+  "exam_date": "2018-06-08",
+  "questions": [
+    {
+      "exam_id": "全国卷_2018_t1",
+      "source": "全国卷2018",
+      "year": 2018,
+      "region": "全国卷",
+      "paper_name": "2018年全国卷高考化学试卷",
+      "question_number": "T1",
+      "original_number": "1",
+      "question_type": "single_choice",
+      "content": "磷酸亚铁锂（LiFePO4）电池是新能源汽车的动力电池之一，采用湿法",
+      "options": [
+        "A. 合理处理废旧电池有利于保护环境和资源再利用",
+        "B. 从“正极片”中可回收的金属元素有 Al、Fe、Li",
+        "C. “沉淀”反应的金属离子为 Fe3+",
+        "D. 上述流程中可用硫酸钠代替碳酸钠"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "金属",
+        "新能源"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "金属"
+    },
+    {
+      "exam_id": "全国卷_2018_t2",
+      "source": "全国卷2018",
+      "year": 2018,
+      "region": "全国卷",
+      "paper_name": "2018年全国卷高考化学试卷",
+      "question_number": "T2",
+      "original_number": "2",
+      "question_type": "single_choice",
+      "content": "下列说法错误的是（ ）",
+      "options": [
+        "A. 蔗糖、果糖和麦芽糖均为双糖",
+        "B. 酶是一类具有高选择催化性能的蛋白质",
+        "C. 植物油含不饱和脂肪酸酯，能使 Br2/CCl4 褪色",
+        "D. 淀粉和纤维素水解的最终产物均为葡萄糖"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "综合"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "综合"
+    },
+    {
+      "exam_id": "全国卷_2018_t3",
+      "source": "全国卷2018",
+      "year": 2018,
+      "region": "全国卷",
+      "paper_name": "2018年全国卷高考化学试卷",
+      "question_number": "T3",
+      "original_number": "3",
+      "question_type": "short_answer",
+      "content": "在生成和纯化乙酸乙酯的实验过程中，下列操作未涉及的是（ ）",
+      "options": [
+        "A. B．                        C．              D．"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "实验"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "实验"
+    },
+    {
+      "exam_id": "全国卷_2018_t4",
+      "source": "全国卷2018",
+      "year": 2018,
+      "region": "全国卷",
+      "paper_name": "2018年全国卷高考化学试卷",
+      "question_number": "T4",
+      "original_number": "4",
+      "question_type": "single_choice",
+      "content": "NA 是阿伏加德罗常数的值，下列说法正确的是（ ）",
+      "options": [
+        "A. 16.25gFeCl3，水解形成的 Fe（OH）3 为胶体粒子数为 0.1NA",
+        "B. 22.4L（标准状况）氩气含有的质子数为 18NA",
+        "C. 92.0g 甘油（丙三醇）中含有羟基数为 1.0NA",
+        "D. 1.0molCH4 与 Cl2 在光照下生成 CH3Cl 的分子数为 1.0NA"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "物质的量"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "物质的量"
+    },
+    {
+      "exam_id": "全国卷_2018_t5",
+      "source": "全国卷2018",
+      "year": 2018,
+      "region": "全国卷",
+      "paper_name": "2018年全国卷高考化学试卷",
+      "question_number": "T5",
+      "original_number": "5",
+      "question_type": "short_answer",
+      "content": "环之间共用一个碳原子的化合物称为螺环化合物，螺（2，2）戊烷",
+      "options": [
+        "A. 与环戊烯互为同分异构体 B．二氯化物超过两种",
+        "C. 所有碳原子均处同一平面 D．生成 1molC5H12，至少需要 2molH2"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "综合"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "综合"
+    },
+    {
+      "exam_id": "全国卷_2018_t6",
+      "source": "全国卷2018",
+      "year": 2018,
+      "region": "全国卷",
+      "paper_name": "2018年全国卷高考化学试卷",
+      "question_number": "T6",
+      "original_number": "6",
+      "question_type": "single_choice",
+      "content": "主族元素 W、X、Y、Z 的原子序数依次增加，且均不大于 20．W、X、",
+      "options": [
+        "A. 常温常压下 X 的单质为气态",
+        "B. Z 的氢化物为离子化合物",
+        "C. Y 和 Z 形成的化合物的水溶液呈碱性",
+        "D. W 与 Y 具有相同的最高化合价"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "综合"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "综合"
+    },
+    {
+      "exam_id": "全国卷_2018_t7",
+      "source": "全国卷2018",
+      "year": 2018,
+      "region": "全国卷",
+      "paper_name": "2018年全国卷高考化学试卷",
+      "question_number": "T7",
+      "original_number": "7",
+      "question_type": "single_choice",
+      "content": "最近我国科学家设计了一种 CO2+H2S 协同转化装置，实现对天然气中",
+      "options": [
+        "A. 阴极的电极反应：CO2+2H++2e﹣═CO+H2O",
+        "B. 协同转化总反应：CO2+H2S═CO+H2O+S",
+        "C. 石墨烯上的电势比 ZnO@石墨烯上的低",
+        "D. 若采用 Fe3+/Fe2+取代 EDTA﹣Fe3+/EDTA﹣Fe2+，溶液需为酸性"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "综合"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "综合"
+    },
+    {
+      "exam_id": "全国卷_2018_t8",
+      "source": "全国卷2018",
+      "year": 2018,
+      "region": "全国卷",
+      "paper_name": "2018年全国卷高考化学试卷",
+      "question_number": "T8",
+      "original_number": "8",
+      "question_type": "short_answer",
+      "content": "醋酸亚铬[（CH3COO）2Cr•2H2O]为砖红色晶体，难溶于冷水，易溶",
+      "options": null,
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "晶体"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "晶体"
+    },
+    {
+      "exam_id": "全国卷_2018_t9",
+      "source": "全国卷2018",
+      "year": 2018,
+      "region": "全国卷",
+      "paper_name": "2018年全国卷高考化学试卷",
+      "question_number": "T9",
+      "original_number": "9",
+      "question_type": "short_answer",
+      "content": "焦亚硫酸钠（Na2S2O5）在医药、橡胶、印染、食品等方面应用广泛。",
+      "options": null,
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "非金属"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "非金属"
+    },
+    {
+      "exam_id": "全国卷_2018_t10",
+      "source": "全国卷2018",
+      "year": 2018,
+      "region": "全国卷",
+      "paper_name": "2018年全国卷高考化学试卷",
+      "question_number": "T10",
+      "original_number": "10",
+      "question_type": "single_choice",
+      "content": "采用 N2O5 为硝化剂是一种新型的绿色硝化技术，在含能材料、医",
+      "options": [
+        "A. v（第一步的逆反应）＞v（第二步反应）",
+        "B. 反应的中间产物只有 NO3",
+        "C. 第二步中 NO2 与 NO3 的碰撞仅部分有效",
+        "D. 第三步反应活化能较高"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "综合"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "综合"
+    },
+    {
+      "exam_id": "全国卷_2018_t11",
+      "source": "全国卷2018",
+      "year": 2018,
+      "region": "全国卷",
+      "paper_name": "2018年全国卷高考化学试卷",
+      "question_number": "T11",
+      "original_number": "11",
+      "question_type": "short_answer",
+      "content": "Li 是最轻的固体金属，采用 Li 作为负极材料的电池具有小而轻、能",
+      "options": [
+        "A. 离子键 B．σ 键 C．π 键 D．氢键"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "金属"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "金属"
+    }
+  ]
+}

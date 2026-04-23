@@ -1,0 +1,443 @@
+/**
+ * 学生端样式 - 学习计划扩展
+ * Design: Study Journey Journal
+ */
+
+/* ============================================
+   学习计划页面
+   ============================================ */
+
+.learning-plan-page {
+  animation: fadeIn 0.4s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 计划头部 */
+.plan-header {
+  background: var(--gradient-primary);
+  border-radius: var(--radius-xl);
+  padding: var(--space-xl);
+  color: white;
+  margin-bottom: var(--space-lg);
+  position: relative;
+  overflow: hidden;
+}
+
+.plan-header::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  right: -20%;
+  width: 200px;
+  height: 200px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+}
+
+.plan-title {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: var(--space-xs);
+}
+
+.plan-period {
+  font-size: 0.875rem;
+  opacity: 0.9;
+}
+
+/* 障碍干预卡片 */
+.barrier-intervention {
+  margin-bottom: var(--space-lg);
+}
+
+.barrier-intervention h3 {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-md);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.intervention-card {
+  background: var(--bg-card-solid);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  margin-bottom: var(--space-md);
+  border-left: 4px solid var(--accent-cyan);
+  box-shadow: var(--shadow-sm);
+}
+
+.intervention-card.concept { border-left-color: var(--barrier-concept); }
+.intervention-card.reading { border-left-color: var(--barrier-reading); }
+.intervention-card.expression { border-left-color: var(--barrier-expression); }
+
+.intervention-header {
+  margin-bottom: var(--space-md);
+}
+
+.intervention-content p {
+  font-size: 0.9375rem;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-sm);
+}
+
+.intervention-content strong {
+  color: var(--text-primary);
+}
+
+/* 区域标题 */
+.plan-section {
+  margin-bottom: var(--space-xl);
+}
+
+.section-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--space-md);
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.section-title::before {
+  content: '';
+  width: 4px;
+  height: 16px;
+  background: var(--accent-cyan);
+  border-radius: 2px;
+}
+
+/* 每日任务卡片 */
+.daily-tasks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.daily-task-card {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-md);
+  background: var(--bg-card-solid);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  box-shadow: var(--shadow-sm);
+  transition: all 0.3s ease;
+  border: 1px solid transparent;
+}
+
+.daily-task-card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateX(4px);
+}
+
+.daily-task-card.completed {
+  opacity: 0.6;
+  background: var(--bg-tertiary);
+}
+
+.daily-task-card.completed .task-text {
+  text-decoration: line-through;
+}
+
+.task-checkbox {
+  width: 28px;
+  height: 28px;
+  border: 2px solid var(--border-default);
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0.875rem;
+  color: transparent;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.task-checkbox:hover {
+  border-color: var(--accent-cyan);
+  color: var(--accent-cyan);
+}
+
+.daily-task-card.completed .task-checkbox {
+  background: var(--status-success);
+  border-color: var(--status-success);
+  color: white;
+}
+
+.task-content {
+  flex: 1;
+}
+
+.task-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-sm);
+}
+
+.task-day {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 0.9375rem;
+}
+
+.task-duration {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+}
+
+.task-text {
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin-bottom: var(--space-sm);
+}
+
+.task-resource {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  color: var(--accent-teal);
+  background: var(--accent-teal-bg);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+}
+
+/* 周目标卡片 */
+.weekly-goals {
+  display: grid;
+  gap: var(--space-md);
+}
+
+.week-card {
+  background: var(--bg-card-solid);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.week-header {
+  font-weight: 700;
+  color: var(--accent-cyan);
+  margin-bottom: var(--space-md);
+  font-size: 1rem;
+}
+
+.week-goals-list {
+  list-style: none;
+  margin-bottom: var(--space-md);
+}
+
+.week-goals-list li {
+  position: relative;
+  padding-left: var(--space-lg);
+  margin-bottom: var(--space-sm);
+  color: var(--text-secondary);
+  font-size: 0.9375rem;
+}
+
+.week-goals-list li::before {
+  content: '→';
+  position: absolute;
+  left: 0;
+  color: var(--accent-cyan);
+}
+
+.milestone {
+  background: var(--accent-amber-dim);
+  color: var(--accent-amber);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+/* 激励语 */
+.motivation-tips {
+  background: linear-gradient(135deg, var(--accent-cyan-dim), var(--accent-teal-bg));
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  margin-bottom: var(--space-lg);
+  text-align: center;
+}
+
+.motivation-tips p {
+  color: var(--accent-cyan);
+  font-weight: 500;
+  margin: 0;
+}
+
+/* 家长建议 */
+.parent-suggestion {
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+}
+
+.parent-suggestion h4 {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-sm);
+}
+
+.parent-suggestion p {
+  color: var(--text-primary);
+  font-size: 0.9375rem;
+  line-height: 1.6;
+}
+
+/* 学习计划弹窗 */
+#learning-plan-modal .modal {
+  max-width: 480px;
+}
+
+.plan-summary {
+  text-align: center;
+  margin-bottom: var(--space-lg);
+}
+
+.plan-summary h3 {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  color: var(--text-primary);
+  margin-bottom: var(--space-xs);
+}
+
+.plan-summary .plan-period {
+  color: var(--text-secondary);
+}
+
+.plan-quick-view {
+  display: flex;
+  justify-content: space-around;
+  margin-bottom: var(--space-xl);
+}
+
+.quick-item {
+  text-align: center;
+}
+
+.quick-icon {
+  font-size: 1.5rem;
+  display: block;
+  margin-bottom: var(--space-xs);
+}
+
+.quick-value {
+  display: block;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.quick-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.plan-actions {
+  display: flex;
+  gap: var(--space-md);
+  justify-content: center;
+}
+
+.plan-actions .btn {
+  flex: 1;
+}
+
+/* 学习计划入口卡片 (在练习结果页) */
+.learning-plan-entrance {
+  background: linear-gradient(135deg, var(--accent-cyan-dim) 0%, var(--accent-purple-dim) 100%);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  margin-bottom: var(--space-lg);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  border: 1px solid transparent;
+}
+
+.learning-plan-entrance:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--accent-cyan);
+}
+
+.learning-plan-entrance-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-sm);
+}
+
+.learning-plan-entrance-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.learning-plan-entrance-title .icon {
+  font-size: 1.25rem;
+}
+
+.learning-plan-entrance-badge {
+  background: var(--accent-cyan);
+  color: white;
+  font-size: 0.6875rem;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+}
+
+.learning-plan-entrance-desc {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-md);
+}
+
+.learning-plan-entrance-meta {
+  display: flex;
+  gap: var(--space-lg);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.learning-plan-entrance-meta span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 空状态 */
+.learning-plan-page .empty-state {
+  text-align: center;
+  padding: var(--space-2xl);
+}
+
+/* 障碍标签 */
+.barrier-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: white;
+}
+
+.barrier-tag.concept { background: var(--barrier-concept); }
+.barrier-tag.reading { background: var(--barrier-reading); }
+.barrier-tag.expression { background: var(--barrier-expression); }

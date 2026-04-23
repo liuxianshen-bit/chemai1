@@ -1,0 +1,27 @@
+# Web Framework
+fastapi==0.109.2
+uvicorn[standard]==0.27.1
+python-multipart==0.0.9
+
+# Database
+sqlalchemy==2.0.25
+pymysql==1.1.0
+alembic==1.13.1
+
+# AI/ML
+dashscope==1.20.0  # 通义千问API
+chromadb==0.4.22
+tencentcloud-sdk-python-ocr==1.0.2752  # 腾讯OCR
+
+# Utils
+pydantic==2.6.1
+pydantic-settings==2.1.0
+python-dotenv==1.0.1
+httpx==0.26.0
+
+# Chemistry
+rdkit==2024.3.1  # 化学结构处理
+
+# Testing
+pytest==8.0.0
+pytest-asyncio==0.23.4

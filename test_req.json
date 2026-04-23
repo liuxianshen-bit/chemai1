@@ -1,0 +1,1 @@
+{"model": "glm-4v", "messages": [{"role": "user", "content": [{"type": "image_url", "image_url": {"url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwAHgQ/VTb9HwAAAABJRU5ErkJggg=="}}, {"type": "text", "text": "请描述这张图片"}]}], "temperature": 0.1, "max_tokens": 2000}

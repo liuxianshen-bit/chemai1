@@ -1,0 +1,357 @@
+{
+  "total": 70,
+  "passed": 67,
+  "failed": 3,
+  "results": [
+    {
+      "name": "AUTH-001 管理员登录",
+      "passed": true,
+      "detail": "有token:True"
+    },
+    {
+      "name": "AUTH-002 用户注册",
+      "passed": true,
+      "detail": "Status: 422"
+    },
+    {
+      "name": "AUTH-003 获取当前用户",
+      "passed": true,
+      "detail": "Status: 200"
+    },
+    {
+      "name": "F1-OCR-001 Health Check",
+      "passed": true,
+      "detail": "Status: 200"
+    },
+    {
+      "name": "F1-OCR-002 OCR Recognize API",
+      "passed": true,
+      "detail": "Status: 422"
+    },
+    {
+      "name": "F1-OCR-003 OCR Stats API",
+      "passed": true,
+      "detail": "Status: 422"
+    },
+    {
+      "name": "F1-OCR-004 OCR Batch API",
+      "passed": true,
+      "detail": "Status: 422"
+    },
+    {
+      "name": "F2-GEN-001 AI出题-单知识点",
+      "passed": true,
+      "detail": "生成3道题"
+    },
+    {
+      "name": "F2-AUD-001 审核速度<=3秒",
+      "passed": true,
+      "detail": "耗时2.07秒"
+    },
+    {
+      "name": "F2-AUD-002 审核报告结构",
+      "passed": true,
+      "detail": "coefficient:True, condition:True, product:True"
+    },
+    {
+      "name": "F2-AUD-003 Historical Questions API",
+      "passed": true,
+      "detail": "Status: 200"
+    },
+    {
+      "name": "F2-AUD-004 Exam Sets API",
+      "passed": true,
+      "detail": "Status: 200"
+    },
+    {
+      "name": "F2-AUD-005 Manual Select API",
+      "passed": true,
+      "detail": "Status: 422"
+    },
+    {
+      "name": "配平-通过-2H2 + O2 = 2H2O",
+      "passed": true,
+      "detail": "期望:passed, 实际:passed"
+    },
+    {
+      "name": "配平-通过-N2 + 3H2 = 2NH3",
+      "passed": true,
+      "detail": "期望:passed, 实际:passed"
+    },
+    {
+      "name": "配平-通过-CH4 + 2O2 = CO2",
+      "passed": true,
+      "detail": "期望:passed, 实际:passed"
+    },
+    {
+      "name": "配平-通过-4Fe + 3O2 = 2Fe",
+      "passed": true,
+      "detail": "期望:passed, 实际:passed"
+    },
+    {
+      "name": "配平-通过-2Mg + O2 = 2MgO",
+      "passed": true,
+      "detail": "期望:passed, 实际:passed"
+    },
+    {
+      "name": "配平-通过-Zn + 2HCl = ZnC",
+      "passed": true,
+      "detail": "期望:passed, 实际:passed"
+    },
+    {
+      "name": "配平-通过-Fe + 2HCl = FeC",
+      "passed": true,
+      "detail": "期望:passed, 实际:passed"
+    },
+    {
+      "name": "配平-通过-NaOH + HCl = Na",
+      "passed": true,
+      "detail": "期望:passed, 实际:passed"
+    },
+    {
+      "name": "配平-通过-S + O2 = SO2",
+      "passed": true,
+      "detail": "期望:passed, 实际:passed"
+    },
+    {
+      "name": "配平-通过-2Cu + O2 = 2CuO",
+      "passed": true,
+      "detail": "期望:passed, 实际:passed"
+    },
+    {
+      "name": "配平-失败-H2 + O2 = H2O",
+      "passed": true,
+      "detail": "期望:blocked, 实际:blocked"
+    },
+    {
+      "name": "配平-失败-Fe + O2 -> Fe2O",
+      "passed": true,
+      "detail": "期望:blocked, 实际:blocked"
+    },
+    {
+      "name": "配平-失败-Al + O2 = Al2O3",
+      "passed": true,
+      "detail": "期望:blocked, 实际:blocked"
+    },
+    {
+      "name": "配平-失败-CH4 + O2 = CO2 ",
+      "passed": true,
+      "detail": "期望:blocked, 实际:blocked"
+    },
+    {
+      "name": "配平-失败-Na + Cl2 = NaCl",
+      "passed": true,
+      "detail": "期望:blocked, 实际:blocked"
+    },
+    {
+      "name": "配平-失败-Mg + O2 = MgO",
+      "passed": true,
+      "detail": "期望:blocked, 实际:blocked"
+    },
+    {
+      "name": "配平-失败-C + O2 = CO",
+      "passed": true,
+      "detail": "期望:blocked, 实际:blocked"
+    },
+    {
+      "name": "配平-失败-Zn + HCl = ZnCl",
+      "passed": true,
+      "detail": "期望:blocked, 实际:blocked"
+    },
+    {
+      "name": "配平-失败-Fe + HCl = FeCl",
+      "passed": true,
+      "detail": "期望:blocked, 实际:blocked"
+    },
+    {
+      "name": "配平-失败-Ca(OH)2 + Na2CO",
+      "passed": true,
+      "detail": "期望:blocked, 实际:blocked"
+    },
+    {
+      "name": "条件-Fe + O2 -> Fe3O",
+      "passed": false,
+      "detail": "期望:warning, 实际:passed"
+    },
+    {
+      "name": "条件-CH4 + O2 -> CO2",
+      "passed": false,
+      "detail": "期望:warning, 实际:passed"
+    },
+    {
+      "name": "条件-2H2 + O2 = 2H2O",
+      "passed": true,
+      "detail": "期望:passed, 实际:passed"
+    },
+    {
+      "name": "条件-Cu + 2H2SO4(浓) ",
+      "passed": true,
+      "detail": "期望:passed, 实际:passed"
+    },
+    {
+      "name": "F3-RPT-001 老师报告API",
+      "passed": true,
+      "detail": "Status: 404"
+    },
+    {
+      "name": "F3-RPT-002 学生报告API",
+      "passed": true,
+      "detail": "Status: 404"
+    },
+    {
+      "name": "F3-RPT-003 发送报告API",
+      "passed": true,
+      "detail": "Status: 404"
+    },
+    {
+      "name": "F3-RPT-004 导出报告API",
+      "passed": true,
+      "detail": "Status: 404"
+    },
+    {
+      "name": "F4-DIA-001 班级诊断API",
+      "passed": true,
+      "detail": "Status: 404"
+    },
+    {
+      "name": "F4-DIA-002 学生诊断API",
+      "passed": true,
+      "detail": "Status: 404"
+    },
+    {
+      "name": "F4-CFG-001 诊断配置获取API",
+      "passed": true,
+      "detail": "Status: 200"
+    },
+    {
+      "name": "F4-CFG-002 诊断配置更新API",
+      "passed": true,
+      "detail": "Status: 200"
+    },
+    {
+      "name": "F4-DIA-003 学习计划生成API",
+      "passed": true,
+      "detail": "Status: 422"
+    },
+    {
+      "name": "F5-PRAC-001 布置练习API",
+      "passed": true,
+      "detail": "Status: 422"
+    },
+    {
+      "name": "F5-PRAC-002 学生练习任务API",
+      "passed": true,
+      "detail": "Status: 404"
+    },
+    {
+      "name": "F5-PRAC-003 提交答案API",
+      "passed": true,
+      "detail": "Status: 422"
+    },
+    {
+      "name": "F5-PRAC-004 练习效果API",
+      "passed": true,
+      "detail": "Status: 404"
+    },
+    {
+      "name": "F6-BANK-001 题库列表API",
+      "passed": true,
+      "detail": "Status: 200"
+    },
+    {
+      "name": "F6-BANK-002 创建题库API",
+      "passed": true,
+      "detail": "Status: 422"
+    },
+    {
+      "name": "F6-BANK-003 历史真题API",
+      "passed": true,
+      "detail": "Status: 200"
+    },
+    {
+      "name": "F6-BANK-004 格式化题目API",
+      "passed": true,
+      "detail": "Status: 422"
+    },
+    {
+      "name": "F7-PANEL-001 班级面板API",
+      "passed": true,
+      "detail": "Status: 404"
+    },
+    {
+      "name": "F7-PANEL-002 班级知识点面板API",
+      "passed": true,
+      "detail": "Status: 404"
+    },
+    {
+      "name": "F7-PANEL-003 学生详情面板API",
+      "passed": true,
+      "detail": "Status: 404"
+    },
+    {
+      "name": "F7-PANEL-004 班级趋势API",
+      "passed": true,
+      "detail": "Status: 404"
+    },
+    {
+      "name": "F7-PANEL-005 仪表盘API",
+      "passed": true,
+      "detail": "Status: 200"
+    },
+    {
+      "name": "F7-PANEL-006 导出面板API",
+      "passed": true,
+      "detail": "Status: 200"
+    },
+    {
+      "name": "CLASS-001 班级列表API",
+      "passed": true,
+      "detail": "Status: 200"
+    },
+    {
+      "name": "CLASS-002 创建班级API",
+      "passed": true,
+      "detail": "Status: 422"
+    },
+    {
+      "name": "CLASS-003 班级学生API",
+      "passed": true,
+      "detail": "Status: 404"
+    },
+    {
+      "name": "USER-001 学生列表API",
+      "passed": true,
+      "detail": "Status: 200"
+    },
+    {
+      "name": "USER-002 教师列表API",
+      "passed": true,
+      "detail": "Status: 200"
+    },
+    {
+      "name": "EXAM-001 创建考试API",
+      "passed": true,
+      "detail": "Status: 422"
+    },
+    {
+      "name": "EXAM-002 考试列表API",
+      "passed": true,
+      "detail": "Status: 404"
+    },
+    {
+      "name": "EXAM-003 考试详情API",
+      "passed": true,
+      "detail": "Status: 404"
+    },
+    {
+      "name": "PERF-001 审核响应时间(平均<=1秒)",
+      "passed": false,
+      "detail": "平均2.05秒"
+    },
+    {
+      "name": "PERF-002 审核响应时间(最大<=3秒)",
+      "passed": true,
+      "detail": "最大2.07秒"
+    }
+  ]
+}

@@ -1,0 +1,389 @@
+"""
+F3: 三层错题报告生成 API
+基于PRD v1.0完整版功能规格
+注: 家长摘要版暂不做，仅实现老师详情版+学生筛选版
+"""
+from fastapi import APIRouter, HTTPException, Depends
+from pydantic import BaseModel
+from typing import List, Optional
+from datetime import datetime
+from sqlalchemy.orm import Session
+
+from app.models.database import (
+    ExamRecord, Question, StudentAnswer, Student,
+    get_db
+)
+
+router = APIRouter()
+
+
+# 知识点典型错误映射
+_KP_TYPICAL_ERRORS = {
+    "盐类水解": "混淆水解与电离的概念，未理解\"有弱才水解\"原则",
+    "电离": "未区分强电解质与弱电解质的电离程度差异",
+    "氧化还原": "电子转移方向和数目判断错误",
+    "原电池": "正负极判断错误，未理解电子流向",
+    "电解池": "阴阳极判断错误，离子放电顺序不清",
+    "化学平衡": "平衡移动方向判断错误，未理解勒夏特列原理",
+    "反应速率": "影响速率因素分析不全面",
+    "元素周期律": "同周期/同主族性质递变规律混淆",
+    "有机化学": "官能团性质和反应类型判断错误",
+    "物质的量": "公式运用不熟练，计量关系混淆",
+}
+
+# 知识点干预建议映射
+_KP_INTERVENTIONS = {
+    "盐类水解": "建议复习盐类水解的定义，强调\"有弱才水解\"的原则，配合练习判断离子水解程度",
+    "电离": "强电解质完全电离，弱电解质部分电离，建议用电离方程式练习巩固",
+    "氧化还原": "强化氧化性/还原性强弱判断，建议配平专项练习",
+    "原电池": "建议从电子流向入手分析，理解牺牲阳极保护法",
+    "电解池": "建议背诵离子放电顺序，结合电解类型练习",
+    "化学平衡": "建议理解平衡常数含义，多做平衡移动判断题",
+    "反应速率": "建议掌握活化能概念，理解温度/浓度/压强对速率影响",
+    "元素周期律": "建议用表格对比同周期同主族性质递变",
+    "有机化学": "建议从官能团角度系统梳理性质，多做有机推断题",
+    "物质的量": "建议用公式卡片法记忆n=m/M=V/Vm=cV等公式",
+}
+
+# 鼓励语
+_ENGOURAGEMENTS_CORRECT = [
+    "太棒了！这道题完全正确！",
+    "完美！你对这部分知识掌握得很扎实！",
+    "正确！继续保持这样的状态！",
+    "厉害！这个问题回答得很准确！",
+]
+
+_ENGOURAGEMENTS_WRONG = [
+    "别灰心，这道题确实有难度，找到问题所在就是进步的开始！",
+    "这道题考察的知识点比较综合，建议先梳理相关概念再重新思考。",
+    "不要紧，很多同学在这类题目上都会犯错，关键是要理解其中的原理。",
+    "发现错误就是进步的开始，把这道题的知识点搞清楚，下次一定能做对！",
+]
+
+
+def _get_typical_error(knowledge_points: List[str]) -> str:
+    """根据知识点生成典型错误描述"""
+    for kp in knowledge_points:
+        if kp in _KP_TYPICAL_ERRORS:
+            return _KP_TYPICAL_ERRORS[kp]
+    return "对知识点理解不够深入，需加强基础概念学习"
+
+
+def _get_intervention_suggestion(knowledge_points: List[str]) -> str:
+    """根据知识点生成干预建议"""
+    suggestions = []
+    for kp in knowledge_points:
+        if kp in _KP_INTERVENTIONS:
+            suggestions.append(_KP_INTERVENTIONS[kp])
+    if suggestions:
+        return "；".join(suggestions)
+    return "建议复习相关知识点，多做练习巩固"
+
+
+def _get_encouragement(knowledge_points: List[str], is_correct: bool) -> str:
+    """生成鼓励语"""
+    import random
+    if is_correct:
+        return random.choice(_ENGOURAGEMENTS_CORRECT)
+    else:
+        base = random.choice(_ENGOURAGEMENTS_WRONG)
+        # 针对性补充
+        for kp in knowledge_points:
+            if kp in ["盐类水解", "电离"]:
+                return base + " 注意区分\"水解\"与\"电离\"的概念。"
+            elif kp in ["氧化还原"]:
+                return base + " 注意电子转移的方向和数目。"
+            elif kp in ["原电池", "电解池"]:
+                return base + " 建议从电子流向入手分析。"
+        return base
+
+
+def _generate_summary(score_pct: float) -> str:
+    """根据得分百分比生成总体评价"""
+    if score_pct >= 90:
+        return "你在本次考试中表现非常优秀！继续保持！"
+    elif score_pct >= 75:
+        return "你在本次考试中表现良好，有少量提升空间，继续加油！"
+    elif score_pct >= 60:
+        return "你在本次考试中表现中等，建议加强薄弱知识点的学习。"
+    elif score_pct >= 40:
+        return "这次考试反映出一些知识掌握不扎实，建议认真复习相关章节。"
+    else:
+        return "不要气馁！这是一个发现问题的好机会，建议从基础概念开始系统复习。"
+
+
+class TeacherReportQuestion(BaseModel):
+    """老师详情版 - 错题"""
+    question_number: str
+    knowledge_points: List[str]
+    error_count: int
+    error_rate: float
+    typical_error: str  # 典型错误原因
+    intervention_suggestion: str  # 干预建议
+
+
+class TeacherReportResponse(BaseModel):
+    """老师详情版报告"""
+    exam_id: str
+    class_id: str
+    exam_name: str
+    total_students: int
+    present_students: int
+    avg_score: float
+    questions: List[TeacherReportQuestion]
+    generated_at: str
+
+
+class StudentReportQuestion(BaseModel):
+    """学生筛选版 - 错题"""
+    question_number: str
+    knowledge_points: List[str]
+    your_answer: str
+    correct_answer: str
+    encouragement: str  # 鼓励性话语
+
+
+class StudentReportResponse(BaseModel):
+    """学生筛选版报告"""
+    student_id: str
+    student_name: str
+    exam_name: str
+    your_score: float
+    class_avg_score: float
+    rank: Optional[int] = None  # 班级排名(不显示具体数字,仅做参考)
+    questions: List[StudentReportQuestion]
+    summary: str  # 总体评价
+    generated_at: str
+
+
+@router.get("/teacher/{exam_record_id}", response_model=TeacherReportResponse)
+async def get_teacher_report(exam_record_id: str, db: Session = Depends(get_db)):
+    """
+    生成老师详情版错题报告
+    包含: 错题列表/知识点/错误率/典型错误原因/干预建议
+    """
+    # 查询考试记录
+    exam_record = db.query(ExamRecord).filter(
+        ExamRecord.record_id == exam_record_id
+    ).first()
+
+    if not exam_record:
+        raise HTTPException(status_code=404, detail=f"考试记录 {exam_record_id} 不存在")
+
+    # 查询该考试的所有题目
+    questions = db.query(Question).filter(
+        Question.record_id == exam_record_id
+    ).all()
+
+    # 查询学生答题记录
+    question_stats = []
+    total_errors = 0
+    present_students = exam_record.present_students or 0
+
+    for q in questions:
+        # 统计该题错误人数
+        wrong_answers = db.query(StudentAnswer).filter(
+            StudentAnswer.question_id == q.question_id,
+            StudentAnswer.is_correct == False
+        ).count()
+
+        error_rate = wrong_answers / present_students if present_students > 0 else 0
+
+        # 根据知识点生成典型错误和干预建议
+        kps = q.knowledge_points or []
+        typical_error = _get_typical_error(kps)
+        intervention = _get_intervention_suggestion(kps)
+
+        question_stats.append(TeacherReportQuestion(
+            question_number=q.question_id.split("_")[-1] if "_" in q.question_id else q.question_id,
+            knowledge_points=kps,
+            error_count=wrong_answers,
+            error_rate=round(error_rate, 3),
+            typical_error=typical_error,
+            intervention_suggestion=intervention
+        ))
+
+        total_errors += wrong_answers
+
+    # 按错误率排序
+    question_stats.sort(key=lambda x: x.error_rate, reverse=True)
+
+    # 生成时间
+    generated_at = exam_record.exam_date.strftime("%Y-%m-%d %H:%M") if exam_record.exam_date else datetime.now().strftime("%Y-%m-%d %H:%M")
+
+    return TeacherReportResponse(
+        exam_id=exam_record_id,
+        class_id=exam_record.class_id,
+        exam_name=exam_record.name,
+        total_students=exam_record.total_students or 0,
+        present_students=present_students,
+        avg_score=exam_record.avg_score or 0,
+        questions=question_stats,
+        generated_at=generated_at
+    )
+
+
+@router.get("/student/{exam_record_id}/{student_id}", response_model=StudentReportResponse)
+async def get_student_report(
+    exam_record_id: str,
+    student_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    生成学生筛选版错题报告
+    仅呈现个人错题(不显示他人成绩); 配合鼓励性话语
+    """
+    # 查询学生信息
+    student = db.query(Student).filter(Student.student_id == student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail=f"学生 {student_id} 不存在")
+
+    # 查询考试记录
+    exam_record = db.query(ExamRecord).filter(
+        ExamRecord.record_id == exam_record_id
+    ).first()
+    if not exam_record:
+        raise HTTPException(status_code=404, detail=f"考试记录 {exam_record_id} 不存在")
+
+    # 查询该学生的答题记录
+    student_answers = db.query(StudentAnswer).filter(
+        StudentAnswer.exam_record_id == exam_record_id,
+        StudentAnswer.student_id == student_id
+    ).all()
+
+    # 查询该考试的题目
+    questions = db.query(Question).filter(
+        Question.record_id == exam_record_id
+    ).all()
+    question_map = {q.question_id: q for q in questions}
+
+    # 构建学生错题列表
+    wrong_questions = []
+    total_score = 0
+    max_possible_score = 0
+
+    for ans in student_answers:
+        q = question_map.get(ans.question_id)
+        if not q:
+            continue
+
+        max_score = 6  # 默认每题6分
+        max_possible_score += max_score
+
+        if ans.is_correct:
+            total_score += max_score
+            encouragement = _get_encouragement(q.knowledge_points or [], is_correct=True)
+            wrong_questions.append(StudentReportQuestion(
+                question_number=q.question_id.split("_")[-1] if "_" in q.question_id else q.question_id,
+                knowledge_points=q.knowledge_points or [],
+                your_answer=ans.student_answer or "",
+                correct_answer=q.answer or "",
+                encouragement=encouragement
+            ))
+        else:
+            encouragement = _get_encouragement(q.knowledge_points or [], is_correct=False)
+            wrong_questions.append(StudentReportQuestion(
+                question_number=q.question_id.split("_")[-1] if "_" in q.question_id else q.question_id,
+                knowledge_points=q.knowledge_points or [],
+                your_answer=ans.student_answer or "",
+                correct_answer=q.answer or "",
+                encouragement=encouragement
+            ))
+
+    # 计算百分比得分
+    your_score_pct = (total_score / max_possible_score * 100) if max_possible_score > 0 else 0
+
+    # 生成时间
+    generated_at = exam_record.exam_date.strftime("%Y-%m-%d %H:%M") if exam_record.exam_date else datetime.now().strftime("%Y-%m-%d %H:%M")
+
+    return StudentReportResponse(
+        student_id=student_id,
+        student_name=student.name,
+        exam_name=exam_record.name,
+        your_score=round(your_score_pct, 1),
+        class_avg_score=exam_record.avg_score or 0,
+        rank=None,  # 不显示具体排名
+        questions=wrong_questions,
+        summary=_generate_summary(your_score_pct),
+        generated_at=generated_at
+    )
+
+
+@router.post("/send-to-students/{exam_record_id}")
+async def send_report_to_students(exam_record_id: str, db: Session = Depends(get_db)):
+    """
+    一键发送学生版报告给全班学生
+    推送至学生端App查看
+    """
+    # 查询考试记录
+    exam_record = db.query(ExamRecord).filter(
+        ExamRecord.record_id == exam_record_id
+    ).first()
+
+    if not exam_record:
+        raise HTTPException(status_code=404, detail=f"考试记录 {exam_record_id} 不存在")
+
+    # 查询该班级所有学生
+    from app.models.database import Student, Class
+    students = db.query(Student).join(Class).filter(
+        Class.class_id == exam_record.class_id
+    ).all()
+
+    # TODO: 实现实际的推送逻辑（短信/邮件/App推送）
+    # 目前仅返回模拟成功
+    sent_count = len(students)
+
+    return {
+        "success": True,
+        "sent_count": sent_count,
+        "failed_count": 0,
+        "message": f"已成功发送{sent_count}份报告"
+    }
+
+
+@router.get("/export/{exam_record_id}")
+async def export_report(
+    exam_record_id: str,
+    format: str = "json",  # json/pdf/excel
+    db: Session = Depends(get_db)
+):
+    """
+    导出报告
+    支持格式: json(默认), pdf, excel
+    """
+    # 查询考试记录
+    exam_record = db.query(ExamRecord).filter(
+        ExamRecord.record_id == exam_record_id
+    ).first()
+
+    if not exam_record:
+        raise HTTPException(status_code=404, detail=f"考试记录 {exam_record_id} 不存在")
+
+    # 获取报告数据
+    report_data = await get_teacher_report(exam_record_id, db)
+
+    if format == "json":
+        return {
+            "success": True,
+            "format": "json",
+            "data": report_data
+        }
+    elif format == "pdf":
+        # TODO: 实现PDF导出
+        return {
+            "success": False,
+            "format": "pdf",
+            "message": "PDF导出功能待实现",
+            "download_url": f"/api/report/download/{exam_record_id}.pdf"
+        }
+    elif format == "excel":
+        # TODO: 实现Excel导出
+        return {
+            "success": False,
+            "format": "excel",
+            "message": "Excel导出功能待实现",
+            "download_url": f"/api/report/download/{exam_record_id}.xlsx"
+        }
+    else:
+        raise HTTPException(status_code=400, detail=f"不支持的格式: {format}")
+

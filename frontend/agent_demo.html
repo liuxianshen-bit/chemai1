@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent工作过程展示 - ChemAI</title>
+    <link rel="stylesheet" href="./styles.css">
+    <style>
+        body {
+            padding: 40px;
+            background: var(--bg-primary);
+        }
+        .demo-container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+        .demo-section {
+            background: var(--bg-card-solid);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+        }
+        .demo-title {
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: var(--accent-cyan);
+        }
+        .demo-desc {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin-bottom: 16px;
+        }
+        .demo-buttons {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .demo-btn {
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-weight: 500;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s;
+        }
+        .demo-btn-primary {
+            background: var(--accent-cyan);
+            color: white;
+        }
+        .demo-btn-primary:hover {
+            background: var(--accent-cyan-light);
+            box-shadow: 0 4px 12px rgba(13, 148, 136, 0.3);
+        }
+        .demo-btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+        }
+        .demo-btn-secondary:hover {
+            background: var(--bg-hover);
+        }
+    </style>
+</head>
+<body>
+    <div class="demo-container">
+        <h1>🤖 Agent工作过程展示</h1>
+
+        <div class="demo-section">
+            <div class="demo-title">出题Agent (chemistry_exam)</div>
+            <div class="demo-desc">展示AI出题时Agent的ReAct工作过程：思考、行动、观察</div>
+            <div class="demo-buttons">
+                <button class="demo-btn demo-btn-primary" onclick="demoGenerateQuestions()">
+                    生成10道题目
+                </button>
+                <button class="demo-btn demo-btn-secondary" onclick="demoDiagnosis()">
+                    障碍诊断
+                </button>
+            </div>
+        </div>
+
+        <div class="demo-section">
+            <div class="demo-title">OCR解析Agent (chemistry_parser)</div>
+            <div class="demo-desc">展示多模态OCR识别时Agent的分析过程</div>
+            <div class="demo-buttons">
+                <button class="demo-btn demo-btn-primary" onclick="demoOcrParsing()">
+                    模拟OCR解析
+                </button>
+            </div>
+        </div>
+
+        <div class="demo-section">
+            <div class="demo-title">改进Agent (chemistry_improvement)</div>
+            <div class="demo-desc">展示学习建议生成时Agent的推理过程</div>
+            <div class="demo-buttons">
+                <button class="demo-btn demo-btn-primary" onclick="demoImprovement()">
+                    生成学习建议
+                </button>
+            </div>
+        </div>
+
+        <div class="demo-section">
+            <div class="demo-title">多Agent协作</div>
+            <div class="demo-desc">展示多个Agent协同工作的过程</div>
+            <div class="demo-buttons">
+                <button class="demo-btn demo-btn-primary" onclick="demoMultiAgent()">
+                    启动多Agent协作
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+    <script>
+        // 演示：生成题目
+        async function demoGenerateQuestions() {
+            await callAgentApi('chemistry_exam', async () => {
+                await new Promise(resolve => setTimeout(resolve, 2000))
+                return { success: true, message: '成功生成10道题目' }
+            }, {
+                startMessage: '正在分析出题要求...',
+                completeMessage: '题目生成完成！'
+            })
+        }
+
+        // 演示：障碍诊断
+        async function demoDiagnosis() {
+            await callAgentApi('chemistry_diagnosis', async () => {
+                await new Promise(resolve => setTimeout(resolve, 2500))
+                return {
+                    success: true,
+                    barriers: { concept: 3, reading: 2, expression: 1 }
+                }
+            }, {
+                startMessage: '正在分析学生答题数据...',
+                completeMessage: '诊断完成'
+            })
+        }
+
+        // 演示：OCR解析
+        async function demoOcrParsing() {
+            await callAgentApi('chemistry_parser', async () => {
+                await new Promise(resolve => setTimeout(resolve, 2000))
+                return { success: true, answers: { '1': 'A', '2': 'B' } }
+            }, {
+                startMessage: '正在识别答题卡...',
+                completeMessage: '识别完成'
+            })
+        }
+
+        // 演示：改进建议
+        async function demoImprovement() {
+            await callAgentApi('chemistry_improvement', async () => {
+                await new Promise(resolve => setTimeout(resolve, 2000))
+                return {
+                    success: true,
+                    suggestions: ['加强氧化还原反应概念理解', '注意审题细节']
+                }
+            }, {
+                startMessage: '正在分析学习数据...',
+                completeMessage: '建议生成完成'
+            })
+        }
+
+        // 演示：多Agent协作
+        async function demoMultiAgent() {
+            showAgentThinking({
+                agent: 'chemistry_parser',
+                message: '启动OCR解析Agent...'
+            })
+
+            for (let i = 0; i < 3; i++) {
+                await new Promise(r => setTimeout(r, 800))
+                updateAgentThinking({
+                    phase: ['thinking', 'acting', 'observing'][i % 3],
+                    message: ['分析图像中...', '提取文字信息...', '校验识别结果...'][i],
+                    progress: 0.3 + i * 0.2
+                })
+            }
+
+            await new Promise(r => setTimeout(r, 1000))
+            updateAgentThinking({
+                agent: 'chemistry_diagnosis',
+                phase: 'thinking',
+                message: '诊断Agent开始工作...',
+                progress: 0.2
+            })
+
+            for (let i = 0; i < 3; i++) {
+                await new Promise(r => setTimeout(r, 800))
+                updateAgentThinking({
+                    phase: 'thinking',
+                    message: ['分析答题模式...', '识别障碍类型...', '生成诊断报告...'][i],
+                    progress: 0.4 + i * 0.15
+                })
+            }
+
+            await new Promise(r => setTimeout(r, 500))
+            AgentThinking.complete({ success: true })
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,93 @@
+{
+  "total": 14,
+  "passed": 14,
+  "failed": 0,
+  "results": [
+    {
+      "name": "服务状态检测",
+      "passed": true,
+      "detail": "OCR:True, MinerU:True, Vision:True"
+    },
+    {
+      "name": "文件类型检测-pdf",
+      "passed": true,
+      "detail": "检测结果: pdf"
+    },
+    {
+      "name": "文件类型检测-image",
+      "passed": true,
+      "detail": "检测结果: image"
+    },
+    {
+      "name": "文件类型检测-image",
+      "passed": true,
+      "detail": "检测结果: image"
+    },
+    {
+      "name": "文件类型检测-image",
+      "passed": true,
+      "detail": "检测结果: image"
+    },
+    {
+      "name": "文件类型检测-image",
+      "passed": true,
+      "detail": "检测结果: image"
+    },
+    {
+      "name": "文件类型检测-image",
+      "passed": true,
+      "detail": "检测结果: image"
+    },
+    {
+      "name": "智能解析-图片",
+      "passed": true,
+      "detail": "provider:ocr-partial"
+    },
+    {
+      "name": "智能解析-PDF",
+      "passed": true,
+      "detail": "provider:mineru"
+    },
+    {
+      "name": "题目提取",
+      "passed": true,
+      "detail": "提取2道题"
+    },
+    {
+      "name": "题目结构",
+      "passed": true,
+      "detail": "结构完整"
+    },
+    {
+      "name": "自动选择-pdf",
+      "passed": true,
+      "detail": "provider:mineru"
+    },
+    {
+      "name": "自动选择-image",
+      "passed": true,
+      "detail": "provider:ocr-partial"
+    },
+    {
+      "name": "统一服务状态",
+      "passed": true,
+      "detail": "全部可用:True"
+    }
+  ],
+  "services_status": {
+    "ocr": {
+      "available": true,
+      "provider": "zhipu",
+      "note": "智谱GLM-OCR"
+    },
+    "mineru": {
+      "available": true,
+      "note": "MinerU CLI"
+    },
+    "vision": {
+      "available": true,
+      "provider": "zhipu-glm-4v",
+      "note": "智谱GLM-4V多模态"
+    }
+  }
+}

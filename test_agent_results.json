@@ -1,0 +1,152 @@
+{
+  "total": 29,
+  "passed": 28,
+  "failed": 1,
+  "results": [
+    {
+      "name": "Balance-2H2 + O2 = 2H2O",
+      "passed": true,
+      "detail": "expected:balanced=True"
+    },
+    {
+      "name": "Balance-H2 + O2 = H2O",
+      "passed": true,
+      "detail": "expected:balanced=False"
+    },
+    {
+      "name": "Balance-Fe + O2 -> Fe2O",
+      "passed": true,
+      "detail": "expected:balanced=False"
+    },
+    {
+      "name": "Balance-CH4 + 2O2 = CO2",
+      "passed": true,
+      "detail": "expected:balanced=True"
+    },
+    {
+      "name": "Balance-4Fe + 3O2 = 2Fe",
+      "passed": true,
+      "detail": "expected:balanced=True"
+    },
+    {
+      "name": "Balance-Al + O2 = Al2O3",
+      "passed": true,
+      "detail": "expected:balanced=False"
+    },
+    {
+      "name": "Balance-N2 + 3H2 = 2NH3",
+      "passed": true,
+      "detail": "expected:balanced=True"
+    },
+    {
+      "name": "Balance-2KClO3 = 2KCl +",
+      "passed": true,
+      "detail": "expected:balanced=True"
+    },
+    {
+      "name": "Balance-Zn + 2HCl = ZnC",
+      "passed": true,
+      "detail": "expected:balanced=True"
+    },
+    {
+      "name": "Balance-Mg + O2 = MgO",
+      "passed": true,
+      "detail": "expected:balanced=False"
+    },
+    {
+      "name": "BalanceCheck_Engine",
+      "passed": true,
+      "detail": "10/10"
+    },
+    {
+      "name": "ExamHandler.exam_audit",
+      "passed": true,
+      "detail": "structure correct"
+    },
+    {
+      "name": "Formula_Std-H2O",
+      "passed": true,
+      "detail": "success=True"
+    },
+    {
+      "name": "Formula_Std-Ca(OH)2",
+      "passed": true,
+      "detail": "success=True"
+    },
+    {
+      "name": "Formula_Std-H2O",
+      "passed": true,
+      "detail": "success=True"
+    },
+    {
+      "name": "Formula_Std-Fe2(SO4)3",
+      "passed": true,
+      "detail": "success=True"
+    },
+    {
+      "name": "Classify-fill-blank",
+      "passed": true,
+      "detail": "actual:fill-blank"
+    },
+    {
+      "name": "Classify-choice",
+      "passed": true,
+      "detail": "actual:choice"
+    },
+    {
+      "name": "Classify-short-answer",
+      "passed": false,
+      "detail": "actual:unknown"
+    },
+    {
+      "name": "MinerU_Status",
+      "passed": true,
+      "detail": "available=True"
+    },
+    {
+      "name": "API_Login",
+      "passed": true,
+      "detail": "success"
+    },
+    {
+      "name": "Integration_audit-2H2 + O2 = 2H2O",
+      "passed": true,
+      "detail": "expected:passed,actual:passed"
+    },
+    {
+      "name": "Integration_audit-H2 + O2 = H2O",
+      "passed": true,
+      "detail": "expected:blocked,actual:blocked"
+    },
+    {
+      "name": "Integration_audit-Fe + O2 -> Fe2O",
+      "passed": true,
+      "detail": "expected:blocked,actual:blocked"
+    },
+    {
+      "name": "ToolReg_exam_generate",
+      "passed": true,
+      "detail": "exists"
+    },
+    {
+      "name": "ToolReg_exam_audit",
+      "passed": true,
+      "detail": "exists"
+    },
+    {
+      "name": "ToolReg_diagnosis_barrier_student",
+      "passed": true,
+      "detail": "exists"
+    },
+    {
+      "name": "ToolReg_standardize_chemical_formula",
+      "passed": true,
+      "detail": "exists"
+    },
+    {
+      "name": "ToolReg_classify_question_type",
+      "passed": true,
+      "detail": "exists"
+    }
+  ]
+}

@@ -1,0 +1,420 @@
+{
+  "paper_name": "2024年湖南高考化学试卷",
+  "region": "湖南",
+  "year": 2024,
+  "total_score": 100,
+  "exam_date": "2024-06-08",
+  "questions": [
+    {
+      "exam_id": "湖南卷_2024_t1",
+      "source": "湖南卷2024",
+      "year": 2024,
+      "region": "湖南卷",
+      "paper_name": "2024年湖南卷高考化学试卷",
+      "question_number": "T1",
+      "original_number": "1",
+      "question_type": "single_choice",
+      "content": "近年来，我国新能源产业得到了蓬勃发展，下列说法错误的是",
+      "options": [
+        "A. 理想的新能源应具有资源丰富、可再生、对环境无污染等特点",
+        "B. 氢氧燃料电池具有能量转化率高、清洁等优点",
+        "C. 锂离子电池放电时锂离子从负极脱嵌，充电时锂离子从正极脱嵌",
+        "D. 太阳能电池是一种将化学能转化为电能的装置"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "综合"
+    },
+    {
+      "exam_id": "湖南卷_2024_t2",
+      "source": "湖南卷2024",
+      "year": 2024,
+      "region": "湖南卷",
+      "paper_name": "2024年湖南卷高考化学试卷",
+      "question_number": "T2",
+      "original_number": "2",
+      "question_type": "single_choice",
+      "content": "下列化学用语表述错误的是",
+      "options": [
+        "A. NaOH 的电子式：",
+        "B. 异丙基的结构简式：",
+        "C. NaCl 溶液中的水合离子：",
+        "D. Cl2 分子中 σ 键的形成："
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "综合"
+    },
+    {
+      "exam_id": "湖南卷_2024_t3",
+      "source": "湖南卷2024",
+      "year": 2024,
+      "region": "湖南卷",
+      "paper_name": "2024年湖南卷高考化学试卷",
+      "question_number": "T3",
+      "original_number": "3",
+      "question_type": "short_answer",
+      "content": "下列实验事故的处理方法不合理的是",
+      "options": [
+        "A. A                 B. B          C. C    D. D"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "实验"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "实验"
+    },
+    {
+      "exam_id": "湖南卷_2024_t4",
+      "source": "湖南卷2024",
+      "year": 2024,
+      "region": "湖南卷",
+      "paper_name": "2024年湖南卷高考化学试卷",
+      "question_number": "T4",
+      "original_number": "4",
+      "question_type": "single_choice",
+      "content": "下列有关化学概念或性质的判断错误的是",
+      "options": [
+        "A. CH4 分子是正四面体结构，则 CH2Cl2 没有同分异构体",
+        "B. 环己烷与苯分子中 C-H 键的键能相等",
+        "C. 甲苯的质谱图中，质荷比为 92 的峰归属于",
+        "D. 由 R 4N+ 与 PF6- 组成的离子液体常温下呈液态，与其离子的体积较大有关"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "性质"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "性质"
+    },
+    {
+      "exam_id": "湖南卷_2024_t5",
+      "source": "湖南卷2024",
+      "year": 2024,
+      "region": "湖南卷",
+      "paper_name": "2024年湖南卷高考化学试卷",
+      "question_number": "T5",
+      "original_number": "5",
+      "question_type": "single_choice",
+      "content": "组成核酸的基本单元是核苷酸，下图是核酸的某一结构片段，下列说法错误的是",
+      "options": [
+        "A. 脱氧核糖核酸(DNA)和核糖核酸(RNA)结构中的碱基相同，戊糖不同",
+        "B. 碱基与戊糖缩合形成核苷，核苷与磷酸缩合形成核苷酸，核苷酸缩合聚合得到核酸",
+        "C. 核苷酸在一定条件下，既可以与酸反应，又可以与碱反应",
+        "D. 核酸分子中碱基通过氢键实现互补配对"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "结构"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "结构"
+    },
+    {
+      "exam_id": "湖南卷_2024_t6",
+      "source": "湖南卷2024",
+      "year": 2024,
+      "region": "湖南卷",
+      "paper_name": "2024年湖南卷高考化学试卷",
+      "question_number": "T6",
+      "original_number": "6",
+      "question_type": "short_answer",
+      "content": "下列过程中，对应的反应方程式错误的是",
+      "options": [
+        "A. A                 B. B  C. C             D. D"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "综合"
+    },
+    {
+      "exam_id": "湖南卷_2024_t7",
+      "source": "湖南卷2024",
+      "year": 2024,
+      "region": "湖南卷",
+      "paper_name": "2024年湖南卷高考化学试卷",
+      "question_number": "T7",
+      "original_number": "7",
+      "question_type": "single_choice",
+      "content": "某学生按图示方法进行实验，观察到以下实验现象：",
+      "options": [
+        "A. 开始阶段铜丝表面气泡释放速度缓慢，原因是铜丝在稀 HNO3 中表面钝化",
+        "B. 锥形瓶内出现了红棕色气体，表明铜和稀 HNO3 反应生成了 NO2",
+        "C. 红棕色逐渐变浅的主要原因是 3NO2 +H2O=2HNO3 +NO",
+        "D. 铜丝与液面脱离接触，反应停止，原因是硝酸消耗完全"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "实验"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "实验"
+    },
+    {
+      "exam_id": "湖南卷_2024_t8",
+      "source": "湖南卷2024",
+      "year": 2024,
+      "region": "湖南卷",
+      "paper_name": "2024年湖南卷高考化学试卷",
+      "question_number": "T8",
+      "original_number": "8",
+      "question_type": "short_answer",
+      "content": "为达到下列实验目的，操作方法合理的是",
+      "options": [
+        "A. A                 B. B  C. C             D. D"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "实验"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "实验"
+    },
+    {
+      "exam_id": "湖南卷_2024_t9",
+      "source": "湖南卷2024",
+      "year": 2024,
+      "region": "湖南卷",
+      "paper_name": "2024年湖南卷高考化学试卷",
+      "question_number": "T9",
+      "original_number": "9",
+      "question_type": "calculation",
+      "content": "通过理论计算方法优化了 P 和 Q 的分子结构，P 和 Q 呈平面六元并环结构，原子的连接方式如图所",
+      "options": [
+        "A. P 为非极性分子，Q 为极性分子                                           B. 第一电离能： B<C<N",
+        "D. P 和 Q 分子中 C、B 和 N 均为 sp2 杂化",
+        "C. 1mol P 和1mol Q 所含电子数目相等"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "结构"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "结构"
+    },
+    {
+      "exam_id": "湖南卷_2024_t10",
+      "source": "湖南卷2024",
+      "year": 2024,
+      "region": "湖南卷",
+      "paper_name": "2024年湖南卷高考化学试卷",
+      "question_number": "T10",
+      "original_number": "10",
+      "question_type": "single_choice",
+      "content": "在 KOH 水溶液中，电化学方法合成高能物质 K4C6N16 时，伴随少量 O2 生成，电解原理如图所示，",
+      "options": [
+        "A. 电解时， O H - 向 Ni 电极移动",
+        "B. 生成  C6  N4-    的电极反应：  2C3 N8 H 4  +  8OH-  -  4e-  =  C6  N4-    +  8H2O",
+        "C. 电解一段时间后，溶液 pH 升高",
+        "D. 每生成1mol H2 的同时，生成 0.5mol K4C6N16"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "溶液",
+        "电解",
+        "电化学"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "溶液"
+    },
+    {
+      "exam_id": "湖南卷_2024_t11",
+      "source": "湖南卷2024",
+      "year": 2024,
+      "region": "湖南卷",
+      "paper_name": "2024年湖南卷高考化学试卷",
+      "question_number": "T11",
+      "original_number": "11",
+      "question_type": "single_choice",
+      "content": "中和法生产 Na2HPO4 ×12H2O 的工艺流程如下：",
+      "options": [
+        "A. “中和”工序若在铁质容器中进行，应先加入 Na2CO3 溶液",
+        "B. “调 pH”工序中 X 为 NaOH 或 H3PO4",
+        "C. “结晶”工序中溶液显酸性",
+        "D. “干燥”工序需在低温下进行",
+        "A. 合成反应中，还原剂是 LiH 和 C",
+        "B. 晶胞中含有的 Li+ 个数为 4",
+        "C. 每个  CN  2-  周围与它最近且距离相等的  Li+  有  8  个",
+        "D. CN  2-  为  V  型结构"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "中和"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "中和"
+    },
+    {
+      "exam_id": "湖南卷_2024_t13",
+      "source": "湖南卷2024",
+      "year": 2024,
+      "region": "湖南卷",
+      "paper_name": "2024年湖南卷高考化学试卷",
+      "question_number": "T13",
+      "original_number": "13",
+      "question_type": "single_choice",
+      "content": "常温下 Kn HCOOH = 1.8´10-4 ，向 20mL0.10mol × L-1NaOH 溶液中缓慢滴入相同浓度的",
+      "options": [
+        "A. 水的电离程度： M<N",
+        "B. M 点： 2c OH-  = c  Na+  + c H+ ",
+        "C. 当V HCOOH = 10mL 时， c OH-  = cH+  + 2c HCOOH + c HCOO- ",
+        "D. N 点： c  Na+  > c HCOO-  > c OH-  > c H+  > c HCOOH"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "浓度",
+        "溶液"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "浓度"
+    },
+    {
+      "exam_id": "湖南卷_2024_t14",
+      "source": "湖南卷2024",
+      "year": 2024,
+      "region": "湖南卷",
+      "paper_name": "2024年湖南卷高考化学试卷",
+      "question_number": "T14",
+      "original_number": "14",
+      "question_type": "single_choice",
+      "content": "恒压下，向某密闭容器中充入一定量的 CH3OH g 和 CO g ，发生如下反应：",
+      "options": [
+        "A. 投料比    x   代表",
+        "B. 曲线 c 代表乙酸的分布分数",
+        "C. DH1 < 0 ， DH2 > 0",
+        "D. L、M、N 三点的平衡常数： K L = K M > K  N"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "综合"
+    },
+    {
+      "exam_id": "湖南卷_2024_t15",
+      "source": "湖南卷2024",
+      "year": 2024,
+      "region": "湖南卷",
+      "paper_name": "2024年湖南卷高考化学试卷",
+      "question_number": "T15",
+      "original_number": "15",
+      "question_type": "short_answer",
+      "content": "亚铜配合物广泛用作催化剂。实验室制备 ëéCu  CH 3CN  ùû ClO4 的反应原理如下：",
+      "options": null,
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "制备",
+        "铜",
+        "实验"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "制备"
+    },
+    {
+      "exam_id": "湖南卷_2024_t16",
+      "source": "湖南卷2024",
+      "year": 2024,
+      "region": "湖南卷",
+      "paper_name": "2024年湖南卷高考化学试卷",
+      "question_number": "T16",
+      "original_number": "16",
+      "question_type": "short_answer",
+      "content": "铜阳极泥(含有 Au、 Ag2Se 、 Cu2Se 、 PbSO4 等)是一种含贵金属的可再生资源，回收贵金属的化工",
+      "options": null,
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "阳极",
+        "金属",
+        "铜"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "阳极"
+    },
+    {
+      "exam_id": "湖南卷_2024_t17",
+      "source": "湖南卷2024",
+      "year": 2024,
+      "region": "湖南卷",
+      "paper_name": "2024年湖南卷高考化学试卷",
+      "question_number": "T17",
+      "original_number": "17",
+      "question_type": "short_answer",
+      "content": "化合物 H 是一种具有生物活性的苯并呋喃衍生物，合成路线如下(部分条件忽略，溶剂未写出)：",
+      "options": null,
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "综合"
+    },
+    {
+      "exam_id": "湖南卷_2024_t18",
+      "source": "湖南卷2024",
+      "year": 2024,
+      "region": "湖南卷",
+      "paper_name": "2024年湖南卷高考化学试卷",
+      "question_number": "T18",
+      "original_number": "18",
+      "question_type": "short_answer",
+      "content": "丙烯腈( CH2 =CHCN )是一种重要的化工原料。工业上以 N2 为载气，用 TiO2 作催化剂生产",
+      "options": null,
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "综合"
+    }
+  ]
+}

@@ -1,0 +1,1281 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智辅化学 - 教师端</title>
+
+    <!-- 字体 -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&family=Outfit:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+    <!-- 样式 -->
+    <link rel="stylesheet" href="./styles.css">
+
+    <style>
+        /* ============================================
+           教师端 - 化学期刊杂志风格
+           与teacher.html完全对齐
+           ============================================ */
+
+        /* 全局SVG */
+        svg { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+        svg path, svg circle, svg rect, svg polyline, svg line, svg ellipse, svg polygon {
+            vector-effect: non-scaling-stroke;
+        }
+
+        /* CSS变量 */
+        :root {
+            --bg-primary: #FAFAF8;
+            --bg-secondary: #FFFFFF;
+            --bg-tertiary: #F4F2EF;
+            --bg-accent: #F0EDE8;
+            --bg-paper: #FDFCFA;
+            --panel: rgba(255, 255, 255, 0.95);
+            --panel-solid: #FFFFFF;
+            --text-primary: #1C1C1C;
+            --text-secondary: #5C5C5C;
+            --text-muted: #909090;
+            --text-inverse: #FAFAF8;
+            --accent: #B85C38;
+            --accent-hover: #9A4A2A;
+            --accent-light: #D4785A;
+            --accent-glow: rgba(184, 92, 56, 0.15);
+            --accent-bg: rgba(184, 92, 56, 0.08);
+            --teal: #4A7C8C;
+            --teal-dim: rgba(74, 124, 140, 0.6);
+            --teal-bg: rgba(74, 124, 140, 0.08);
+            --amber: #B8863A;
+            --amber-bg: rgba(184, 134, 58, 0.08);
+            --purple: #7C6A9C;
+            --purple-bg: rgba(124, 106, 156, 0.08);
+            --red: #A85454;
+            --red-bg: rgba(168, 84, 84, 0.08);
+            --success: #4A8C6A;
+            --warning: #B8863A;
+            --error: #A85454;
+            --info: #4A7C8C;
+            --border: #E5E2DD;
+            --border-subtle: #F0EDE8;
+            --border-strong: #CCC8C1;
+            --border-dashed: #D5D1CA;
+            --shadow-xs: 0 1px 2px rgba(0,0,0,0.04);
+            --shadow-sm: 0 2px 4px rgba(0,0,0,0.04);
+            --shadow-md: 0 4px 12px rgba(0,0,0,0.06);
+            --shadow-lg: 0 8px 24px rgba(0,0,0,0.08);
+            --font-heading: 'Noto Serif SC', Georgia, serif;
+            --font-body: 'Outfit', -apple-system, sans-serif;
+            --font-mono: 'Consolas', 'Monaco', monospace;
+            --gradient-primary: linear-gradient(135deg, #B85C38 0%, #D4785A 100%);
+            --gradient-bg: linear-gradient(180deg, #FAFAF8 0%, #FFFFFF 100%);
+        }
+
+        body {
+            font-family: var(--font-body);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.5;
+        }
+
+        /* 六边形化学结构背景 */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image:
+                radial-gradient(circle at 30px 30px, var(--border) 1.5px, transparent 1.5px),
+                radial-gradient(circle at 90px 90px, var(--border) 1px, transparent 1px);
+            background-size: 120px 120px, 60px 60px;
+            pointer-events: none;
+            z-index: 0;
+            opacity: 0.4;
+        }
+
+        /* ============================================
+           左侧边栏布局 - 化学期刊风格
+           ============================================ */
+        .app-layout {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        /* 侧边栏 */
+        .sidebar {
+            width: 240px;
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            position: fixed;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            z-index: 100;
+        }
+
+        .sidebar-brand {
+            padding: 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-shrink: 0;
+        }
+
+        .sidebar-brand-icon {
+            width: 40px;
+            height: 40px;
+            background: var(--accent);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .sidebar-brand-icon svg {
+            width: 22px;
+            height: 22px;
+            color: white;
+        }
+
+        .sidebar-brand-text {
+            font-family: var(--font-heading);
+            font-size: 1.125rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .sidebar-nav {
+            flex: 1;
+            padding: 16px 12px;
+            overflow-y: auto;
+        }
+
+        .sidebar-nav-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            border-radius: 10px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            margin-bottom: 4px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            border: none;
+            background: none;
+            width: 100%;
+            text-align: left;
+        }
+
+        .sidebar-nav-item:hover {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+        }
+
+        .sidebar-nav-item.active {
+            background: var(--accent-bg);
+            color: var(--accent);
+        }
+
+        .sidebar-nav-item svg {
+            width: 20px;
+            height: 20px;
+            flex-shrink: 0;
+        }
+
+        .sidebar-nav-item span {
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .sidebar-nav-item .badge {
+            font-size: 0.5625rem;
+            padding: 2px 6px;
+            background: var(--accent);
+            color: #fff;
+            border-radius: 10px;
+            flex-shrink: 0;
+        }
+
+        .sidebar-user {
+            padding: 16px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .sidebar-user-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: var(--accent);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 0.875rem;
+        }
+
+        .sidebar-user-info {
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .sidebar-user-name {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .sidebar-user-school {
+            font-size: 0.6875rem;
+            color: var(--text-muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* 主内容区 */
+        .main-content {
+            flex: 1;
+            margin-left: 240px;
+            padding: 32px;
+            min-height: 100vh;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* 页面 */
+        .page { display: none; }
+        .page.active { display: block; }
+
+        /* 页面标题 - 学术期刊风格 */
+        .page-header {
+            margin-bottom: 28px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid var(--border);
+            position: relative;
+        }
+
+        .page-header::after {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: 0;
+            width: 60px;
+            height: 2px;
+            background: var(--accent);
+        }
+
+        .page-title {
+            font-size: 1.75rem;
+            font-weight: 700;
+            margin-bottom: 6px;
+            color: var(--text-primary);
+            font-family: var(--font-heading);
+            letter-spacing: -0.02em;
+        }
+
+        .page-desc {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        /* 统计卡片行 */
+        .stats-row {
+            display: grid;
+            grid-template-columns: 1.5fr 1fr 1fr 0.8fr 1fr;
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+
+        .stat-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            position: relative;
+            transition: all 0.3s ease;
+            box-shadow: var(--shadow-sm);
+            overflow: hidden;
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            border-radius: 12px 12px 0 0;
+        }
+
+        .stat-card.red::before { background: var(--error); }
+        .stat-card.teal::before { background: var(--teal); }
+        .stat-card.amber::before { background: var(--amber); }
+        .stat-card.purple::before { background: var(--info); }
+
+        .stat-card:first-child { padding: 24px; }
+        .stat-card:first-child .stat-value { font-size: 2.5rem; }
+
+        .stat-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+            font-family: var(--font-body);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .stat-value {
+            font-size: 1.75rem;
+            font-weight: 700;
+            line-height: 1;
+            margin-bottom: 4px;
+            font-family: var(--font-mono);
+        }
+
+        .stat-card.red .stat-value { color: var(--error); }
+        .stat-card.teal .stat-value { color: var(--teal); }
+        .stat-card.amber .stat-value { color: var(--amber); }
+        .stat-card.purple .stat-value { color: var(--info); }
+
+        .stat-sub {
+            font-size: 0.6875rem;
+            color: var(--text-muted);
+        }
+
+        /* 面板 */
+        .panel {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+            transition: box-shadow 0.2s ease;
+            box-shadow: var(--shadow-sm);
+            margin-bottom: 24px;
+        }
+
+        .panel:hover { box-shadow: var(--shadow-md); }
+
+        .panel-header {
+            padding: 14px 18px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .panel-title {
+            font-family: var(--font-heading);
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .panel-action {
+            font-size: 0.75rem;
+            color: var(--accent);
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 4px;
+            transition: all 0.2s ease;
+        }
+
+        .panel-action:hover { background: var(--teal-bg); }
+
+        .panel-body { padding: 18px; }
+
+        /* OCR班级选择 */
+        .ocr-class-select {
+            display: none; /* 默认隐藏，选择OCR Tab后显示 */
+        }
+        .ocr-class-select.visible {
+            display: block;
+        }
+
+        /* 上传区 */
+        .upload-zone {
+            border: 2px dashed var(--border);
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .upload-zone:hover {
+            border-color: var(--accent);
+            background: var(--accent-bg);
+        }
+
+        .upload-icon {
+            width: 48px;
+            height: 48px;
+            background: var(--bg-primary);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 14px;
+        }
+
+        .upload-icon svg { width: 24px; height: 24px; color: var(--text-muted); }
+        .upload-zone h3 { font-size: 0.9375rem; margin-bottom: 6px; color: var(--text-primary); }
+        .upload-zone p { font-size: 0.75rem; color: var(--text-muted); }
+
+        /* 状态标签 */
+        .status {
+            font-size: 0.6875rem;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-weight: 500;
+        }
+
+        .status.done { background: var(--teal-bg); color: var(--teal); }
+        .status.pending { background: var(--amber-bg); color: var(--amber); }
+        .status.error { background: rgba(168, 84, 84, 0.1); color: var(--error); }
+
+        /* 按钮 */
+        .btn-primary {
+            padding: 8px 16px;
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: var(--font-body);
+        }
+
+        .btn-primary:hover { background: var(--accent-hover); }
+
+        .btn-secondary {
+            padding: 8px 16px;
+            background: transparent;
+            color: var(--accent);
+            border: 1px solid var(--accent);
+            border-radius: 8px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: var(--font-body);
+        }
+
+        .btn-secondary:hover { background: var(--accent-bg); }
+
+        .btn-sm { padding: 6px 12px; font-size: 0.8125rem; }
+
+        /* 学生卡片 */
+        .student-card {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 14px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .student-card:hover {
+            border-color: var(--accent);
+            transform: translateX(4px);
+        }
+
+        .student-avatar {
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent), var(--teal));
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 1rem;
+            flex-shrink: 0;
+        }
+
+        .student-info { flex: 1; }
+
+        .student-info h4 {
+            font-size: 0.9375rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 2px;
+        }
+
+        .student-info p {
+            font-size: 0.8125rem;
+            color: var(--text-muted);
+        }
+
+        /* 障碍标签 */
+        .barrier-tag {
+            display: inline-flex;
+            align-items: center;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+
+        .barrier-tag.concept { background: var(--amber-bg); color: var(--amber); }
+        .barrier-tag.reading { background: var(--teal-bg); color: var(--teal); }
+        .barrier-tag.expression { background: var(--purple-bg); color: var(--purple); }
+
+        /* 空状态 */
+        .empty-state {
+            text-align: center;
+            padding: 48px 24px;
+            color: var(--text-muted);
+        }
+
+        .empty-state-icon {
+            font-size: 3rem;
+            margin-bottom: 16px;
+            opacity: 0.5;
+        }
+
+        /* 模态框 */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 9999;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-overlay.active { display: flex; }
+
+        .modal {
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 90vh;
+            overflow: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .modal-title {
+            font-size: 1rem;
+            font-weight: 600;
+            font-family: var(--font-heading);
+        }
+
+        .modal-close {
+            width: 32px;
+            height: 32px;
+            border: none;
+            background: transparent;
+            font-size: 1.5rem;
+            color: var(--text-muted);
+            cursor: pointer;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-close:hover { background: var(--bg-tertiary); }
+
+        .modal-body { padding: 20px; }
+
+        .modal-footer {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+            padding: 16px 20px;
+            border-top: 1px solid var(--border);
+        }
+
+        /* 动画 */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .page.active { animation: fadeIn 0.3s ease; }
+    </style>
+</head>
+<body>
+    <div class="app-layout">
+        <!-- 左侧边栏 -->
+        <aside class="sidebar">
+            <div class="sidebar-brand">
+                <div class="sidebar-brand-icon">
+                    <svg viewBox="0 0 24 24" stroke-width="2">
+                        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                    </svg>
+                </div>
+                <div class="sidebar-brand-text">智辅化学</div>
+            </div>
+
+            <nav class="sidebar-nav" id="sidebar-nav">
+                <button class="sidebar-nav-item active" data-page="home">
+                    <svg viewBox="0 0 24 24" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9,22 9,12 15,12 15,22"/></svg>
+                    <span>首页概览</span>
+                </button>
+                <button class="sidebar-nav-item" data-page="exam">
+                    <svg viewBox="0 0 24 24" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                    <span>考试管理</span>
+                    <span class="badge">NEW</span>
+                </button>
+                <button class="sidebar-nav-item" data-page="question">
+                    <svg viewBox="0 0 24 24" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3M12 17h.01"/></svg>
+                    <span>题目库</span>
+                </button>
+                <button class="sidebar-nav-item" data-page="diagnosis">
+                    <svg viewBox="0 0 24 24" stroke-width="2"><path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                    <span>障碍诊断</span>
+                </button>
+                <button class="sidebar-nav-item" data-page="report">
+                    <svg viewBox="0 0 24 24" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10,9 9,9 8,9"/></svg>
+                    <span>学情报告</span>
+                </button>
+                <button class="sidebar-nav-item" data-page="students">
+                    <svg viewBox="0 0 24 24" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+                    <span>学生管理</span>
+                </button>
+            </nav>
+
+            <div class="sidebar-user">
+                <div class="sidebar-user-avatar" id="user-avatar">海</div>
+                <div class="sidebar-user-info">
+                    <div class="sidebar-user-name" id="user-name">海老师</div>
+                    <div class="sidebar-user-school" id="user-school">市第一中学</div>
+                </div>
+                <button class="sidebar-nav-item" onclick="doLogout()" style="padding:8px;">
+                    <svg viewBox="0 0 24 24" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16,17 21,12 16,7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                </button>
+            </div>
+        </aside>
+
+        <!-- 主内容区 -->
+        <main class="main-content">
+            <!-- 首页 -->
+            <div class="page active" id="page-home">
+                <div class="page-header">
+                    <h1 class="page-title">首页概览</h1>
+                    <p class="page-desc">欢迎回来，今天的教学数据如下</p>
+                </div>
+
+                <div class="stats-row">
+                    <div class="stat-card teal">
+                        <div class="stat-label">考试总数</div>
+                        <div class="stat-value" id="stat-exam-count">-</div>
+                    </div>
+                    <div class="stat-card amber">
+                        <div class="stat-label">参考学生</div>
+                        <div class="stat-value" id="stat-student-count">-</div>
+                    </div>
+                    <div class="stat-card red">
+                        <div class="stat-label">平均分</div>
+                        <div class="stat-value" id="stat-avg-score">-</div>
+                    </div>
+                    <div class="stat-card purple">
+                        <div class="stat-label">今日练习</div>
+                        <div class="stat-value">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">完成率</div>
+                        <div class="stat-value">-</div>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <div class="panel-header">
+                        <h3 class="panel-title">快捷操作</h3>
+                    </div>
+                    <div class="panel-body">
+                        <!-- 班级选择 + 上传区域 -->
+                        <div class="ocr-class-select" id="ocr-class-select" style="margin-bottom:16px;">
+                            <label style="font-size:0.75rem;color:var(--text-muted);display:block;margin-bottom:6px;">选择班级（上传答题卡前必须先选择）</label>
+                            <select id="ocr-class-dropdown" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:0.875rem;background:white;">
+                                <option value="">请选择班级...</option>
+                            </select>
+                        </div>
+
+                        <div class="upload-zone" id="upload-zone" onclick="handleOcrClassSelect()">
+                            <input type="file" id="file-input" accept="image/*,.pdf,.docx,.pptx" style="display:none;">
+                            <div class="upload-icon">
+                                <svg viewBox="0 0 24 24" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+                            </div>
+                            <h3>点击或拖拽上传答题卡/文档</h3>
+                            <p>支持 JPG/PNG/BMP 图片、PDF、Word、PowerPoint 文件</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 考试管理 -->
+            <div class="page" id="page-exam">
+                <div class="page-header">
+                    <h1 class="page-title">考试管理</h1>
+                    <p class="page-desc">创建和管理考试，查看学生答题情况</p>
+                </div>
+
+                <div class="panel">
+                    <div class="panel-header">
+                        <h3 class="panel-title">考试列表</h3>
+                        <button class="btn-primary btn-sm" onclick="teacherModule.initExamModule()">创建考试</button>
+                    </div>
+                    <div class="panel-body" id="exam-list">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">📋</div>
+                            <p>暂无考试记录</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 题目库 -->
+            <div class="page" id="page-question">
+                <div class="page-header">
+                    <h1 class="page-title">题目管理</h1>
+                    <p class="page-desc">AI智能出题，题目审核与管理</p>
+                </div>
+                <div class="panel">
+                    <div class="panel-body" id="exam-bank-list">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">📚</div>
+                            <p>题目库加载中...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 障碍诊断 -->
+            <div class="page" id="page-diagnosis">
+                <div class="page-header">
+                    <h1 class="page-title">障碍诊断</h1>
+                    <p class="page-desc">三维度障碍分析，个性化学习计划</p>
+                </div>
+
+                <!-- 诊断配置区域 -->
+                <div class="panel" id="diagnosis-config-panel">
+                    <div class="panel-header">
+                        <h3 class="panel-title">诊断阈值设置</h3>
+                    </div>
+                    <div class="panel-body" id="diagnosis-threshold">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">🔬</div>
+                            <p>正在加载诊断配置...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 诊断结果面板（初始隐藏） -->
+                <div id="diagnosis-plan" style="display:none;margin-top:24px;">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+                        <!-- 障碍分布 -->
+                        <div class="panel">
+                            <div class="panel-header"><h3 class="panel-title">班级障碍分布</h3></div>
+                            <div class="panel-body" id="diagnosis-obstacle-distribution">
+                                <!-- 动态内容 -->
+                            </div>
+                        </div>
+                        <!-- 学生列表 -->
+                        <div class="panel">
+                            <div class="panel-header"><h3 class="panel-title">学生诊断列表</h3></div>
+                            <div class="panel-body" id="diagnosis-student-list" style="max-height:400px;overflow-y:auto;">
+                                <!-- 动态内容 -->
+                            </div>
+                        </div>
+                    </div>
+                    <!-- 学生详情 -->
+                    <div class="panel" id="diagnosis-student-detail" style="display:none;margin-top:20px;">
+                        <div class="panel-header"><h3 class="panel-title">学生诊断详情</h3></div>
+                        <div class="panel-body">
+                            <div id="diagnosis-student-info">
+                                <!-- 学生信息 -->
+                            </div>
+                            <div id="diagnosis-plan-content">
+                                <!-- 学习计划内容 -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 学情报告 -->
+            <div class="page" id="page-report">
+                <div class="page-header">
+                    <h1 class="page-title">学情报告</h1>
+                    <p class="page-desc">班级学情分析，学生学习追踪</p>
+                </div>
+
+                <!-- 面板容器 -->
+                <div id="panel-container"></div>
+
+                <!-- 报告容器（供initReportModule检查） -->
+                <div id="report-teacher-view">
+                    <!-- 视图切换 -->
+                    <div style="display:flex;gap:12px;margin-bottom:24px;padding:16px;background:var(--bg-tertiary);border-radius:12px;align-items:center;flex-wrap:wrap;">
+                        <button class="btn btn-primary" onclick="teacherModule.switchPanelView('class')">班级整体</button>
+                        <button class="btn btn-secondary" onclick="teacherModule.switchPanelView('student')">学生</button>
+                        <span style="margin-left:auto;font-size:0.875rem;color:var(--text-muted);">
+                            点击下方学生卡片可查看该学生的详细诊断和学习计划
+                        </span>
+                    </div>
+
+                    <!-- 错误率Top5 -->
+                    <div class="panel">
+                        <div class="panel-header">
+                            <h3 class="panel-title">错误率Top5知识点</h3>
+                        </div>
+                        <div class="panel-body">
+                            <table id="report-error-top5" style="width:100%;border-collapse:collapse;">
+                                <thead>
+                                    <tr style="text-align:left;color:var(--text-muted);font-size:0.75rem;">
+                                        <th style="padding:8px 12px;">排名</th>
+                                        <th style="padding:8px 12px;">知识点/题目</th>
+                                        <th style="padding:8px 12px;">错误率</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="report-error-top5-body">
+                                    <!-- 动态内容 -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- 障碍分布 -->
+                    <div class="panel">
+                        <div class="panel-header">
+                            <h3 class="panel-title">班级障碍分布</h3>
+                        </div>
+                        <div class="panel-body" id="report-obstacle-distribution">
+                            <!-- 动态内容 -->
+                        </div>
+                    </div>
+
+                    <!-- 学生报告列表 -->
+                    <div class="panel">
+                        <div class="panel-header">
+                            <h3 class="panel-title">学生报告</h3>
+                        </div>
+                        <div class="panel-body" id="report-student-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;">
+                            <!-- 动态内容 -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 学生管理 -->
+            <div class="page" id="page-students">
+                <div class="page-header">
+                    <h1 class="page-title">学生管理</h1>
+                    <p class="page-desc">学生审核，练习推送</p>
+                </div>
+                <div class="panel">
+                    <div class="panel-body" id="student-list-container">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">👥</div>
+                            <p>暂无学生数据</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 学校设置 -->
+            <div class="page" id="page-school">
+                <div class="page-header">
+                    <h1 class="page-title">学校设置</h1>
+                    <p class="page-desc">管理学校基本信息、学期设置和科目配置</p>
+                </div>
+                <div class="panel">
+                    <div class="panel-body" id="school-info">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">🏫</div>
+                            <p>加载学校信息中...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 年级管理 -->
+            <div class="page" id="page-grade">
+                <div class="page-header">
+                    <h1 class="page-title">年级管理</h1>
+                    <p class="page-desc">管理年级信息，包括在读和已毕业年级</p>
+                </div>
+                <div class="panel">
+                    <div class="panel-header" style="display:flex;justify-content:space-between;align-items:center;padding:16px;border-bottom:1px solid var(--border);">
+                        <h3 style="font-size:1rem;">年级列表</h3>
+                        <button class="btn-primary btn-sm" onclick="showAddGradeModal()">添加年级</button>
+                    </div>
+                    <div class="panel-body" id="grade-list">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">📚</div>
+                            <p>暂无年级数据</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 班级管理 -->
+            <div class="page" id="page-classes">
+                <div class="page-header">
+                    <h1 class="page-title">班级管理</h1>
+                    <p class="page-desc">管理班级信息，分配班主任和任课教师</p>
+                </div>
+                <div class="panel">
+                    <div class="panel-header" style="display:flex;justify-content:space-between;align-items:center;padding:16px;border-bottom:1px solid var(--border);">
+                        <h3 style="font-size:1rem;">班级列表</h3>
+                        <button class="btn-primary btn-sm" onclick="showAddClassModal()">添加班级</button>
+                    </div>
+                    <div class="panel-body" id="class-list">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">🏠</div>
+                            <p>暂无班级数据</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 教师管理 -->
+            <div class="page" id="page-teachers">
+                <div class="page-header">
+                    <h1 class="page-title">教师管理</h1>
+                    <p class="page-desc">管理教师账号，分配任教班级和科目</p>
+                </div>
+                <div class="panel">
+                    <div class="panel-body" id="teacher-list">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">👨‍🏫</div>
+                            <p>暂无教师数据</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 入驻审批 -->
+            <div class="page" id="page-teacher-apps">
+                <div class="page-header">
+                    <h1 class="page-title">入驻审批</h1>
+                    <p class="page-desc">审核教师入驻申请，创建教师账号</p>
+                </div>
+                <div class="panel">
+                    <div class="panel-header" style="display:flex;justify-content:space-between;align-items:center;padding:16px;border-bottom:1px solid var(--border);">
+                        <h3 style="font-size:1rem;">待审批申请</h3>
+                        <button class="btn-secondary btn-sm" onclick="loadTeacherApplications()">刷新</button>
+                    </div>
+                    <div class="panel-body" id="teacher-app-list">
+                        <div class="empty-state">
+                            <div class="empty-state-icon">📋</div>
+                            <p>暂无待审批申请</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- OCR预览弹窗 -->
+        <div class="modal-overlay" id="ocr-preview-modal">
+            <div class="modal" style="max-width:800px;">
+                <div class="modal-header">
+                    <span class="modal-title">OCR识别结果</span>
+                    <button class="modal-close" onclick="teacherModule.closeOcrPreviewModal()">×</button>
+                </div>
+                <div class="modal-body" id="ocr-preview-content" style="max-height:70vh;overflow-y:auto;">
+                    <!-- 状态 -->
+                    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+                        <span class="status" id="ocr-status">识别中...</span>
+                        <span id="ocr-confidence" style="font-size:0.875rem;color:var(--text-muted);"></span>
+                    </div>
+
+                    <!-- 消息 -->
+                    <div id="ocr-message" style="margin-bottom:16px;padding:12px;background:var(--bg-tertiary);border-radius:8px;font-size:0.875rem;color:var(--text-secondary);"></div>
+
+                    <!-- 学生身份确认 -->
+                    <div id="ocr-student-confirm" style="margin-bottom:16px;padding:16px;background:linear-gradient(135deg,var(--accent-bg),var(--teal-bg));border-radius:12px;border:1px solid var(--border);">
+                        <h4 style="font-size:0.875rem;color:var(--text-muted);margin-bottom:12px;display:flex;align-items:center;gap:8px;">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                            学生身份确认
+                        </h4>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                            <div>
+                                <label style="font-size:0.75rem;color:var(--text-muted);display:block;margin-bottom:4px;">学号</label>
+                                <input type="text" id="ocr-confirm-student-id" value=""
+                                    onchange="window.updateOcrStudentId(this.value)"
+                                    style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:0.875rem;background:white;"
+                                    placeholder="请输入或确认学号">
+                            </div>
+                            <div>
+                                <label style="font-size:0.75rem;color:var(--text-muted);display:block;margin-bottom:4px;">姓名</label>
+                                <input type="text" id="ocr-confirm-student-name" value=""
+                                    onchange="window.updateOcrStudentName(this.value)"
+                                    style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:0.875rem;background:white;"
+                                    placeholder="请输入或确认姓名">
+                            </div>
+                        </div>
+                        <div style="margin-top:8px;font-size:0.75rem;color:var(--text-muted);">
+                            请确认学生身份是否正确，识别错误时可在此修正
+                        </div>
+                    </div>
+
+                    <!-- 原始识别文本 -->
+                    <div id="ocr-raw-text-section" style="display:none;margin-bottom:16px;">
+                        <h4 style="font-size:0.875rem;color:var(--text-muted);margin-bottom:8px;">原始识别文本</h4>
+                        <div id="ocr-raw-text" style="padding:12px;background:var(--bg-tertiary);border-radius:8px;font-family:var(--font-mono);font-size:0.8125rem;white-space:pre-wrap;max-height:120px;overflow-y:auto;"></div>
+                    </div>
+
+                    <!-- 识别结果 -->
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+                        <!-- 答案列表 -->
+                        <div>
+                            <h4 style="font-size:0.875rem;color:var(--text-muted);margin-bottom:8px;">识别答案</h4>
+                            <div id="ocr-answers-list" style="max-height:300px;overflow-y:auto;"></div>
+                        </div>
+                        <!-- 可编辑列表 -->
+                        <div>
+                            <h4 style="font-size:0.875rem;color:var(--text-muted);margin-bottom:8px;">修正答案</h4>
+                            <div id="ocr-edit-list" style="max-height:300px;overflow-y:auto;"></div>
+                        </div>
+                    </div>
+
+                    <!-- LLM分析 -->
+                    <div id="ocr-llm-analysis" style="display:none;margin-top:16px;">
+                        <h4 style="font-size:0.875rem;color:var(--text-muted);margin-bottom:8px;">LLM一致性检查</h4>
+                        <div id="ocr-llm-list"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn-secondary" onclick="teacherModule.retryOcrWithLLM()">AI重新分析</button>
+                    <button class="btn-primary" onclick="teacherModule.confirmOcrResults()">确认并生成统计</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 考试创建/编辑弹窗 -->
+        <div class="modal-overlay" id="exam-modal">
+            <div class="modal" style="max-width:500px;">
+                <div class="modal-header">
+                    <span class="modal-title">创建考试</span>
+                    <button class="modal-close" onclick="teacherModule.closeExamModal()">×</button>
+                </div>
+                <div class="modal-body">
+                    <form id="exam-form">
+                        <div class="form-group">
+                            <label>考试标题</label>
+                            <input type="text" id="exam-title" required style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:6px;font-size:0.875rem;">
+                        </div>
+                        <div class="form-group">
+                            <label>描述</label>
+                            <textarea id="exam-description" rows="3" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:6px;font-size:0.875rem;resize:vertical;"></textarea>
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                            <div class="form-group">
+                                <label>时长(分钟)</label>
+                                <input type="number" id="exam-duration" value="60" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:6px;font-size:0.875rem;">
+                            </div>
+                            <div class="form-group">
+                                <label>总分</label>
+                                <input type="number" id="exam-total-score" value="100" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:6px;font-size:0.875rem;">
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn-secondary" onclick="teacherModule.closeExamModal()">取消</button>
+                    <button class="btn-primary" onclick="teacherModule.saveExam({title:document.getElementById('exam-title').value,description:document.getElementById('exam-description').value,duration:parseInt(document.getElementById('exam-duration').value),total_score:parseInt(document.getElementById('exam-total-score').value)})">保存</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 考试详情弹窗 -->
+        <div class="modal-overlay" id="exam-detail-modal">
+            <div class="modal" style="max-width:600px;">
+                <div class="modal-header">
+                    <span class="modal-title">考试详情</span>
+                    <button class="modal-close" onclick="teacherModule.closeExamDetailModal()">×</button>
+                </div>
+                <div class="modal-body" id="exam-detail-content">
+                    <!-- 动态内容 -->
+                </div>
+                <div class="modal-footer">
+                    <button class="btn-secondary" onclick="teacherModule.closeExamDetailModal()">关闭</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 题目生成弹窗 -->
+        <div class="modal-overlay" id="question-generate-modal">
+            <div class="modal" style="max-width:500px;">
+                <div class="modal-header">
+                    <span class="modal-title">AI智能出题</span>
+                    <button class="modal-close" onclick="teacherModule.closeGenerateModal()">×</button>
+                </div>
+                <div class="modal-body">
+                    <form id="question-generate-form">
+                        <div class="form-group">
+                            <label>知识点</label>
+                            <input type="text" id="qg-knowledge-points" placeholder="如：氧化还原反应,电化学" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:6px;font-size:0.875rem;">
+                        </div>
+                        <div class="form-group">
+                            <label>难度</label>
+                            <select id="qg-difficulty" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:6px;font-size:0.875rem;">
+                                <option value="easy">简单</option>
+                                <option value="medium" selected>中等</option>
+                                <option value="hard">困难</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>题目数量</label>
+                            <input type="number" id="qg-quantity" value="10" min="1" max="50" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:6px;font-size:0.875rem;">
+                        </div>
+                        <div class="form-group">
+                            <label>考试类型</label>
+                            <select id="qg-exam-type" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:6px;font-size:0.875rem;">
+                                <option value="单元练习">单元练习</option>
+                                <option value="月考">月考</option>
+                                <option value="期中考试">期中考试</option>
+                                <option value="期末考试">期末考试</option>
+                            </select>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn-secondary" onclick="teacherModule.closeGenerateModal()">取消</button>
+                    <button class="btn-primary" onclick="teacherModule.generateQuestions({knowledge_points:document.getElementById('qg-knowledge-points').value.split(',').map(s=>s.trim()),difficulty:document.getElementById('qg-difficulty').value,quantity:parseInt(document.getElementById('qg-quantity').value),exam_type:document.getElementById('qg-exam-type').value})">开始生成</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 题目结果弹窗 -->
+        <div class="modal-overlay" id="question-result-modal">
+            <div class="modal" style="max-width:700px;">
+                <div class="modal-header">
+                    <span class="modal-title">生成的题目</span>
+                    <button class="modal-close" onclick="teacherModule.closeResultModal()">×</button>
+                </div>
+                <div class="modal-body" id="question-result-list" style="max-height:60vh;overflow-y:auto;">
+                    <!-- 动态内容 -->
+                </div>
+                <div class="modal-footer">
+                    <button class="btn-secondary" onclick="teacherModule.closeResultModal()">关闭</button>
+                    <button class="btn-primary" onclick="teacherModule.closeResultModal();showPage('question')">查看全部</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 题目详情弹窗 -->
+        <div class="modal-overlay" id="question-detail-modal">
+            <div class="modal" style="max-width:600px;">
+                <div class="modal-header">
+                    <span class="modal-title">题目详情</span>
+                    <button class="modal-close" onclick="teacherModule.closeQuestionDetailModal()">×</button>
+                </div>
+                <div class="modal-body" id="question-detail-content">
+                    <!-- 动态内容 -->
+                </div>
+                <div class="modal-footer">
+                    <button class="btn-secondary" onclick="teacherModule.closeQuestionDetailModal()">关闭</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 学生报告弹窗 -->
+        <div class="modal-overlay" id="student-report-modal">
+            <div class="modal" style="max-width:600px;">
+                <div class="modal-header">
+                    <span class="modal-title">学生报告</span>
+                    <button class="modal-close" onclick="window.closeStudentReportModal?.()">×</button>
+                </div>
+                <div class="modal-body" id="student-report-content">
+                    <!-- 动态内容 -->
+                </div>
+                <div class="modal-footer">
+                    <button class="btn-secondary" onclick="window.closeStudentReportModal?.()">关闭</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 脚本 -->
+    <script type="module" src="/src/main.js"></script>
+    <script>
+        // 页面切换
+        function showPage(pageName) {
+            // 隐藏所有页面
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'))
+            // 显示目标页面
+            const target = document.getElementById('page-' + pageName)
+            if (target) target.classList.add('active')
+
+            // 更新侧边栏状态
+            document.querySelectorAll('.sidebar-nav-item').forEach(item => {
+                item.classList.remove('active')
+                if (item.dataset.page === pageName) {
+                    item.classList.add('active')
+                }
+            })
+
+            // 加载对应模块
+            if (pageName === 'exam') {
+                teacherModule.initExamModule?.()
+            } else if (pageName === 'question') {
+                teacherModule.initQuestionModule?.()
+            } else if (pageName === 'diagnosis') {
+                teacherModule.initDiagnosisModule?.()
+            } else if (pageName === 'report') {
+                teacherModule.initReportModule?.()
+                teacherModule.initPanelModule?.()
+            } else if (pageName === 'students') {
+                teacherModule.initStudentsModule?.()
+            } else if (pageName === 'home') {
+                // 初始化首页OCR上传
+                teacherModule.initOcrUpload?.()
+            }
+        }
+
+        // 侧边栏导航点击
+        document.querySelectorAll('.sidebar-nav-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const page = item.dataset.page
+                if (page) showPage(page)
+            })
+        })
+
+        // 登出
+        function doLogout() {
+            if (confirm('确定要退出登录吗？')) {
+                sessionStorage.removeItem('chemai_user')
+                window.location.href = '/login.html'
+            }
+        }
+
+        // 初始化教师页面
+        ChemAI.initPage('teacher')
+    </script>
+</body>
+</html>

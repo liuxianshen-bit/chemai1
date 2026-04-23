@@ -1,0 +1,70 @@
+"""
+ChemAI Configuration
+基于PRD v1.0完整版技术选型
+"""
+from pydantic_settings import BaseSettings
+from typing import List
+
+
+class Settings(BaseSettings):
+    """应用配置"""
+
+    # 应用信息
+    APP_NAME: str = "智辅化学 ChemAI"
+    APP_VERSION: str = "1.0.0"
+    DEBUG: bool = False
+
+    # 数据库配置 (SQLite for MVP, 可切换MySQL)
+    DATABASE_URL: str = "sqlite:///./chemai.db"
+
+    # 通义千问API配置
+    DASHSCOPE_API_KEY: str = ""  # 需在环境变量设置
+    LLM_MODEL: str = "qwen-turbo"
+    LLM_API_URL: str = "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation"
+
+    # 腾讯OCR配置
+    TENCENT_OCR_SECRET_ID: str = ""   # 需在环境变量设置
+    TENCENT_OCR_SECRET_KEY: str = ""  # 需在环境变量设置
+    TENCENT_OCR_REGION: str = "ap-guangzhou"
+
+    # 智谱AI OCR配置
+    ZHIPU_API_KEY: str = ""  # 需在环境变量设置
+
+    # Chroma向量数据库
+    CHROMA_DB_PATH: str = "./data/chromadb"
+
+    # 化学知识图谱配置
+    KNOWLEDGE_GRAPH_PATH: str = "./data/knowledge_graph"
+    EXAM_QUESTIONS_PATH: str = "./data/exam_questions"
+
+    # OCR识别配置
+    OCR_CONFIDENCE_THRESHOLD: float = 0.85  # 识别置信度阈值
+    MAX_IMAGE_SIZE: int = 10 * 1024 * 1024  # 10MB
+
+    # 化学方程式审核配置
+    BALANCE_CHECK_ENABLED: bool = True  # 系数配平检查
+    CONDITION_CHECK_ENABLED: bool = True  # 反应条件检查
+    PRODUCT_CHECK_ENABLED: bool = True  # 产物稳定性检查
+    STRUCTURE_CHECK_ENABLED: bool = True  # 分子结构检查
+
+    # 障碍诊断配置（默认值，可由教师调整）
+    DEFAULT_CONCEPT_THRESHOLD: int = 3  # 概念理解型：连续错误N次触发
+    DEFAULT_READING_THRESHOLD: int = 2  # 审题障碍型：连续错误N次触发
+    DEFAULT_EXPRESSION_THRESHOLD: int = 3  # 表述障碍型：连续错误N次触发
+    DEFAULT_MASTERY_THRESHOLD: int = 3  # 掌握标准：连续答对N次
+
+    # 考试覆盖范围（基于PRD）
+    EXAM_COVERAGE: List[str] = [
+        "全国卷2022", "全国卷2023", "全国卷2024",
+        "湖南卷2022", "湖南卷2023", "湖南卷2024"
+    ]
+
+    # MVP月度成本上限
+    MAX_MONTHLY_COST: float = 500.0  # ¥500/月
+
+    class Config:
+        env_file = ".env"
+        case_sensitive = True
+
+
+settings = Settings()

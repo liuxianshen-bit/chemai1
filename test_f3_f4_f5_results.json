@@ -1,0 +1,266 @@
+{
+  "total": 20,
+  "passed": 19,
+  "failed": 1,
+  "results": [
+    {
+      "name": "老师报告生成",
+      "passed": true,
+      "detail": "包含top_errors: 5"
+    },
+    {
+      "name": "老师报告高频错误",
+      "passed": true,
+      "detail": "TOP5错误题目数: 5"
+    },
+    {
+      "name": "老师报告教学建议",
+      "passed": true,
+      "detail": "教学建议数: 2"
+    },
+    {
+      "name": "学生报告保护性呈现",
+      "passed": true,
+      "detail": "不暴露具体错误: True"
+    },
+    {
+      "name": "学生报告鼓励话语",
+      "passed": true,
+      "detail": "有鼓励话语: True"
+    },
+    {
+      "name": "障碍诊断-返回结构",
+      "passed": true,
+      "detail": "包含必要字段: ['student_id', 'student_name', 'barrier_type', 'barrier_desc', 'confidence', 'reasoning', 'weak_knowledge_points', 'teaching_suggestion', 'recent_performance']"
+    },
+    {
+      "name": "障碍诊断-类型有效",
+      "passed": true,
+      "detail": "诊断类型: reading"
+    },
+    {
+      "name": "障碍诊断-置信度",
+      "passed": true,
+      "detail": "置信度: 0.75"
+    },
+    {
+      "name": "障碍诊断-薄弱知识点",
+      "passed": true,
+      "detail": "薄弱知识点: ['氧化还原', '离子方程式', '氧化还原反应类型', '离子共存', '化学键']"
+    },
+    {
+      "name": "班级诊断聚合",
+      "passed": true,
+      "detail": "障碍分布: {'concept': 0.0, 'reading': 1.0, 'expression': 0.0}"
+    },
+    {
+      "name": "自适应出题-题目生成",
+      "passed": true,
+      "detail": "生成题目数: 2"
+    },
+    {
+      "name": "自适应出题-知识点匹配",
+      "passed": true,
+      "detail": "题目知识点: [['氧化还原'], ['离子方程式']]"
+    },
+    {
+      "name": "自适应出题-题目结构",
+      "passed": true,
+      "detail": "所有题目包含content和answer"
+    },
+    {
+      "name": "自适应练习-练习生成",
+      "passed": true,
+      "detail": "练习题目数: 2"
+    },
+    {
+      "name": "自适应练习-目标知识点",
+      "passed": true,
+      "detail": "目标知识点: 氧化还原"
+    },
+    {
+      "name": "ExamStatsRequest结构",
+      "passed": true,
+      "detail": "包含必要字段: ['class_id', 'exam_name', 'exam_date', 'questions', 'ocr_results']"
+    },
+    {
+      "name": "Question结构完整性",
+      "passed": false,
+      "detail": "所有题目包含必要字段: False"
+    },
+    {
+      "name": "StudentAnswer结构",
+      "passed": true,
+      "detail": "包含student_id和answers: ['student_id', 'student_name', 'answers']"
+    },
+    {
+      "name": "诊断配置验证",
+      "passed": true,
+      "detail": "配置有效: True, 错误: []"
+    },
+    {
+      "name": "诊断配置边界值",
+      "passed": true,
+      "detail": "边界测试: 4/4"
+    }
+  ],
+  "mock_teacher_report": {
+    "exam_id": "exam_20260415",
+    "exam_name": "高二化学期中考试",
+    "total_students": 30,
+    "present_students": 28,
+    "avg_score": 72.5,
+    "class_overall_analysis": "本次考试28人参加，平均分72.5分。错误率最高的题目是第4题，错误率达42%。",
+    "top_errors": [
+      {
+        "question_number": "4",
+        "knowledge_points": [
+          "物质的量"
+        ],
+        "error_count": 12,
+        "error_rate": 0.429
+      },
+      {
+        "question_number": "7",
+        "knowledge_points": [
+          "化学反应速率"
+        ],
+        "error_count": 10,
+        "error_rate": 0.357
+      },
+      {
+        "question_number": "2",
+        "knowledge_points": [
+          "离子反应",
+          "离子方程式"
+        ],
+        "error_count": 8,
+        "error_rate": 0.286
+      },
+      {
+        "question_number": "8",
+        "knowledge_points": [
+          "化学平衡"
+        ],
+        "error_count": 7,
+        "error_rate": 0.25
+      },
+      {
+        "question_number": "1",
+        "knowledge_points": [
+          "电解质"
+        ],
+        "error_count": 5,
+        "error_rate": 0.179
+      }
+    ],
+    "high_frequency_errors": [
+      {
+        "knowledge_point": "物质的量",
+        "error_count": 12,
+        "error_rate": 0.429
+      },
+      {
+        "knowledge_point": "化学反应速率",
+        "error_count": 10,
+        "error_rate": 0.357
+      },
+      {
+        "knowledge_point": "离子反应",
+        "error_count": 8,
+        "error_rate": 0.286
+      },
+      {
+        "knowledge_point": "化学平衡",
+        "error_count": 7,
+        "error_rate": 0.25
+      },
+      {
+        "knowledge_point": "电解质",
+        "error_count": 5,
+        "error_rate": 0.179
+      }
+    ],
+    "barrier_distribution": {
+      "concept": 0.45,
+      "reading": 0.3,
+      "expression": 0.25
+    },
+    "teaching_priorities": [
+      "加强化学基本概念的教学，使用思维导图等工具帮助学生建立概念体系",
+      "训练学生审题能力，强调关键词句的识别和信息提取"
+    ]
+  },
+  "mock_student_report": {
+    "exam_name": "高二化学期中考试",
+    "avg_score": 72.5,
+    "class_rank": "中上",
+    "personal_errors": "错题已收录，建议复习第4、7、2章",
+    "encouragement": "继续保持，下次一定会更好！",
+    "next_practice_kps": [
+      "物质的量",
+      "化学反应速率"
+    ]
+  },
+  "mock_diagnosis": {
+    "student_id": "unknown",
+    "student_name": "未知",
+    "barrier_type": "reading",
+    "barrier_desc": "审题障碍型 - 学生读取题目信息不全或审题错误",
+    "confidence": 0.75,
+    "reasoning": "错误分散在多个知识点，可能是审题能力不足",
+    "weak_knowledge_points": [
+      "氧化还原",
+      "离子方程式",
+      "氧化还原反应类型",
+      "离子共存",
+      "化学键"
+    ],
+    "teaching_suggestion": "训练学生审题能力，强调关键词句的识别和信息提取",
+    "recent_performance": {
+      "recent_accuracy": 65,
+      "recent_practice_date": "2026-04-15",
+      "improvement": "略有下降"
+    }
+  },
+  "mock_class_diagnosis": {
+    "class_barrier_distribution": {
+      "concept": 0.0,
+      "reading": 1.0,
+      "expression": 0.0
+    },
+    "class_weak_knowledge_points": [
+      "氧化还原",
+      "离子方程式",
+      "氧化还原反应类型",
+      "离子共存",
+      "化学键"
+    ],
+    "teaching_priority": "reading"
+  },
+  "mock_practice_questions": [
+    {
+      "knowledge_points": [
+        "氧化还原"
+      ],
+      "content": "下列反应中，既是氧化反应又是还原反应的是？",
+      "options": [
+        "A. 2Na + Cl2 = 2NaCl",
+        "B. CaO + H2O = Ca(OH)2",
+        "C. 2H2 + O2 = 2H2O",
+        "D. Si + O2 = SiO2"
+      ],
+      "answer": "A",
+      "difficulty": "medium"
+    },
+    {
+      "knowledge_points": [
+        "离子方程式"
+      ],
+      "content": "写出氯化铁与氢氧化钠反应的离子方程式",
+      "options": null,
+      "answer": "Fe3+ + 3OH- = Fe(OH)3↓",
+      "difficulty": "medium"
+    }
+  ]
+}

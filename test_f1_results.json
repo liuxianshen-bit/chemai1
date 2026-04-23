@@ -1,0 +1,347 @@
+{
+  "total": 14,
+  "passed": 12,
+  "failed": 2,
+  "results": [
+    {
+      "name": "服务状态检测",
+      "passed": true,
+      "detail": "OCR:True, MinerU:True, Vision:True"
+    },
+    {
+      "name": "文件类型检测-JPEG",
+      "passed": true,
+      "detail": "检测结果: image"
+    },
+    {
+      "name": "文件类型检测-PDF",
+      "passed": true,
+      "detail": "检测结果: pdf"
+    },
+    {
+      "name": "考试统计数据计算",
+      "passed": true,
+      "detail": "题目数: 10, 平均分: 19.0"
+    },
+    {
+      "name": "高频错误识别",
+      "passed": false,
+      "detail": "最高错误题: 3, 错误率: 0.8"
+    },
+    {
+      "name": "知识点聚合",
+      "passed": true,
+      "detail": "知识点数: 11"
+    },
+    {
+      "name": "OCR预览数据结构",
+      "passed": true,
+      "detail": "包含必要字段: preview_id=True"
+    },
+    {
+      "name": "OCR预览学生数据",
+      "passed": true,
+      "detail": "学生数: 1"
+    },
+    {
+      "name": "文件类型检测-pdf",
+      "passed": true,
+      "detail": "输入: b'%PDF', 期望: pdf, 实际: pdf"
+    },
+    {
+      "name": "文件类型检测-image",
+      "passed": true,
+      "detail": "输入: b'\\xff\\xd8\\xff', 期望: image, 实际: image"
+    },
+    {
+      "name": "文件类型检测-image",
+      "passed": true,
+      "detail": "输入: b'\\x89PNG', 期望: image, 实际: image"
+    },
+    {
+      "name": "文件类型检测-image",
+      "passed": true,
+      "detail": "输入: b'GIF8', 期望: image, 实际: image"
+    },
+    {
+      "name": "文件类型检测-image",
+      "passed": true,
+      "detail": "输入: b'random', 期望: image, 实际: image"
+    },
+    {
+      "name": "条件审核测试",
+      "passed": false,
+      "detail": "通过: 2/3"
+    }
+  ],
+  "services_status": "passed",
+  "mock_exam_stats": {
+    "exam_name": "高二化学期中考试",
+    "total_students": 5,
+    "present_students": 5,
+    "avg_score": 19.0,
+    "question_stats": [
+      {
+        "question_number": "3",
+        "knowledge_points": [
+          "氧化还原"
+        ],
+        "correct_answer": "C",
+        "error_count": 4,
+        "error_rate": 0.8,
+        "avg_score": 1.0,
+        "wrong_students": [
+          {
+            "student_id": "202401002",
+            "student_name": "李四",
+            "wrong_answer": "D"
+          },
+          {
+            "student_id": "202401003",
+            "student_name": "王五",
+            "wrong_answer": "D"
+          },
+          {
+            "student_id": "202401004",
+            "student_name": "赵六",
+            "wrong_answer": "A"
+          }
+        ]
+      },
+      {
+        "question_number": "4",
+        "knowledge_points": [
+          "物质的量"
+        ],
+        "correct_answer": "D",
+        "error_count": 4,
+        "error_rate": 0.8,
+        "avg_score": 1.0,
+        "wrong_students": [
+          {
+            "student_id": "202401002",
+            "student_name": "李四",
+            "wrong_answer": "C"
+          },
+          {
+            "student_id": "202401003",
+            "student_name": "王五",
+            "wrong_answer": "A"
+          },
+          {
+            "student_id": "202401004",
+            "student_name": "赵六",
+            "wrong_answer": "A"
+          }
+        ]
+      },
+      {
+        "question_number": "6",
+        "knowledge_points": [
+          "元素周期律"
+        ],
+        "correct_answer": "B",
+        "error_count": 4,
+        "error_rate": 0.8,
+        "avg_score": 1.0,
+        "wrong_students": [
+          {
+            "student_id": "202401002",
+            "student_name": "李四",
+            "wrong_answer": "A"
+          },
+          {
+            "student_id": "202401003",
+            "student_name": "王五",
+            "wrong_answer": "C"
+          },
+          {
+            "student_id": "202401004",
+            "student_name": "赵六",
+            "wrong_answer": "A"
+          }
+        ]
+      },
+      {
+        "question_number": "2",
+        "knowledge_points": [
+          "离子反应",
+          "离子方程式"
+        ],
+        "correct_answer": "B",
+        "error_count": 3,
+        "error_rate": 0.6,
+        "avg_score": 2.0,
+        "wrong_students": [
+          {
+            "student_id": "202401003",
+            "student_name": "王五",
+            "wrong_answer": "C"
+          },
+          {
+            "student_id": "202401004",
+            "student_name": "赵六",
+            "wrong_answer": "A"
+          },
+          {
+            "student_id": "202401005",
+            "student_name": "钱七",
+            "wrong_answer": "D"
+          }
+        ]
+      },
+      {
+        "question_number": "5",
+        "knowledge_points": [
+          "化学键"
+        ],
+        "correct_answer": "A",
+        "error_count": 3,
+        "error_rate": 0.6,
+        "avg_score": 2.0,
+        "wrong_students": [
+          {
+            "student_id": "202401002",
+            "student_name": "李四",
+            "wrong_answer": "B"
+          },
+          {
+            "student_id": "202401003",
+            "student_name": "王五",
+            "wrong_answer": "B"
+          },
+          {
+            "student_id": "202401005",
+            "student_name": "钱七",
+            "wrong_answer": "C"
+          }
+        ]
+      },
+      {
+        "question_number": "7",
+        "knowledge_points": [
+          "化学反应速率"
+        ],
+        "correct_answer": "C",
+        "error_count": 3,
+        "error_rate": 0.6,
+        "avg_score": 2.0,
+        "wrong_students": [
+          {
+            "student_id": "202401003",
+            "student_name": "王五",
+            "wrong_answer": "D"
+          },
+          {
+            "student_id": "202401004",
+            "student_name": "赵六",
+            "wrong_answer": "A"
+          },
+          {
+            "student_id": "202401005",
+            "student_name": "钱七",
+            "wrong_answer": "A"
+          }
+        ]
+      },
+      {
+        "question_number": "8",
+        "knowledge_points": [
+          "化学平衡"
+        ],
+        "correct_answer": "D",
+        "error_count": 3,
+        "error_rate": 0.6,
+        "avg_score": 2.0,
+        "wrong_students": [
+          {
+            "student_id": "202401003",
+            "student_name": "王五",
+            "wrong_answer": "A"
+          },
+          {
+            "student_id": "202401004",
+            "student_name": "赵六",
+            "wrong_answer": "A"
+          },
+          {
+            "student_id": "202401005",
+            "student_name": "钱七",
+            "wrong_answer": "B"
+          }
+        ]
+      },
+      {
+        "question_number": "10",
+        "knowledge_points": [
+          "电化学"
+        ],
+        "correct_answer": "B",
+        "error_count": 3,
+        "error_rate": 0.6,
+        "avg_score": 2.0,
+        "wrong_students": [
+          {
+            "student_id": "202401003",
+            "student_name": "王五",
+            "wrong_answer": "C"
+          },
+          {
+            "student_id": "202401004",
+            "student_name": "赵六",
+            "wrong_answer": "A"
+          },
+          {
+            "student_id": "202401005",
+            "student_name": "钱七",
+            "wrong_answer": "D"
+          }
+        ]
+      },
+      {
+        "question_number": "1",
+        "knowledge_points": [
+          "电解质"
+        ],
+        "correct_answer": "A",
+        "error_count": 2,
+        "error_rate": 0.4,
+        "avg_score": 3.0,
+        "wrong_students": [
+          {
+            "student_id": "202401003",
+            "student_name": "王五",
+            "wrong_answer": "B"
+          },
+          {
+            "student_id": "202401005",
+            "student_name": "钱七",
+            "wrong_answer": "C"
+          }
+        ]
+      },
+      {
+        "question_number": "9",
+        "knowledge_points": [
+          "电解质溶液"
+        ],
+        "correct_answer": "A",
+        "error_count": 2,
+        "error_rate": 0.4,
+        "avg_score": 3.0,
+        "wrong_students": [
+          {
+            "student_id": "202401003",
+            "student_name": "王五",
+            "wrong_answer": "B"
+          },
+          {
+            "student_id": "202401005",
+            "student_name": "钱七",
+            "wrong_answer": "C"
+          }
+        ]
+      }
+    ]
+  }
+}
