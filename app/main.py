@@ -12,13 +12,16 @@ try:
 except ImportError:
     pass
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse, JSONResponse
 from app.core.config import settings
 
 # API路由
-from app.api import ocr, exam, question, diagnosis, report, practice, panel, auth, user, class_api, exam_bank, memory, school, grade, teacher_application, log
+from app.api import ocr, exam, question, diagnosis, report, practice, panel, auth, user, class_api, exam_bank, memory, school, grade, teacher_application, log, parent, review, warning, analytics, integration, notification, knowledge
+from app.api.practice_api import wrong_topic
+from app.api.hermes_proxy import router as hermes_proxy_router
+from app.mcp import mcp_router
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -30,14 +33,42 @@ app = FastAPI(
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FRONTEND_DIR = os.path.join(PROJECT_ROOT, "frontend")
 
-# CORS配置
+# CORS配置（生产环境通过 CHEMAI_CORS_ORIGINS 环境变量设置白名单）
+ALLOWED_ORIGINS = os.getenv("CHEMAI_CORS_ORIGINS", "*")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS.split(",") if ALLOWED_ORIGINS != "*" else ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 无需认证的路径
+PUBLIC_PREFIXES = ["/api/auth/", "/api/agent/", "/api/hermes/", "/api/classes", "/docs", "/redoc", "/openapi.json", "/health"]
+PUBLIC_EXTENSIONS = {".html", ".js", ".css", ".png", ".ico", ".svg", ".woff2"}
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    path = request.url.path
+    # 非 API 路径跳过
+    if not path.startswith("/api/"):
+        return await call_next(request)
+    # 白名单前缀跳过（如 /api/auth/、/api/agent/ 及其子路径）
+    if any(path.startswith(p) for p in PUBLIC_PREFIXES):
+        return await call_next(request)
+    # 静态文件跳过
+    if any(path.endswith(ext) for ext in PUBLIC_EXTENSIONS):
+        return await call_next(request)
+
+    from app.middleware.auth import verify_token
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return JSONResponse(status_code=401, content={"detail": "未携带认证token"})
+    token = auth_header.replace("Bearer ", "")
+    payload = verify_token(token)
+    if not payload:
+        return JSONResponse(status_code=401, content={"detail": "token无效或已过期"})
+    return await call_next(request)
 
 # 注册API路由（优先级最高）
 app.include_router(auth.router, prefix="/api/auth", tags=["认证"])
@@ -56,6 +87,20 @@ app.include_router(school.router, prefix="/api/school", tags=["学校设置"])
 app.include_router(grade.router, prefix="/api/grades", tags=["年级管理"])
 app.include_router(teacher_application.router, prefix="/api/teacher-applications", tags=["教师入驻"])
 app.include_router(log.router, prefix="/api/logs", tags=["操作日志"])
+app.include_router(parent.router, prefix="/api/parent", tags=["家长端"])
+app.include_router(review.router, prefix="/api/review", tags=["间隔复习"])
+app.include_router(warning.router, prefix="/api/warning", tags=["学情预警"])
+app.include_router(analytics.router, prefix="/api/analytics", tags=["数据可视化"])
+app.include_router(integration.router, prefix="/api/integration", tags=["LMS集成"])
+app.include_router(notification.router, prefix="/api/notification", tags=["通知推送"])
+app.include_router(wrong_topic.router, prefix="/api/practice/wrong-topic", tags=["错题强化"])
+app.include_router(mcp_router, tags=["MCP工具"])
+app.include_router(hermes_proxy_router, prefix="/api/hermes", tags=["Hermes代理"])
+app.include_router(knowledge.router, prefix="/api/knowledge", tags=["知识卡片"])
+
+# ChemAgent
+from agent.channel.fastapi_sse import router as agent_router
+app.include_router(agent_router, prefix="/api/agent", tags=["AI Agent"])
 
 
 @app.get("/")
@@ -78,6 +123,16 @@ async def serve_app_js():
     return RedirectResponse(url="/")
 
 
+@app.get("/components/{file}")
+async def serve_component(file: str):
+    """前端组件静态文件"""
+    file_path = os.path.join(FRONTEND_DIR, "components", file)
+    if os.path.exists(file_path):
+        ext = file.rsplit(".", 1)[-1] if "." in file else ""
+        media_types = {"js": "application/javascript", "css": "text/css"}
+        return FileResponse(file_path, media_type=media_types.get(ext))
+    return RedirectResponse(url="/")
+
 @app.get("/styles.css")
 async def serve_css():
     css_file = os.path.join(FRONTEND_DIR, "styles.css")
@@ -94,28 +149,12 @@ async def serve_login_html():
     return RedirectResponse(url="/")
 
 
-@app.get("/teacher.html")
-async def serve_teacher_html():
-    html_file = os.path.join(FRONTEND_DIR, "teacher.html")
-    if os.path.exists(html_file):
-        return FileResponse(html_file)
-    return RedirectResponse(url="/")
-
-
-@app.get("/student.html")
-async def serve_student_html():
-    html_file = os.path.join(FRONTEND_DIR, "student.html")
-    if os.path.exists(html_file):
-        return FileResponse(html_file)
-    return RedirectResponse(url="/")
-
-
 @app.get("/index.html")
 async def serve_index_html():
     html_file = os.path.join(FRONTEND_DIR, "index.html")
-    if os.path.exists(html_file):
-        return FileResponse(html_file)
-    return RedirectResponse(url="/")
+    if not os.path.exists(html_file):
+        html_file = os.path.join(FRONTEND_DIR, "login.html")
+    return FileResponse(html_file)
 
 
 # HTML页面路由（兜底）
@@ -142,6 +181,23 @@ async def startup_event():
 
     from app.utils.init_db import init_database
     init_database()
+
+    # 启动调度器
+    try:
+        from app.scheduler import init_scheduler
+        init_scheduler(app)
+    except ImportError as e:
+        print(f"调度器启动失败 (APScheduler可能未安装): {e}")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    # 关闭调度器
+    try:
+        from app.scheduler import shutdown_scheduler
+        shutdown_scheduler()
+    except Exception as e:
+        print(f"调度器关闭失败: {e}")
 
 
 if __name__ == "__main__":

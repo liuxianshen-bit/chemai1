@@ -8,7 +8,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 import uuid
 
-from app.models.database import ExamRecord, Class, Student, get_db, RecordType
+from app.models.database import ExamRecord, Class, Student, StudentAnswer, Question, get_db, RecordType
 
 router = APIRouter()
 
@@ -147,4 +147,117 @@ async def finalize_exam(exam_record_id: str, db: Session = Depends(get_db)):
         "success": True,
         "record_id": exam_record_id,
         "present_students": present_students
+    }
+
+
+# ============================================================
+# P5-2: 考试管理补充端点
+# ============================================================
+
+
+class ExamUpdateRequest(BaseModel):
+    """更新考试请求"""
+    name: Optional[str] = None
+    exam_date: Optional[datetime] = None
+
+
+@router.put("/{exam_id}")
+async def update_exam(exam_id: str, request: ExamUpdateRequest, db: Session = Depends(get_db)):
+    """更新考试信息（名称、日期等）"""
+    exam = db.query(ExamRecord).filter(ExamRecord.record_id == exam_id).first()
+    if not exam:
+        raise HTTPException(status_code=404, detail=f"考试记录 {exam_id} 不存在")
+
+    if request.name is not None:
+        exam.name = request.name
+    if request.exam_date is not None:
+        exam.exam_date = request.exam_date
+
+    db.commit()
+    db.refresh(exam)
+
+    return {
+        "success": True,
+        "record_id": exam.record_id,
+        "name": exam.name,
+        "exam_date": exam.exam_date.strftime("%Y-%m-%d") if exam.exam_date else None
+    }
+
+
+@router.delete("/{exam_id}")
+async def delete_exam(exam_id: str, db: Session = Depends(get_db)):
+    """删除考试及相关数据（题目、答题记录）"""
+    exam = db.query(ExamRecord).filter(ExamRecord.record_id == exam_id).first()
+    if not exam:
+        raise HTTPException(status_code=404, detail=f"考试记录 {exam_id} 不存在")
+
+    # 删除关联的学生答题记录
+    db.query(StudentAnswer).filter(StudentAnswer.exam_record_id == exam_id).delete()
+    # 删除关联的题目
+    db.query(Question).filter(Question.record_id == exam_id).delete()
+    # 删除考试记录
+    db.delete(exam)
+    db.commit()
+
+    return {"success": True, "message": f"考试 {exam_id} 已删除"}
+
+
+@router.get("/{exam_id}/result/{student_id}")
+async def get_student_exam_result(exam_id: str, student_id: str, db: Session = Depends(get_db)):
+    """获取单个学生在某次考试中的结果详情"""
+    exam = db.query(ExamRecord).filter(ExamRecord.record_id == exam_id).first()
+    if not exam:
+        raise HTTPException(status_code=404, detail=f"考试记录 {exam_id} 不存在")
+
+    student = db.query(Student).filter(Student.student_id == student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail=f"学生 {student_id} 不存在")
+
+    # 查询该学生的答题记录
+    answers = db.query(StudentAnswer).filter(
+        StudentAnswer.exam_record_id == exam_id,
+        StudentAnswer.student_id == student_id
+    ).all()
+
+    # 查询考试题目
+    questions = db.query(Question).filter(Question.record_id == exam_id).all()
+    question_map = {q.question_id: q for q in questions}
+
+    question_results = []
+    correct_count = 0
+    total_score = 0
+
+    for ans in answers:
+        q = question_map.get(ans.question_id)
+        kps = q.knowledge_points if q else []
+        if ans.is_correct:
+            correct_count += 1
+            total_score += 1
+
+        question_results.append({
+            "question_id": ans.question_id,
+            "content": q.content if q else "",
+            "options": q.options if q else None,
+            "answer": q.answer if q else "",
+            "analysis": q.analysis if q else "",
+            "knowledge_points": kps,
+            "your_answer": ans.student_answer,
+            "is_correct": ans.is_correct,
+            "barrier_type": ans.barrier_type.value if ans.barrier_type else None
+        })
+
+    total = len(answers)
+    accuracy = round(correct_count / total, 2) if total > 0 else 0
+
+    return {
+        "success": True,
+        "exam_id": exam_id,
+        "exam_name": exam.name,
+        "student_id": student_id,
+        "student_name": student.name,
+        "total_questions": total,
+        "correct_count": correct_count,
+        "accuracy": accuracy,
+        "score": round(accuracy * 100, 1),
+        "questions": question_results
     }

@@ -18,6 +18,8 @@ pydantic==2.6.1
 pydantic-settings==2.1.0
 python-dotenv==1.0.1
 httpx==0.26.0
+requests==2.31.0
+apscheduler==3.10.4
 
 # Chemistry
 rdkit==2024.3.1  # 化学结构处理

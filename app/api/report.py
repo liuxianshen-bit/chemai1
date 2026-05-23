@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.models.database import (
     ExamRecord, Question, StudentAnswer, Student,
-    get_db
+    get_db, Teacher, Class, BarrierType, RecordType
 )
 
 router = APIRouter()
@@ -156,23 +156,62 @@ class StudentReportResponse(BaseModel):
     generated_at: str
 
 
-@router.get("/teacher/{exam_record_id}", response_model=TeacherReportResponse)
-async def get_teacher_report(exam_record_id: str, db: Session = Depends(get_db)):
+@router.get("/teacher/{record_or_teacher_id}")
+async def get_teacher_report(record_or_teacher_id: str, db: Session = Depends(get_db)):
     """
     生成老师详情版错题报告
-    包含: 错题列表/知识点/错误率/典型错误原因/干预建议
+    支持两种模式:
+    - exam模式: 传入exam_record_id,返回该次考试的教师报告
+    - overview模式: 传入teacher_id,返回该教师的汇总报告
     """
-    # 查询考试记录
+    # 先尝试作为exam_record_id查询
     exam_record = db.query(ExamRecord).filter(
-        ExamRecord.record_id == exam_record_id
+        ExamRecord.record_id == record_or_teacher_id
     ).first()
 
     if not exam_record:
-        raise HTTPException(status_code=404, detail=f"考试记录 {exam_record_id} 不存在")
+        # 作为teacher_id处理,返回教师总览
+        teacher = db.query(Teacher).filter(Teacher.teacher_id == record_or_teacher_id).first()
+        if not teacher:
+            raise HTTPException(status_code=404, detail=f"考试记录或教师 {record_or_teacher_id} 不存在")
+
+        # 查询该教师所带班级的所有考试
+        classes = db.query(Class).filter(Class.teacher_id == teacher.teacher_id).all()
+        class_ids = [c.class_id for c in classes]
+        exams = db.query(ExamRecord).filter(
+            ExamRecord.class_id.in_(class_ids)
+        ).order_by(ExamRecord.exam_date.desc()).limit(20).all()
+
+        exam_list = []
+        total_avg = 0
+        for e in exams:
+            class_obj = db.query(Class).filter(Class.class_id == e.class_id).first()
+            exam_list.append({
+                "record_id": e.record_id,
+                "exam_name": e.name,
+                "class_name": class_obj.name if class_obj else "",
+                "exam_date": e.exam_date.strftime("%Y-%m-%d") if e.exam_date else None,
+                "avg_score": e.avg_score,
+                "total_students": e.total_students or 0,
+                "present_students": e.present_students or 0
+            })
+            if e.avg_score:
+                total_avg += e.avg_score
+
+        return {
+            "success": True,
+            "type": "overview",
+            "teacher_id": teacher.teacher_id,
+            "teacher_name": teacher.name,
+            "total_classes": len(classes),
+            "total_exams": len(exams),
+            "overall_avg_score": round(total_avg / len(exams), 1) if exams else 0,
+            "exams": exam_list
+        }
 
     # 查询该考试的所有题目
     questions = db.query(Question).filter(
-        Question.record_id == exam_record_id
+        Question.record_id == record_or_teacher_id
     ).all()
 
     # 查询学生答题记录
@@ -212,7 +251,7 @@ async def get_teacher_report(exam_record_id: str, db: Session = Depends(get_db))
     generated_at = exam_record.exam_date.strftime("%Y-%m-%d %H:%M") if exam_record.exam_date else datetime.now().strftime("%Y-%m-%d %H:%M")
 
     return TeacherReportResponse(
-        exam_id=exam_record_id,
+        exam_id=record_or_teacher_id,
         class_id=exam_record.class_id,
         exam_name=exam_record.name,
         total_students=exam_record.total_students or 0,
@@ -386,4 +425,227 @@ async def export_report(
         }
     else:
         raise HTTPException(status_code=400, detail=f"不支持的格式: {format}")
+
+
+# ============================================================
+# P5-4: 报告模块补充端点
+# ============================================================
+
+
+@router.get("/student/{student_id}")
+async def get_student_report_overview(student_id: str, db: Session = Depends(get_db)):
+    """学生报告概览 - 显示最近的考试成绩汇总和障碍趋势"""
+    student = db.query(Student).filter(Student.student_id == student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail=f"学生 {student_id} 不存在")
+
+    # 查询该学生最近的考试记录
+    exams = db.query(ExamRecord).join(
+        StudentAnswer, ExamRecord.record_id == StudentAnswer.exam_record_id
+    ).filter(
+        StudentAnswer.student_id == student_id
+    ).order_by(ExamRecord.exam_date.desc()).limit(10).all()
+
+    exam_results = []
+    for e in exams:
+        answers = db.query(StudentAnswer).filter(
+            StudentAnswer.exam_record_id == e.record_id,
+            StudentAnswer.student_id == student_id
+        ).all()
+        correct = sum(1 for a in answers if a.is_correct)
+        total = len(answers)
+        exam_results.append({
+            "exam_id": e.record_id,
+            "exam_name": e.name,
+            "exam_date": e.exam_date.strftime("%Y-%m-%d") if e.exam_date else None,
+            "score": round(correct / total * 100, 1) if total > 0 else 0,
+            "correct_count": correct,
+            "total_questions": total
+        })
+
+    return {
+        "success": True,
+        "student_id": student_id,
+        "student_name": student.name,
+        "class_id": student.class_id,
+        "barrier_type": student.barrier_type,
+        "exercises_completed": student.exercises_completed or 0,
+        "exam_results": exam_results
+    }
+
+
+@router.get("/class/{class_id}")
+async def get_class_report_overview(class_id: str, db: Session = Depends(get_db)):
+    """班级报告概览"""
+    class_obj = db.query(Class).filter(Class.class_id == class_id).first()
+    if not class_obj:
+        raise HTTPException(status_code=404, detail=f"班级 {class_id} 不存在")
+
+    exams = db.query(ExamRecord).filter(
+        ExamRecord.class_id == class_id,
+        ExamRecord.type == RecordType.EXAM
+    ).order_by(ExamRecord.exam_date.desc()).limit(20).all()
+
+    exam_stats = []
+    for e in exams:
+        answers = db.query(StudentAnswer).filter(
+            StudentAnswer.exam_record_id == e.record_id
+        ).all()
+        correct_count = sum(1 for a in answers if a.is_correct)
+        total_count = len(answers)
+        exam_stats.append({
+            "record_id": e.record_id,
+            "name": e.name,
+            "exam_date": e.exam_date.strftime("%Y-%m-%d") if e.exam_date else None,
+            "total_students": e.total_students or 0,
+            "present_students": e.present_students or 0,
+            "avg_score": e.avg_score,
+            "overall_accuracy": round(correct_count / total_count, 2) if total_count > 0 else 0
+        })
+
+    return {
+        "success": True,
+        "class_id": class_id,
+        "class_name": class_obj.name,
+        "student_count": class_obj.student_count or 0,
+        "exams": exam_stats
+    }
+
+
+@router.get("/student/{student_id}/kp-mastery")
+async def get_student_kp_mastery(student_id: str, db: Session = Depends(get_db)):
+    """学生知识点掌握报告"""
+    student = db.query(Student).filter(Student.student_id == student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail=f"学生 {student_id} 不存在")
+
+    # 查询该学生所有答题记录
+    answers = db.query(StudentAnswer).filter(
+        StudentAnswer.student_id == student_id
+    ).all()
+
+    # 按知识点聚合
+    kp_correct = {}
+    kp_total = {}
+    for a in answers:
+        q = db.query(Question).filter(Question.question_id == a.question_id).first()
+        if q and q.knowledge_points:
+            for kp in q.knowledge_points:
+                if kp not in kp_total:
+                    kp_total[kp] = 0
+                    kp_correct[kp] = 0
+                kp_total[kp] += 1
+                if a.is_correct:
+                    kp_correct[kp] += 1
+
+    mastery_list = []
+    for kp, total in kp_total.items():
+        mastery_list.append({
+            "knowledge_point": kp,
+            "total_questions": total,
+            "correct_count": kp_correct.get(kp, 0),
+            "mastery": round(kp_correct.get(kp, 0) / total * 100, 1) if total > 0 else 0
+        })
+
+    mastery_list.sort(key=lambda x: x["mastery"])
+
+    return {
+        "success": True,
+        "student_id": student_id,
+        "student_name": student.name,
+        "kp_mastery": mastery_list
+    }
+
+
+@router.get("/student/{student_id}/barrier-change")
+async def get_student_barrier_change(student_id: str, db: Session = Depends(get_db)):
+    """学生障碍类型变化报告"""
+    student = db.query(Student).filter(Student.student_id == student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail=f"学生 {student_id} 不存在")
+
+    # 按考试分组统计barrier分布变化
+    exams = db.query(ExamRecord).join(
+        StudentAnswer, ExamRecord.record_id == StudentAnswer.exam_record_id
+    ).filter(
+        StudentAnswer.student_id == student_id
+    ).order_by(ExamRecord.exam_date.asc()).all()
+
+    timeline = []
+    seen = set()
+    for e in exams:
+        if e.record_id in seen:
+            continue
+        seen.add(e.record_id)
+        answers = db.query(StudentAnswer).filter(
+            StudentAnswer.exam_record_id == e.record_id,
+            StudentAnswer.student_id == student_id
+        ).all()
+
+        barrier_dist = {"concept": 0, "reading": 0, "expression": 0}
+        for a in answers:
+            if a.barrier_type and not a.is_correct:
+                bt = a.barrier_type.value
+                barrier_dist[bt] = barrier_dist.get(bt, 0) + 1
+
+        timeline.append({
+            "exam_id": e.record_id,
+            "exam_name": e.name,
+            "exam_date": e.exam_date.strftime("%Y-%m-%d") if e.exam_date else None,
+            "barrier_distribution": barrier_dist
+        })
+
+    return {
+        "success": True,
+        "student_id": student_id,
+        "student_name": student.name,
+        "current_barrier": student.barrier_type,
+        "timeline": timeline
+    }
+
+
+@router.get("/student/{student_id}/trend")
+async def get_student_learning_trend(student_id: str, db: Session = Depends(get_db)):
+    """学生学习趋势报告"""
+    student = db.query(Student).filter(Student.student_id == student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail=f"学生 {student_id} 不存在")
+
+    # 查询所有考试的成绩变化
+    exams = db.query(ExamRecord).join(
+        StudentAnswer, ExamRecord.record_id == StudentAnswer.exam_record_id
+    ).filter(
+        StudentAnswer.student_id == student_id
+    ).order_by(ExamRecord.exam_date.asc()).all()
+
+    trend_data = []
+    seen = set()
+    for e in exams:
+        if e.record_id in seen:
+            continue
+        seen.add(e.record_id)
+        answers = db.query(StudentAnswer).filter(
+            StudentAnswer.exam_record_id == e.record_id,
+            StudentAnswer.student_id == student_id
+        ).all()
+        correct = sum(1 for a in answers if a.is_correct)
+        total = len(answers)
+        trend_data.append({
+            "exam_id": e.record_id,
+            "exam_name": e.name,
+            "exam_date": e.exam_date.strftime("%Y-%m-%d") if e.exam_date else None,
+            "score": round(correct / total * 100, 1) if total > 0 else 0,
+            "correct_count": correct,
+            "total_questions": total
+        })
+
+    return {
+        "success": True,
+        "student_id": student_id,
+        "student_name": student.name,
+        "trend": trend_data,
+        "total_exams": len(trend_data),
+        "latest_score": trend_data[-1]["score"] if trend_data else 0,
+        "earliest_score": trend_data[0]["score"] if trend_data else 0
+    }
 

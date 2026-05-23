@@ -14,7 +14,9 @@ export const UserStatus = {
 export const UserRole = {
   ADMIN: 'admin',
   TEACHER: 'teacher',
-  STUDENT: 'student'
+  STUDENT: 'student',
+  ACADEMIC_LEADER: '学科组长',
+  EDUCATION_ADMIN: '教务管理员'
 }
 
 // ============================================
@@ -136,11 +138,27 @@ export const authService = {
   },
 
   /**
-   * 检查是否是教师
+   * 检查是否是教师（包含学科组长和教务管理员）
    */
   isTeacher() {
     const user = this.getCurrentUserFromSession()
-    return user && user.role === UserRole.TEACHER
+    return user && ['teacher', '学科组长', '教务管理员'].includes(user.role)
+  },
+
+  /**
+   * 检查是否是学科组长
+   */
+  isAcademicLeader() {
+    const user = this.getCurrentUserFromSession()
+    return user && user.role === UserRole.ACADEMIC_LEADER
+  },
+
+  /**
+   * 检查是否是教务管理员
+   */
+  isEducationAdmin() {
+    const user = this.getCurrentUserFromSession()
+    return user && user.role === UserRole.EDUCATION_ADMIN
   },
 
   /**

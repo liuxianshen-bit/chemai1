@@ -159,6 +159,52 @@ class LLMService:
 
         return self.generate_text(prompt, system_prompt, temperature=0.7)
 
+    def generate_variant_questions(
+        self,
+        original_content: str,
+        original_answer: str,
+        knowledge_points: List[str],
+        difficulty: str = "medium",
+        quantity: int = 3
+    ) -> Dict:
+        """
+        生成变式练习题
+        基于原题生成同知识点但不同表述的题目
+        """
+        system_prompt = """你是一位资深高中化学教师,擅长生成变式练习题。
+
+要求:
+1. 保持相同的知识点和难度
+2. 题目内容要有变化（换数据、换问法、换情境）
+3. 选项要重新设计，避免与原题相同
+4. 保持陷阱设置的风格
+5. 化学方程式必须配平正确
+
+返回格式（JSON）:
+{
+    "questions": [
+        {
+            "content": "变式题正文",
+            "options": ["A. 选项", "B. 选项", "C. 选项", "D. 选项"],
+            "answer": "正确答案字母",
+            "knowledge_points": ["知识点1", "知识点2"],
+            "difficulty": "easy/medium/hard"
+        }
+    ]
+}"""
+
+        prompt = f"""请为以下原题生成{quantity}道变式练习题:
+
+【原题】
+{original_content}
+答案: {original_answer}
+知识点: {', '.join(knowledge_points)}
+难度: {difficulty}
+
+请生成内容不同但考查相同知识点的变式题，直接返回JSON:"""
+
+        return self.generate_text(prompt, system_prompt, temperature=0.8)
+
     def audit_question_with_llm(self, question_content: str) -> Dict:
         """
         使用LLM进行题目安全审核

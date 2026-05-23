@@ -12,10 +12,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: resolve(__dirname, 'index_new.html'),
-        teacher: resolve(__dirname, 'teacher_v2.html'),
-        student: resolve(__dirname, 'student_v2.html'),
-        login: resolve(__dirname, 'login.html'),
-        agent_demo: resolve(__dirname, 'agent_demo.html')
+        login: resolve(__dirname, 'login.html')
       }
     }
   },
@@ -34,7 +31,7 @@ export default defineConfig({
     port: 3000,
     proxy: {
       '/api': {
-        target: 'http://localhost:8001',
+        target: 'http://localhost:8000',
         changeOrigin: true
       }
     }

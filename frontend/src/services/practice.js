@@ -91,3 +91,44 @@ export const practiceService = {
     return await api.get('/api/practice/historical', params)
   }
 }
+
+// 复习服务 - Review Service
+export const reviewService = {
+  /**
+   * 获取到期复习任务
+   */
+  async getDueReviews(studentId) {
+    return await api.get(`/api/review/student/${studentId}/due`)
+  },
+
+  /**
+   * 获取待复习数量
+   */
+  async getReviewCount(studentId) {
+    return await api.get(`/api/review/student/${studentId}/count`)
+  },
+
+  /**
+   * 提交复习结果
+   */
+  async submitReview(taskId, isCorrect) {
+    return await api.post('/api/review/submit', {
+      task_id: taskId,
+      is_correct: isCorrect
+    })
+  },
+
+  /**
+   * 同步复习任务
+   */
+  async syncReviewTasks(studentId) {
+    return await api.post(`/api/review/sync/${studentId}`)
+  },
+
+  /**
+   * 获取复习历史
+   */
+  async getReviewHistory(studentId, limit = 20) {
+    return await api.get(`/api/review/history/${studentId}?limit=${limit}`)
+  }
+}

@@ -84,12 +84,14 @@ class Student(Base):
     barrier_last_updated = Column(DateTime, nullable=True)
     exercises_completed = Column(Integer, default=0)
     last_exercise_at = Column(DateTime, nullable=True)
+    bind_code = Column(String(64), nullable=True)  # 家长绑定码
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # 关系
     student_class = relationship("Class", back_populates="students")
     account = relationship("Account", back_populates="student", uselist=False)
+    parent_bindings = relationship("StudentParentBinding", back_populates="student")
 
 
 class Account(Base):
@@ -97,11 +99,12 @@ class Account(Base):
     __tablename__ = "accounts"
 
     account_id = Column(String(64), primary_key=True)
-    role = Column(String(32), nullable=False)  # admin/teacher/student
+    role = Column(String(32), nullable=False)  # admin/teacher/student/parent
     username = Column(String(64), unique=True, nullable=False)
     password_hash = Column(String(256), nullable=False)
     teacher_id = Column(String(64), ForeignKey("teachers.teacher_id"), nullable=True)
     student_id = Column(String(64), ForeignKey("students.student_id"), nullable=True)
+    parent_id = Column(String(64), ForeignKey("parents.parent_id"), nullable=True)
     status = Column(String(32), default="active")  # active/disabled
     current_token = Column(String(128), nullable=True)  # 当前登录token
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -110,6 +113,7 @@ class Account(Base):
     # 关系
     teacher = relationship("Teacher", back_populates="account")
     student = relationship("Student", back_populates="account")
+    parent = relationship("Parent", back_populates="account")
 
 
 class Class(Base):
@@ -351,7 +355,6 @@ class TeacherClassSubject(Base):
     # 关系
     teacher = relationship("Teacher", back_populates="teacher_subjects")
     class_obj = relationship("Class", back_populates="teacher_subjects")
-    class_obj = relationship("Class")
 
 
 class TeacherApplication(Base):
@@ -381,6 +384,62 @@ class OperationLog(Base):
     detail = Column(JSON, nullable=True)
     ip_address = Column(String(50), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Parent(Base):
+    """家长表"""
+    __tablename__ = "parents"
+
+    parent_id = Column(String(64), primary_key=True)
+    name = Column(String(128), nullable=False)
+    phone = Column(String(32), nullable=True)
+    email = Column(String(128), nullable=True)
+    password_hash = Column(String(256), nullable=False)
+    status = Column(String(32), default="active")  # active/disabled
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # 关系
+    bindings = relationship("StudentParentBinding", back_populates="parent")
+    notifications = relationship("ParentNotification", back_populates="parent")
+    account = relationship("Account", back_populates="parent", uselist=False)
+
+
+class StudentParentBinding(Base):
+    """亲子绑定表"""
+    __tablename__ = "student_parent_bindings"
+
+    binding_id = Column(String(64), primary_key=True)
+    student_id = Column(String(64), ForeignKey("students.student_id"), nullable=False)
+    parent_id = Column(String(64), ForeignKey("parents.parent_id"), nullable=False)
+    relation = Column(String(32), default="家长")  # 父亲/母亲/其他
+    status = Column(String(32), default="active")  # pending/active/inactive
+    bind_code = Column(String(64), nullable=False)  # 绑定验证码
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # 关系
+    student = relationship("Student", back_populates="parent_bindings")
+    parent = relationship("Parent", back_populates="bindings")
+
+
+class ParentNotification(Base):
+    """家长通知记录表"""
+    __tablename__ = "parent_notifications"
+
+    notification_id = Column(String(64), primary_key=True)
+    parent_id = Column(String(64), ForeignKey("parents.parent_id"), nullable=False)
+    student_id = Column(String(64), ForeignKey("students.student_id"), nullable=False)
+    type = Column(String(32), nullable=False)  # weekly_report/score_alert/learning_plan/reminder/daily_report
+    title = Column(String(256), nullable=False)
+    content = Column(Text, nullable=True)
+    is_read = Column(Boolean, default=False)
+    sent_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # 关系
+    parent = relationship("Parent", back_populates="notifications")
+    student = relationship("Student")
 
 
 # 数据库初始化函数

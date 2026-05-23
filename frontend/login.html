@@ -822,6 +822,10 @@
                                 <span class="demo-role">👨‍🎓 学生</span>
                                 <span class="demo-name">李明同学</span>
                             </button>
+                            <button class="demo-account-btn" onclick="quickLoginAs('parent')">
+                                <span class="demo-role">👨‍👩‍👧 家长</span>
+                                <span class="demo-name">李明家长</span>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -954,24 +958,13 @@
 
         // API 基础路径和 apiRequest 函数已在 app.js 中定义
 
-        // 演示账号数据 - 完整5级权限体系
-        const DEMO_ACCOUNTS = {
-            admin: {
-                id: 1, name: '系统管理员', role: 'admin', school: '敏华高级中学',
-                permissions: ['全部权限'], avatar: '👤'
-            },
-            academic: {
-                id: 10, name: '王组长', role: '学科组长', school: '敏华高级中学',
-                subject: '化学', permissions: ['本学科管理', '查看本学科报表'], avatar: '📚'
-            },
-            teacher: {
-                id: 2, name: '张老师', role: 'teacher', school: '敏华高级中学',
-                subject: '化学', classes: ['高一(1)班', '高一(2)班'], avatar: '👨‍🏫'
-            },
-            student: {
-                id: 3, name: '李明', role: 'student', class: '高一(1)班',
-                studentNo: '20240101', avatar: '👨‍🎓'
-            }
+        // 快速登录凭证映射（角色 → 数据库真实账号）
+        const QUICK_LOGIN_CREDENTIALS = {
+            admin:    { username: 'admin', password: 'admin123', label: '系统管理员' },
+            academic: { username: 'hai', password: 'hai123456', label: '学科组长' },
+            teacher: { username: 'liu', password: '123456', label: '任课教师' },
+            student: { username: '202610101', password: '123456', label: '学生' },
+            parent:  { username: '13800138000', password: '123456', label: '家长' },
         };
 
         function switchLoginTab(el, tab) {
@@ -1014,34 +1007,45 @@
             setTimeout(() => toast.remove(), 3000);
         }
 
-        // 快速体验登录（根据角色选择演示账号）
+        // 快速体验登录（调用真实后端API）
         async function quickLoginAs(role) {
+            const creds = QUICK_LOGIN_CREDENTIALS[role];
+            if (!creds) {
+                showToast('未知角色', 'error');
+                return;
+            }
+
             showToast('正在登录...', 'info');
-            const user = DEMO_ACCOUNTS[role];
+            const usernameInput = document.getElementById('username-input');
+            const passwordInput = document.getElementById('password-input');
 
-            // 模拟API调用
-            await new Promise(resolve => setTimeout(resolve, 500));
+            try {
+                const result = await apiRequest('/api/auth/login', {
+                    method: 'POST',
+                    body: JSON.stringify({ username: creds.username, password: creds.password })
+                });
 
-            sessionStorage.setItem('chemai_user', JSON.stringify(user));
-            sessionStorage.setItem('chemai_token', 'demo_token_' + role);
-
-            const roleNames = {
-                admin: '系统管理员',
-                academic: '学科组长',
-                teacher: '任课教师',
-                student: '学生'
-            };
-            showToast(`${roleNames[role] || role} 登录成功`, 'success');
-
-            setTimeout(() => {
-                if (role === 'student') {
-                    window.location.href = 'student.html';
+                if (result.success) {
+                    const userData = { ...result.user };
+                    if (result.token) userData.token = result.token;
+                    if (result.refresh_token) userData.refreshToken = result.refresh_token;
+                    sessionStorage.setItem('chemai_user', JSON.stringify(userData));
+                    showToast(`${creds.label} 登录成功`, 'success');
+                    redirectByRole(result.user.role);
                 } else {
-                    // admin/学科组长/任课教师 都去 teacher.html
-                    // 菜单根据 role 动态显示
-                    window.location.href = 'teacher.html';
+                    showToast(result.message || '登录失败', 'error');
                 }
-            }, 800);
+            } catch (error) {
+                console.error('快速登录失败:', error);
+                showToast('无法连接到服务器，请检查服务是否启动', 'error');
+            }
+        }
+
+        function redirectByRole(role) {
+            const target = role === 'student' ? 'student_v2.html'
+                : role === 'parent' ? 'parent_portal.html'
+                : 'teacher_v2.html';
+            setTimeout(() => { window.location.href = target; }, 800);
         }
 
         async function handleLogin() {
@@ -1083,16 +1087,7 @@
                     if (result.refresh_token) userData.refreshToken = result.refresh_token;
                     sessionStorage.setItem('chemai_user', JSON.stringify(userData));
                     showToast('登录成功，正在跳转...', 'success');
-                    setTimeout(() => {
-                        // 根据返回的role跳转
-                        const role = result.user.role;
-                        if (role === 'student') {
-                            window.location.href = 'student.html';
-                        } else {
-                            // admin/学科组长/任课教师 都去 teacher.html（菜单动态）
-                            window.location.href = 'teacher.html';
-                        }
-                    }, 800);
+                    redirectByRole(result.user.role);
                 } else {
                     showToast(result.message || '登录失败', 'error');
                 }
@@ -1102,21 +1097,19 @@
             }
         }
 
-        // Mock登录（API不可用时的后备）
+        // Mock登录（API不可用时的后备，与数据库用户一致）
         function handleLoginFallback(username, password) {
             const mockUsers = {
-                'admin': { id: 1, name: '管理员', role: 'admin', school: '敏华高级中学', password: 'admin123' },
-                'academic': { id: 10, name: '王组长', role: '学科组长', school: '敏华高级中学', subject: '化学', password: '123456' },
-                'teacher': { id: 2, name: '张老师', role: 'teacher', school: '敏华高级中学', password: '123456' },
-                'student': { id: 3, name: '李明', role: 'student', class: '高一(1)班', password: '123456' },
-                '13800138000': { id: 4, name: '王老师', role: 'teacher', school: '敏华第二中学', password: '123456' },
-                '13900139000': { id: 5, name: '张同学', role: 'student', class: '高三(1)班', password: '123456' }
+                'admin': { name: '系统管理员', role: 'admin', school: '邵阳县第一中学', password: 'admin123' },
+                'hai': { name: '海老师', role: '学科组长', school: '邵阳县第一中学', subject: '化学', password: 'hai123456' },
+                'liu': { name: '刘老师', role: 'teacher', school: '邵阳县第一中学', subject: '化学', password: '123456' },
+                'chen': { name: '陈老师', role: 'teacher', school: '邵阳县第一中学', subject: '数学', password: '123456' },
+                '202610101': { name: '李雨萱', role: 'student', class: '高一(1)班', password: '123456' },
+                '202610201': { name: '陈伟', role: 'student', class: '高一(2)班', password: '123456' },
+                '13800138000': { name: '李国华', role: 'parent', student: '李雨萱', password: '123456' },
             };
 
             let user = mockUsers[username];
-            if (!user) {
-                user = Object.values(mockUsers).find(u => u.phone === username);
-            }
 
             if (!user || user.password !== password) {
                 showToast('用户名或密码错误', 'error');
@@ -1124,17 +1117,10 @@
             }
 
             const { password: _, ...userWithoutPassword } = user;
+            userWithoutPassword.username = username;
             sessionStorage.setItem('chemai_user', JSON.stringify(userWithoutPassword));
             showToast('登录成功（离线模式）', 'success');
-            setTimeout(() => {
-                if (user.role === 'student') {
-                    window.location.href = 'student.html';
-                } else {
-                    // admin/学科组长/任课教师 都去 teacher.html
-                    // 菜单根据 role 动态显示
-                    window.location.href = 'teacher.html';
-                }
-            }, 800);
+            redirectByRole(user.role);
         }
 
         // 教师入驻申请

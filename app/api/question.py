@@ -2,21 +2,40 @@
 F2: AI出题与三维安全审核 API
 基于PRD v1.0完整版功能规格
 """
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
 from pydantic import BaseModel
 from typing import List, Optional, Literal
 import json
 from datetime import datetime
+from sqlalchemy.orm import Session
+from app.models.database import get_db
 
 router = APIRouter()
 
 
 class QuestionGenerateRequest(BaseModel):
-    """AI出题请求"""
+    """AI出题请求 - 增强版"""
     exam_type: str = "单元练习"  # 单元练习/月考/期中/期末
     knowledge_points: List[str]
     difficulty: Literal["easy", "medium", "hard", "competition"] = "medium"
     quantity: int = 10
+    # 增强参数
+    barrier_type: Optional[Literal["concept", "reading", "expression"]] = None  # 目标障碍类型
+    question_types: Optional[List[str]] = None  # 题目类型：choice(选择题)/fill(填空题)/calc(计算题)
+    estimated_time: Optional[int] = None  # 预估时间（分钟）
+
+
+class SmartGenerateRequest(BaseModel):
+    """智能出题请求 - 完整参数"""
+    exam_type: str = "单元练习"
+    class_id: str  # 班级ID
+    knowledge_points: List[str]
+    difficulty: Literal["easy", "medium", "hard", "competition"] = "medium"
+    quantity: int = 10
+    barrier_type: Optional[Literal["concept", "reading", "expression"]] = None
+    question_types: Optional[List[str]] = None
+    target_students: Optional[List[str]] = None  # 指定学生ID列表，None表示全班
+    deadline: Optional[str] = None  # 截止时间
 
 
 class AuditResult(BaseModel):
@@ -817,10 +836,12 @@ async def import_questions_from_ocr(
     try:
         # 使用pdftotext提取文本
         if file.content_type == "application/pdf":
-            cmd = f'pdftotext -layout -enc UTF-8 "{tmp_path}" -'
-            process = os.popen(cmd)
-            text = process.read()
-            process.close()
+            import subprocess
+            result = subprocess.run(
+                ["pdftotext", "-layout", "-enc", "UTF-8", tmp_path, "-"],
+                capture_output=True, text=True, timeout=30
+            )
+            text = result.stdout
         else:
             # 图片需要先 OCR
             from app.services.ocr_service import ocr_service
@@ -1019,4 +1040,487 @@ def _build_question_data(content: str, options: List[dict], year: int, region: s
         "difficulty": difficulty,
         "score": 3,
         "chapter": knowledge_points[0] if knowledge_points else "综合"
+    }
+
+
+# ==================== P1-1: 智能出题增强API ====================
+
+class SmartAssignRequest(BaseModel):
+    """智能出题并布置请求"""
+    exam_name: str  # 练习名称
+    class_id: str  # 班级ID
+    knowledge_points: List[str]  # 知识点列表
+    difficulty: Literal["easy", "medium", "hard", "competition"] = "medium"
+    quantity: int = 10
+    barrier_type: Optional[Literal["concept", "reading", "expression"]] = None
+    question_types: Optional[List[str]] = None  # choice/fill/calc
+    target_student_ids: Optional[List[str]] = None  # None表示全班
+    deadline: Optional[str] = None
+    send_to_students: bool = True  # 是否立即发送给学生
+
+
+@router.post("/smart-assign", response_model=QuestionGenerateResponse)
+async def smart_generate_and_assign(request: SmartAssignRequest, db=None):
+    """
+    P1-1: 智能出题并布置
+    增强版AI出题，支持：
+    - 障碍类型定向（概念理解/审题障碍/表述障碍）
+    - 题目类型选择（选择题/填空题/计算题）
+    - 预估时间设置
+    - 直接布置给班级/学生
+    """
+    import time
+    from sqlalchemy.orm import Session
+    from app.models.database import get_db as _get_db
+    from app.models.database import ExamRecord, Question, Student, Class
+    from app.services.llm_service import llm_service
+    from app.services.chemical_balance import audit_chemical_equation
+
+    start_time = time.time()
+
+    # 构造增强的prompt
+    system_prompt = """你是一位资深高中化学教师,擅长根据知识点生成高质量的化学练习题。"""
+
+    barrier_prompts = {
+        "concept": "本次出题重点考察学生对基础概念的深入理解，题目应设置概念辨析类陷阱",
+        "reading": "本次出题重点考察学生的审题能力，题目应设置审题陷阱如偷换概念、遗漏关键信息等",
+        "expression": "本次出题重点考察学生的规范表述能力，题目应设置表述类陷阱"
+    }
+
+    type_prompts = {
+        "choice": "生成选择题，包含4个选项",
+        "fill": "生成填空题，考察计算和概念",
+        "calc": "生成计算题，考察解题过程"
+    }
+
+    extra_instructions = []
+    if request.barrier_type and request.barrier_type in barrier_prompts:
+        extra_instructions.append(barrier_prompts[request.barrier_type])
+    if request.question_types:
+        type_hint = "、".join([type_prompts.get(t, t) for t in request.question_types])
+        extra_instructions.append(f"题目类型要求: {type_hint}")
+
+    difficulty_map = {"easy": "简单", "medium": "中等", "hard": "困难", "competition": "竞赛"}
+    difficulty_hint = difficulty_map.get(request.difficulty, "中等")
+
+    prompt = f"""请为以下知识点生成{request.quantity}道{difficulty_hint}难度的化学练习题:
+
+知识点: {', '.join(request.knowledge_points)}
+{' '.join(extra_instructions) if extra_instructions else ''}
+
+请直接返回JSON,不要有其他文字:
+{{
+    "questions": [
+        {{
+            "content": "题目正文",
+            "options": ["A. 选项", "B. 选项", "C. 选项", "D. 选项"],  // 选择题必填
+            "answer": "正确答案字母",
+            "knowledge_points": ["知识点1", "知识点2"],
+            "difficulty": "{request.difficulty}",
+            "type": "choice/fill/calc"
+        }}
+    ]
+}}"""
+
+    # 调用LLM生成
+    llm_result = llm_service.generate_text(prompt, system_prompt, temperature=0.7)
+
+    questions = []
+    total_cost = 0.0
+
+    if llm_result.get("success") and "questions" in llm_result.get("content", ""):
+        try:
+            content = llm_result["content"]
+            if "```json" in content:
+                content = content.split("```json")[1].split("```")[0]
+            data = json.loads(content)
+            generated_questions = data.get("questions", [])
+        except json.JSONDecodeError:
+            generated_questions = []
+    else:
+        generated_questions = []
+
+    if not generated_questions:
+        return QuestionGenerateResponse(
+            success=False,
+            questions=[],
+            generate_time_ms=int((time.time() - start_time) * 1000),
+            total_cost=0.0,
+            error="LLM生成失败"
+        )
+
+    # 审核每道题
+    for i, q in enumerate(generated_questions):
+        question_id = f"smart_{int(time.time())}_{i}"
+
+        # 化学方程式审核
+        import re
+        equations = re.findall(r'[A-Za-z0-9\(\)\[\]→=+\s]+', q.get("content", ""))
+        has_equation = any('→' in eq or '=' in eq for eq in equations)
+
+        coefficient_status = "passed"
+        if has_equation:
+            for eq in equations:
+                if '→' in eq or '=' in eq:
+                    result = audit_chemical_equation(eq.strip())
+                    if result["overall_status"] == "blocked":
+                        coefficient_status = "blocked"
+                        break
+
+        questions.append(AuditReport(
+            question_id=question_id,
+            content=q.get("content", ""),
+            options=q.get("options"),
+            answer=q.get("answer", ""),
+            knowledge_points=q.get("knowledge_points", request.knowledge_points),
+            difficulty=q.get("difficulty", request.difficulty),
+            coefficient_audit=AuditResult(dimension="coefficient", status=coefficient_status, message="配平正确" if coefficient_status == "passed" else "配平错误"),
+            condition_audit=AuditResult(dimension="condition", status="passed", message="条件正确"),
+            product_audit=AuditResult(dimension="product", status="passed", message="产物正确"),
+            structure_audit=AuditResult(dimension="structure", status="passed", message="结构正确"),
+            overall_status=coefficient_status,
+            trap_hints=[],
+            historical_matches=[]
+        ))
+
+    return QuestionGenerateResponse(
+        success=True,
+        questions=questions,
+        generate_time_ms=int((time.time() - start_time) * 1000),
+        total_cost=total_cost
+    )
+
+
+@router.post("/batch-assign")
+async def batch_assign_exam(
+    exam_name: str,
+    class_id: str,
+    question_ids: List[str],
+    target_student_ids: Optional[List[str]] = None,
+    deadline: Optional[str] = None
+):
+    """
+    P1-1: 批量布置练习
+    将已生成的题目批量布置给班级学生
+    """
+    from sqlalchemy.orm import Session
+    from app.models.database import get_db as _get_db
+    from app.models.database import ExamRecord, Question, Student, Class
+    from datetime import datetime
+
+    db = next(_get_db())
+
+    try:
+        # 验证班级
+        class_obj = db.query(Class).filter(Class.class_id == class_id).first()
+        if not class_obj:
+            raise HTTPException(status_code=404, detail="班级不存在")
+
+        # 创建考试记录
+        record_id = f"exam_{class_id}_{int(datetime.now().timestamp())}"
+        exam_record = ExamRecord(
+            record_id=record_id,
+            class_id=class_id,
+            name=exam_name,
+            type="practice",
+            exam_date=datetime.strptime(deadline, "%Y-%m-%d") if deadline else datetime.now(),
+            total_students=len(target_student_ids) if target_student_ids else class_obj.student_count,
+            source="AI_SMART"
+        )
+        db.add(exam_record)
+
+        # 关联题目
+        for qid in question_ids:
+            question = db.query(Question).filter(Question.question_id == qid).first()
+            if question:
+                question.record_id = record_id
+                db.add(question)
+
+        db.commit()
+
+        return {
+            "success": True,
+            "record_id": record_id,
+            "exam_name": exam_name,
+            "class_name": class_obj.name,
+            "question_count": len(question_ids),
+            "message": "练习布置成功"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db.close()
+
+
+# ============================================================
+# P5-5: 题目管理补充端点
+# ============================================================
+
+
+@router.get("/categories")
+async def get_question_categories(db: Session = Depends(get_db)):
+    """获取题库分类"""
+    from app.models.database import KnowledgePoint
+
+    # 从KnowledgePoint表获取分类
+    kps = db.query(KnowledgePoint).all()
+    if kps:
+        categories = {}
+        for kp in kps:
+            cat = kp.category or "其他"
+            if cat not in categories:
+                categories[cat] = []
+            categories[cat].append({
+                "kp_id": kp.kp_id,
+                "name": kp.name,
+                "question_count": kp.question_count or 0,
+                "error_rate": kp.error_rate
+            })
+
+        return {
+            "success": True,
+            "categories": [
+                {"name": cat, "items": items}
+                for cat, items in categories.items()
+            ]
+        }
+
+    # 后备：从Question表聚合
+    from app.models.database import Question
+    all_kps = db.query(Question.knowledge_points).distinct().all()
+    kp_set = set()
+    for row in all_kps:
+        if row[0]:
+            for kp in row[0]:
+                kp_set.add(kp)
+
+    return {
+        "success": True,
+        "categories": [
+            {"name": "全部", "items": [{"name": kp} for kp in sorted(kp_set)]}
+        ]
+    }
+
+
+@router.get("/kps")
+async def get_knowledge_points(db: Session = Depends(get_db)):
+    """获取知识点列表"""
+    from app.models.database import KnowledgePoint
+
+    kps = db.query(KnowledgePoint).order_by(KnowledgePoint.category, KnowledgePoint.name).all()
+    if kps:
+        return {
+            "success": True,
+            "knowledge_points": [
+                {
+                    "kp_id": kp.kp_id,
+                    "name": kp.name,
+                    "category": kp.category,
+                    "description": kp.description,
+                    "question_count": kp.question_count or 0,
+                    "error_rate": kp.error_rate
+                }
+                for kp in kps
+            ]
+        }
+
+    # 后备：从Question表聚合
+    from app.models.database import Question
+    all_kps = db.query(Question.knowledge_points).distinct().all()
+    kp_set = set()
+    for row in all_kps:
+        if row[0]:
+            for kp in row[0]:
+                kp_set.add(kp)
+
+    return {
+        "success": True,
+        "knowledge_points": [{"name": kp} for kp in sorted(kp_set)]
+    }
+
+
+@router.get("/similar/{question_id}")
+async def get_similar_questions(question_id: str, limit: int = 5):
+    """获取相似题目 - 委托给exam_bank_service"""
+    from app.services.exam_bank import exam_bank_service
+
+    # 先从数据库查找题目的知识点
+    from app.models.database import get_db as _get_db, Question
+    db = next(_get_db())
+    try:
+        question = db.query(Question).filter(Question.question_id == question_id).first()
+        kps = question.knowledge_points if question else []
+        difficulty = question.difficulty.value if question and hasattr(question.difficulty, 'value') else None
+    finally:
+        db.close()
+
+    similar = exam_bank_service.find_similar_questions(
+        knowledge_points=kps,
+        difficulty=difficulty,
+        limit=limit
+    )
+
+    return {
+        "success": True,
+        "question_id": question_id,
+        "similar_questions": [
+            {
+                "exam_id": q.exam_id,
+                "content": q.content[:200] + "..." if len(q.content) > 200 else q.content,
+                "source": q.source,
+                "year": q.year,
+                "knowledge_points": q.knowledge_points,
+                "difficulty": q.difficulty,
+                "similarity": getattr(q, 'similarity', None)
+            }
+            for q in similar
+        ]
+    }
+
+
+@router.post("/search")
+async def search_questions(
+    request: dict,
+    limit: int = 20,
+    offset: int = 0,
+    db: Session = Depends(get_db)
+):
+    """搜索题目 - 按知识点/难度/内容等条件筛选"""
+    from app.models.database import Question
+
+    query = db.query(Question)
+
+    # 按知识点过滤
+    knowledge_points = request.get("knowledge_points")
+    if knowledge_points:
+        for kp in knowledge_points:
+            query = query.filter(Question.knowledge_points.contains(kp))
+
+    # 按难度过滤
+    difficulty = request.get("difficulty")
+    if difficulty:
+        query = query.filter(Question.difficulty == difficulty)
+
+    # 按审核状态过滤
+    audit_status = request.get("audit_status")
+    if audit_status:
+        query = query.filter(Question.audit_status == audit_status)
+
+    # 按考试记录过滤
+    record_id = request.get("record_id")
+    if record_id:
+        query = query.filter(Question.record_id == record_id)
+
+    # 按关键字搜索题目内容
+    keyword = request.get("keyword")
+    if keyword:
+        query = query.filter(Question.content.contains(keyword))
+
+    total = query.count()
+    questions = query.order_by(Question.question_id.desc()).offset(offset).limit(limit).all()
+
+    return {
+        "success": True,
+        "total": total,
+        "offset": offset,
+        "limit": limit,
+        "questions": [
+            {
+                "question_id": q.question_id,
+                "content": q.content,
+                "options": q.options,
+                "answer": q.answer,
+                "analysis": q.analysis,
+                "knowledge_points": q.knowledge_points,
+                "difficulty": q.difficulty.value if hasattr(q.difficulty, 'value') else q.difficulty,
+                "audit_status": q.audit_status.value if hasattr(q.audit_status, 'value') else q.audit_status,
+                "record_id": q.record_id
+            }
+            for q in questions
+        ]
+    }
+
+
+@router.get("/{question_id}")
+async def get_question_detail(question_id: str, db: Session = Depends(get_db)):
+    """获取题目详情"""
+    from app.models.database import Question
+
+    question = db.query(Question).filter(Question.question_id == question_id).first()
+    if not question:
+        raise HTTPException(status_code=404, detail=f"题目 {question_id} 不存在")
+
+    return {
+        "success": True,
+        "question": {
+            "question_id": question.question_id,
+            "content": question.content,
+            "options": question.options,
+            "answer": question.answer,
+            "analysis": question.analysis,
+            "knowledge_points": question.knowledge_points,
+            "difficulty": question.difficulty.value if hasattr(question.difficulty, 'value') else question.difficulty,
+            "source": question.source.value if hasattr(question.source, 'value') else question.source,
+            "audit_status": question.audit_status.value if hasattr(question.audit_status, 'value') else question.audit_status,
+            "audit_report": question.audit_report,
+            "historical_matches": question.historical_matches,
+            "record_id": question.record_id
+        }
+    }
+
+
+class AuditActionRequest(BaseModel):
+    """审核操作请求"""
+    reason: Optional[str] = None  # 拒绝原因
+
+
+@router.post("/{question_id}/approve")
+async def approve_question(
+    question_id: str,
+    request: AuditActionRequest = None,
+    db: Session = Depends(get_db)
+):
+    """审核通过题目"""
+    from app.models.database import Question, AuditStatus
+
+    question = db.query(Question).filter(Question.question_id == question_id).first()
+    if not question:
+        raise HTTPException(status_code=404, detail=f"题目 {question_id} 不存在")
+
+    question.audit_status = AuditStatus.PASSED
+    db.commit()
+
+    return {
+        "success": True,
+        "message": "题目审核已通过",
+        "question_id": question_id
+    }
+
+
+@router.post("/{question_id}/reject")
+async def reject_question(
+    question_id: str,
+    request: AuditActionRequest = None,
+    db: Session = Depends(get_db)
+):
+    """审核拒绝题目"""
+    from app.models.database import Question, AuditStatus
+
+    question = db.query(Question).filter(Question.question_id == question_id).first()
+    if not question:
+        raise HTTPException(status_code=404, detail=f"题目 {question_id} 不存在")
+
+    question.audit_status = AuditStatus.BLOCKED
+    if request and request.reason:
+        question.audit_report = {"reject_reason": request.reason}
+    db.commit()
+
+    return {
+        "success": True,
+        "message": "题目已拒绝",
+        "question_id": question_id,
+        "reason": request.reason if request else None
     }

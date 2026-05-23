@@ -1520,4 +1520,5 @@ if (typeof window !== 'undefined') {
   window.teacherModule = window.teacherModule || {}
   window.teacherModule.refreshServicesStatus = refreshServicesStatus
   window.teacherModule.loadServicesStatus = loadServicesStatus
+  window.teacherModule.initOcrUpload = initOcrUpload
 }

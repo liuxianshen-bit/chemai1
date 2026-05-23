@@ -3,7 +3,7 @@
  * 包含错误处理、请求拦截、响应拦截
  */
 
-const API_BASE = 'http://localhost:8001'
+const API_BASE = ''  // 通过 Vite proxy 转发到 FastAPI
 
 // ============================================
 // API 错误类

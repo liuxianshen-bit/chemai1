@@ -24,19 +24,19 @@ class OCRService:
     def recognize_handwriting(self, image_data: bytes) -> Dict:
         """手写文字识别"""
         if not self.enabled:
-            return self._mock_result("handwriting")
+            return self._ocr_not_configured()
         return self._call_zhipu_ocr(image_data, "handwriting")
 
     def recognize_print(self, image_data: bytes) -> Dict:
         """印刷文字识别"""
         if not self.enabled:
-            return self._mock_result("print")
+            return self._ocr_not_configured()
         return self._call_zhipu_ocr(image_data, "print")
 
     def recognize_table(self, image_data: bytes) -> Dict:
         """表格识别"""
         if not self.enabled:
-            return self._mock_result("table")
+            return self._ocr_not_configured()
         return self._call_zhipu_ocr(image_data, "table")
 
     def recognize_answer_sheet(self, image_data: bytes) -> Dict:
@@ -45,7 +45,7 @@ class OCRService:
         识别学生作答结果，返回结构化数据
         """
         if not self.enabled:
-            return self._mock_answer_sheet_result()
+            return self._ocr_not_configured()
 
         # 调用智谱OCR
         result = self._call_zhipu_ocr(image_data, "answer_sheet")
@@ -245,43 +245,18 @@ class OCRService:
             answers[q_num] = answer.upper()
         return answers
 
-    def _mock_result(self, type_: str) -> Dict:
-        """生成模拟识别结果"""
+    def _ocr_not_configured(self) -> Dict:
+        """OCR 服务未配置时的错误返回"""
         return {
-            "success": True,
-            "type": type_,
-            "TextDetections": [],
-            "confidence": 0.95,
-            "mock": True,
-            "provider": "mock"
-        }
-
-    def _mock_answer_sheet_result(self) -> Dict:
-        """生成模拟答题卡识别结果"""
-        return {
-            "success": True,
-            "student_id": "202401001",
-            "student_name": "张三",
-            "answers": {
-                "1": "A",
-                "2": "B",
-                "3": "C",
-                "4": "D",
-                "5": "A",
-                "6": "B",
-                "7": "C",
-                "8": "A",
-                "9": "B",
-                "10": "C"
-            },
-            "scores": {
-                "1": 6, "2": 6, "3": 0, "4": 6, "5": 6,
-                "6": 0, "7": 6, "8": 6, "9": 0, "10": 6
-            },
-            "total_score": 42,
-            "confidence": 0.96,
-            "mock": True,
-            "provider": "mock"
+            "success": False,
+            "error": "OCR 服务未配置，请设置 ZHIPU_API_KEY 环境变量",
+            "student_id": "",
+            "student_name": "",
+            "answers": {},
+            "scores": {},
+            "total_score": 0,
+            "confidence": 0,
+            "provider": "none",
         }
 
 

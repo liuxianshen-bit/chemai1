@@ -758,10 +758,11 @@ export async function generateLearningPlan(studentId) {
 
   try {
     // 调用学习计划生成API
+    const student = currentStudentList.find(s => s.student_id === studentId)
     const result = await api.post('/api/diagnosis/learning-plan/generate', {
       student_id: studentId,
-      barrier_type: 'concept',
-      weak_knowledge_points: ['氧化还原反应', '离子反应']
+      barrier_type: student?.dominant_barrier || student?.barrier_type?.dominant || 'concept',
+      weak_knowledge_points: student?.weak_knowledge_points || []
     })
 
     if (result.success || result.student_id) {

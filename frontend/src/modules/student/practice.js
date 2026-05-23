@@ -31,7 +31,8 @@ export async function loadPracticeTasks() {
   showLoading('加载练习任务...')
 
   try {
-    const result = await practiceService.getStudentTasks()
+    const studentId = authService.getCurrentUserFromSession()?.id
+    const result = await practiceService.getStudentTasks(studentId)
 
     if (result.success) {
       renderPracticeTasks(result.data.tasks || [])

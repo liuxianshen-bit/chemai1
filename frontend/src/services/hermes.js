@@ -11,9 +11,10 @@
 
 import { api, handleApiError } from './api.js'
 
-// Hermes Agent API 配置
-const HERMES_BASE_URL = 'http://localhost:8642'
-const HERMES_API = `${HERMES_BASE_URL}/v1`
+// ChemAgent API 配置 — 通过 Vite proxy 转发
+const AGENT_API = '/api/agent'
+// 保留兼容 Hermes 任务管理 API（confirm/correct/interrupt 暂不可用，返回占位）
+const HERMES_API = '/api/agent'
 
 // 事件类型
 export const HermesEventType = {
@@ -176,20 +177,16 @@ class HermesAgentService {
     this._resetState()
 
     try {
-      const response = await fetch(`${HERMES_API}/chat/completions`, {
+      const response = await fetch(`${AGENT_API}/chat/stream`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          model: 'hermes-agent',
-          messages: [
-            {
-              role: 'user',
-              content: this._buildPrompt(task, params)
-            }
-          ],
-          stream: true
+          persona: this._getPersona(task),
+          message: this._buildPrompt(task, params),
+          provider: 'deepseek',
+          history: params.conversationHistory || []
         }),
         signal: this.abortController.signal
       })
@@ -219,6 +216,25 @@ class HermesAgentService {
     this._accumulatedContent = ''
     this._toolCallsBuffer = []
     this.pendingConfirm = null
+  }
+
+  /**
+   * 根据任务类型映射 Persona
+   */
+  _getPersona(task) {
+    const taskPersonaMap = {
+      'generate_questions': 'teacher',
+      'audit_question': 'teacher',
+      'diagnose_barrier': 'teacher',
+      'analyze_barrier': 'teacher',
+      'generate_learning_plan': 'teacher',
+      'ocr_recognize': 'teacher',
+      'ocr_parse': 'teacher',
+      'chemistry_tutor': 'tutor',
+      'simulate_experiment': 'tutor',
+      'weekly_report': 'parent',
+    }
+    return taskPersonaMap[task] || 'tutor'
   }
 
   /**

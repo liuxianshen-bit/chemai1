@@ -48,7 +48,9 @@ function getRoleName(role) {
   const roleNames = {
     admin: '管理员',
     teacher: '教师',
-    student: '学生'
+    student: '学生',
+    '学科组长': '学科组长',
+    '教务管理员': '教务管理员'
   }
   return roleNames[role] || role
 }
@@ -66,7 +68,7 @@ async function loadQuickStats(user) {
       { label: '已完成练习', value: '-', icon: '✅' },
       { label: '错题本', value: '-', icon: '❌' }
     )
-  } else if (user.role === 'teacher') {
+  } else if (user.role === 'teacher' || user.role === '学科组长' || user.role === '教务管理员') {
     stats.push(
       { label: '学生总数', value: '-', icon: '👥' },
       { label: '待审核', value: '-', icon: '⏳' },
@@ -101,7 +103,7 @@ function renderQuickActions(user) {
       { text: '查看报告', href: '/report.html', icon: '📊' },
       { text: '错题本', href: '/wrong.html', icon: '📒' }
     )
-  } else if (user.role === 'teacher') {
+  } else if (user.role === 'teacher' || user.role === '学科组长' || user.role === '教务管理员') {
     actions.push(
       { text: '创建考试', href: '/exam.html?action=create', icon: '📝' },
       { text: '题目管理', href: '/question.html', icon: '📚' },

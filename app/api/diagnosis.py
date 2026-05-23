@@ -11,7 +11,8 @@ from sqlalchemy.orm import Session
 
 from app.models.database import (
     Student, ExamRecord, StudentAnswer, Question, BarrierConfig, Class,
-    get_db, BarrierType
+    get_db, BarrierType, Parent, StudentParentBinding, ParentNotification,
+    OperationLog
 )
 
 router = APIRouter()
@@ -388,13 +389,42 @@ async def send_plan_to_parent(
     if not student:
         raise HTTPException(status_code=404, detail=f"学生 {student_id} 不存在")
 
-    # TODO: 实现实际的推送逻辑（短信/邮件/App推送）
-    # 目前仅返回模拟成功
+    # 查询该学生的所有绑定家长
+    bindings = db.query(StudentParentBinding).filter(
+        StudentParentBinding.student_id == student_id,
+        StudentParentBinding.status == "active"
+    ).all()
+
+    if not bindings:
+        return {
+            "success": False,
+            "message": "该学生未绑定家长，无法发送",
+            "student_id": student_id
+        }
+
+    sent_count = 0
+    for binding in bindings:
+        # 创建通知记录
+        notification = ParentNotification(
+            notification_id=f"notif_{student_id}_{binding.parent_id}_{int(datetime.utcnow().timestamp())}",
+            parent_id=binding.parent_id,
+            student_id=student_id,
+            type="learning_plan",
+            title=f"📖 {student.name} 的个性化学习计划已生成",
+            content=f"主要障碍类型: {student.barrier_type.get('dominant', '概念理解型') if isinstance(student.barrier_type, dict) else '概念理解型'}" if plan_data is None else str(plan_data),
+            is_read=False,
+            sent_at=datetime.utcnow()
+        )
+        db.add(notification)
+        sent_count += 1
+
+    db.commit()
 
     return {
         "success": True,
-        "message": "学习计划已发送给家长",
-        "student_id": student_id
+        "message": f"学习计划已发送给 {sent_count} 位家长",
+        "student_id": student_id,
+        "sent_count": sent_count
     }
 
 
@@ -464,4 +494,250 @@ async def get_student_learning_plan(
             },
             "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M")
         }
+    }
+
+
+# ============================================================
+# P5-1: 诊断模块补充端点
+# ============================================================
+
+
+@router.get("/plan/{student_id}")
+async def get_student_diagnosis_plan(student_id: str, db: Session = Depends(get_db)):
+    """
+    获取学生已有的诊断学习计划
+    由Hermes Agent生成后存储，本端点仅做检索
+    """
+    student = db.query(Student).filter(Student.student_id == student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail=f"学生 {student_id} 不存在")
+
+    barrier_type = student.barrier_type or {"concept": 0.33, "reading": 0.33, "expression": 0.34}
+    dominant = max(barrier_type, key=barrier_type.get)
+
+    # 查询该学生最近的答题记录，找出薄弱知识点
+    recent_answers = db.query(StudentAnswer).filter(
+        StudentAnswer.student_id == student_id,
+        StudentAnswer.is_correct == False
+    ).order_by(StudentAnswer.answered_at.desc()).limit(20).all()
+
+    kp_error_count = {}
+    for ans in recent_answers:
+        question = db.query(Question).filter(Question.question_id == ans.question_id).first()
+        if question:
+            for kp in (question.knowledge_points or []):
+                kp_error_count[kp] = kp_error_count.get(kp, 0) + 1
+
+    sorted_kps = sorted(kp_error_count.items(), key=lambda x: x[1], reverse=True)
+    weak_kps = [kp for kp, _ in sorted_kps[:5]]
+
+    return {
+        "success": True,
+        "data": {
+            "student_id": student_id,
+            "student_name": student.name,
+            "barrier_type": barrier_type,
+            "dominant_barrier": dominant,
+            "weak_knowledge_points": weak_kps,
+            "recommended_intervention": _INTERVENTIONS.get(dominant, ""),
+            "last_updated": student.barrier_last_updated.strftime("%Y-%m-%d") if student.barrier_last_updated else datetime.now().strftime("%Y-%m-%d")
+        }
+    }
+
+
+class FeedbackRequest(BaseModel):
+    """诊断反馈请求"""
+    rating: Optional[int] = None  # 1-5 评分
+    comment: Optional[str] = None  # 反馈内容
+    accurate: Optional[bool] = None  # 诊断是否准确
+
+
+@router.post("/{diagnosis_id}/feedback")
+async def submit_diagnosis_feedback(
+    diagnosis_id: str,
+    feedback: FeedbackRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    提交诊断结果反馈
+    学生对诊断结果的准确性进行评价
+    """
+    # feedback记录到操作日志
+    from app.models.database import OperationLog
+    log = OperationLog(
+        user_id=diagnosis_id,
+        action="feedback",
+        target_type="diagnosis",
+        target_id=diagnosis_id,
+        detail={
+            "rating": feedback.rating,
+            "comment": feedback.comment,
+            "accurate": feedback.accurate
+        }
+    )
+    db.add(log)
+    db.commit()
+
+    return {
+        "success": True,
+        "message": "反馈提交成功"
+    }
+
+
+@router.get("/history/{student_id}")
+async def get_diagnosis_history(
+    student_id: str,
+    limit: int = 10,
+    db: Session = Depends(get_db)
+):
+    """
+    获取学生历史诊断记录列表
+    按考试分组统计每次的障碍分布
+    """
+    student = db.query(Student).filter(Student.student_id == student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail=f"学生 {student_id} 不存在")
+
+    # 查询该学生参与过的所有考试/练习
+    exam_records = db.query(ExamRecord).join(
+        StudentAnswer, ExamRecord.record_id == StudentAnswer.exam_record_id
+    ).filter(
+        StudentAnswer.student_id == student_id
+    ).order_by(ExamRecord.exam_date.desc()).limit(limit).all()
+
+    history = []
+    for exam in exam_records:
+        # 统计本次考试的barrier分布
+        answers = db.query(StudentAnswer).filter(
+            StudentAnswer.exam_record_id == exam.record_id,
+            StudentAnswer.student_id == student_id
+        ).all()
+
+        barrier_count = {"concept": 0, "reading": 0, "expression": 0}
+        correct = sum(1 for a in answers if a.is_correct)
+        total = len(answers)
+
+        for a in answers:
+            if a.barrier_type and not a.is_correct:
+                barrier_count[a.barrier_type.value] = barrier_count.get(a.barrier_type.value, 0) + 1
+
+        history.append({
+            "exam_record_id": exam.record_id,
+            "exam_name": exam.name,
+            "exam_date": exam.exam_date.strftime("%Y-%m-%d") if exam.exam_date else None,
+            "accuracy": round(correct / total, 2) if total > 0 else 0,
+            "barrier_distribution": barrier_count
+        })
+
+    return {
+        "success": True,
+        "student_id": student_id,
+        "student_name": student.name,
+        "history": history
+    }
+
+
+@router.get("/class/{class_id}/stats")
+async def get_class_barrier_stats(class_id: str, db: Session = Depends(get_db)):
+    """
+    班级障碍类型分布统计
+    聚合全班学生的barrier_type字段
+    """
+    class_obj = db.query(Class).filter(Class.class_id == class_id).first()
+    if not class_obj:
+        raise HTTPException(status_code=404, detail=f"班级 {class_id} 不存在")
+
+    students = db.query(Student).filter(Student.class_id == class_id).all()
+
+    concept_count = 0
+    reading_count = 0
+    expression_count = 0
+    student_count = len(students)
+
+    for s in students:
+        bt = s.barrier_type
+        if bt and isinstance(bt, dict):
+            dominant = max(bt, key=bt.get)
+            if dominant == "concept":
+                concept_count += 1
+            elif dominant == "reading":
+                reading_count += 1
+            elif dominant == "expression":
+                expression_count += 1
+
+    return {
+        "success": True,
+        "class_id": class_id,
+        "class_name": class_obj.name,
+        "total_students": student_count,
+        "distribution": {
+            "concept": {"count": concept_count, "percentage": round(concept_count / student_count * 100, 1) if student_count > 0 else 0},
+            "reading": {"count": reading_count, "percentage": round(reading_count / student_count * 100, 1) if student_count > 0 else 0},
+            "expression": {"count": expression_count, "percentage": round(expression_count / student_count * 100, 1) if student_count > 0 else 0}
+        }
+    }
+
+
+@router.get("/class/{class_id}/kp/{kp}")
+async def get_kp_barrier_analysis(
+    class_id: str,
+    kp: str,
+    db: Session = Depends(get_db)
+):
+    """
+    按知识点的班级障碍分析
+    查询指定知识点下学生的错误率和障碍分布
+    """
+    class_obj = db.query(Class).filter(Class.class_id == class_id).first()
+    if not class_obj:
+        raise HTTPException(status_code=404, detail=f"班级 {class_id} 不存在")
+
+    # 查询该班级学生在指定知识点上的答题情况
+    students = db.query(Student).filter(Student.class_id == class_id).all()
+    student_ids = [s.student_id for s in students]
+
+    # 查找包含该知识点的题目
+    questions = db.query(Question).filter(
+        Question.knowledge_points.contains(kp)
+    ).all()
+    question_ids = [q.question_id for q in questions]
+
+    if not question_ids:
+        return {
+            "success": True,
+            "class_id": class_id,
+            "knowledge_point": kp,
+            "total_questions": 0,
+            "total_answers": 0,
+            "error_rate": 0,
+            "barrier_distribution": {"concept": 0, "reading": 0, "expression": 0},
+            "message": "暂未找到该知识点的题目数据"
+        }
+
+    # 查询答题记录
+    answers = db.query(StudentAnswer).filter(
+        StudentAnswer.student_id.in_(student_ids),
+        StudentAnswer.question_id.in_(question_ids)
+    ).all()
+
+    total = len(answers)
+    errors = [a for a in answers if not a.is_correct]
+    error_rate = len(errors) / total if total > 0 else 0
+
+    barrier_dist = {"concept": 0, "reading": 0, "expression": 0}
+    for a in errors:
+        if a.barrier_type:
+            bt = a.barrier_type.value
+            barrier_dist[bt] = barrier_dist.get(bt, 0) + 1
+
+    return {
+        "success": True,
+        "class_id": class_id,
+        "class_name": class_obj.name,
+        "knowledge_point": kp,
+        "total_questions": len(questions),
+        "total_answers": total,
+        "error_count": len(errors),
+        "error_rate": round(error_rate, 3),
+        "barrier_distribution": barrier_dist
     }

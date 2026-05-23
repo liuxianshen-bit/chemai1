@@ -62,10 +62,10 @@ function renderLearningPlan(data) {
       </div>
 
       <!-- 障碍干预提示 -->
-      ${plan.barrier针对性的干预 ? `
+      ${plan['barrier针对性的干预'] ? `
         <div class="barrier-intervention">
           <h3>针对您的障碍类型</h3>
-          ${plan.barrier针对性的干预.map(item => `
+          ${plan['barrier针对性的干预'].map(item => `
             <div class="intervention-card ${item.barrier}">
               <div class="intervention-header">
                 <span class="barrier-tag ${getBarrierClass(item.barrier)}">${item.barrier}</span>

@@ -40,10 +40,10 @@ export const examService = {
   },
 
   /**
-   * 发布考试
+   * 发布考试（终态锁定）
    */
   async publishExam(examId) {
-    return await api.post(`/api/exam/${examId}/publish`)
+    return await api.post(`/api/exam/${examId}/finalize`)
   },
 
   /**

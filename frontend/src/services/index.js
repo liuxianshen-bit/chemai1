@@ -15,7 +15,7 @@ export { hermesService, HermesEventType, ConfirmType, TaskType } from './hermes.
 export { examService } from './exam.js'
 export { questionService } from './question.js'
 export { diagnosisService, BarrierType, BarrierLevel, BarrierTypeNames, BarrierLevelNames } from './diagnosis.js'
-export { practiceService, PracticeStatus, PracticeStatusNames } from './practice.js'
+export { practiceService, reviewService, PracticeStatus, PracticeStatusNames } from './practice.js'
 export { reportService } from './report.js'
 export { userService, permissionService, classService } from './user.js'
 export { schoolService, gradeService, teacherAppService } from './school.js'

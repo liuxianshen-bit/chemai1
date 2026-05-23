@@ -43,7 +43,7 @@ export const diagnosisService = {
    * 获取学生障碍诊断
    */
   async getStudentDiagnosis(studentId) {
-    return await api.get(`/api/diagnosis/student/${studentId}`)
+    return await api.get(`/api/diagnosis/barrier/${studentId}`)
   },
 
   /**

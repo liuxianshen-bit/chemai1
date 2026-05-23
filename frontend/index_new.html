@@ -3,31 +3,87 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>智辅化学 - ChemAI Agent v2.0</title>
-
-    <!-- 字体 -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
-
-    <!-- 样式 -->
+    <title>智辅化学 - ChemAI Agent</title>
+    <link href="https://fonts.googleapis.cn/css2?family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="./styles.css">
+    <link rel="stylesheet" href="/src/styles/agent.css">
 </head>
 <body>
-    <div id="app"></div>
+    <div id="app" class="agent-layout">
+        <!-- 侧边栏 -->
+        <aside class="agent-sidebar">
+            <div class="sidebar-section">
+                <div class="sidebar-item new-chat" onclick="location.reload()">
+                    <span class="icon">💬</span> 新对话
+                </div>
+            </div>
+            <div class="sidebar-section">
+                <div class="sidebar-title">功能</div>
+                <div class="sidebar-item" onclick="ChemAI.initPage('teacher')">
+                    <span class="icon">📋</span> 题库管理
+                </div>
+                <div class="sidebar-item" onclick="ChemAI.initPage('teacher')">
+                    <span class="icon">📊</span> 学情面板
+                </div>
+                <div class="sidebar-item" onclick="ChemAI.initPage('teacher')">
+                    <span class="icon">📝</span> 考试管理
+                </div>
+                <div class="sidebar-item" onclick="ChemAI.initPage('teacher')">
+                    <span class="icon">🎓</span> 学生管理
+                </div>
+            </div>
+        </aside>
 
-    <!-- 脚本 -->
-    <script type="module" src="/src/main.js"></script>
-    <script>
-        // 根据页面初始化对应模块
-        const path = window.location.pathname
-        if (path.includes('teacher')) {
-            ChemAI.initPage('teacher')
-        } else if (path.includes('student')) {
-            ChemAI.initPage('student')
-        } else if (path.includes('login')) {
-            ChemAI.initPage('login')
+        <!-- 主聊天区 -->
+        <main class="agent-main">
+            <div class="agent-messages" id="agent-messages">
+                <div class="agent-msg assistant">
+                    👋 你好！我是 ChemAI 化学教学助手。<br><br>
+                    我能帮你：<br>
+                    • <b>配平化学方程式</b><br>
+                    • <b>生成练习题</b><br>
+                    • <b>诊断学习障碍</b><br>
+                    • <b>搜索历年真题</b><br>
+                    • <b>模拟化学实验</b><br>
+                    • <b>生成学习周报</b><br><br>
+                    直接输入问题开始吧！
+                </div>
+            </div>
+
+            <!-- 快捷提问 -->
+            <div class="agent-suggestions">
+                <div class="suggestion-chip" data-prompt="帮我配平 Fe + O2 = Fe2O3">⚖️ 配平方程式</div>
+                <div class="suggestion-chip" data-prompt="出3道关于盐类水解的选择题">📝 出题练习</div>
+                <div class="suggestion-chip" data-prompt="模拟钠与水的反应实验">🔬 模拟实验</div>
+                <div class="suggestion-chip" data-prompt="请讲解氧化还原反应的基本概念">📖 讲解概念</div>
+                <div class="suggestion-chip" data-prompt="搜索关于化学平衡的高考真题">🔍 查真题</div>
+                <div class="suggestion-chip" data-prompt="分析我的学习障碍并给出建议">🩺 错题诊断</div>
+            </div>
+
+            <!-- 输入区 -->
+            <div class="agent-input-area">
+                <textarea id="agent-input" placeholder="输入化学问题，Enter 发送，Shift+Enter 换行..." rows="1"></textarea>
+                <button id="agent-send">发送</button>
+            </div>
+
+            <!-- 状态栏 -->
+            <div class="agent-status" id="agent-status">
+                <div class="status-dot"></div>
+                <span class="status-text">思考中...</span>
+            </div>
+        </main>
+    </div>
+
+    <script type="module">
+        import { initAgentPage } from '/src/modules/agent/index.js'
+        import { authService } from '/src/services/index.js'
+
+        // 检查登录状态
+        const user = authService.getCurrentUserFromSession()
+        if (!user) {
+            window.location.href = '/login.html'
         } else {
-            ChemAI.initPage('home')
+            initAgentPage()
         }
     </script>
 </body>

@@ -199,4 +199,6 @@ if (typeof window !== 'undefined') {
   window.approveStudent = approveStudent
   window.viewStudentReport = viewStudentReport
   window.sendPracticeToStudent = sendPracticeToStudent
+  window.teacherModule = window.teacherModule || {}
+  window.teacherModule.initStudentsModule = initStudentsModule
 }

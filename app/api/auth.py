@@ -13,7 +13,7 @@ from datetime import datetime
 import hashlib
 from sqlalchemy.orm import Session
 
-from app.models.database import get_db, Teacher, Student, Account, TeacherApplication
+from app.models.database import get_db, Teacher, Student, Account, TeacherApplication, Parent, StudentParentBinding
 from app.middleware.auth import (
     create_access_token, create_refresh_token, verify_token, verify_refresh_token,
     get_current_user as mw_get_current_user
@@ -59,7 +59,7 @@ def get_user_info(account: Account, db: Session) -> dict:
         "username": account.username
     }
 
-    if account.role == "teacher" and account.teacher_id:
+    if account.role in ("teacher", "学科组长", "教务管理员") and account.teacher_id:
         teacher = db.query(Teacher).filter(Teacher.teacher_id == account.teacher_id).first()
         if teacher:
             user_info["name"] = teacher.name
@@ -85,6 +85,25 @@ def get_user_info(account: Account, db: Session) -> dict:
             admin_teacher = db.query(Teacher).filter(Teacher.teacher_id == account.teacher_id).first()
             if admin_teacher:
                 user_info["school_id"] = admin_teacher.school_id
+
+    elif account.role == "parent" and account.parent_id:
+        parent = db.query(Parent).filter(Parent.parent_id == account.parent_id).first()
+        if parent:
+            user_info["name"] = parent.name
+            user_info["id"] = parent.parent_id
+            user_info["parent_id"] = parent.parent_id
+            user_info["status"] = parent.status
+            # 获取绑定的学生信息
+            binding = db.query(StudentParentBinding).filter(
+                StudentParentBinding.parent_id == parent.parent_id,
+                StudentParentBinding.status == "active"
+            ).first()
+            if binding:
+                student = db.query(Student).filter(Student.student_id == binding.student_id).first()
+                if student:
+                    user_info["student_id"] = student.student_id
+                    user_info["student_name"] = student.name
+                    user_info["class_id"] = student.class_id
 
     return user_info
 

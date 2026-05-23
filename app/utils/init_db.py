@@ -3,10 +3,14 @@
 创建演示数据：邵阳县第一中学
 """
 import hashlib
-from datetime import datetime
+import random
+from datetime import datetime, timedelta
 from app.models.database import (
     init_db, get_db, Account, Class, Teacher, Student,
-    School, Grade, TeacherClassSubject
+    School, Grade, TeacherClassSubject, ExamRecord, Question,
+    StudentAnswer, BarrierConfig, Difficulty, RecordType,
+    QuestionSource, AuditStatus, BarrierType, Parent,
+    StudentParentBinding
 )
 
 def hash_password(password: str) -> str:
@@ -343,6 +347,309 @@ def create_all_students(db):
     return len(all_students)
 
 
+# ==================== 演示考试/答题数据 ====================
+
+def load_sql_file(filename):
+    """加载 SQL 文件内容"""
+    import os
+    sql_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", filename)
+    with open(sql_path, "r", encoding="utf-8") as f:
+        return f.read()
+
+
+def create_demo_parents(db):
+    """创建演示家长账号（P5-6）"""
+    import uuid
+
+    # 检查是否已存在
+    existing_parent = db.query(Parent).filter(Parent.phone == "13800138000").first()
+    if existing_parent:
+        print(f"家长账号已存在: {existing_parent.name} ({existing_parent.phone})")
+        return
+
+    # 1. 创建家长记录
+    parent = Parent(
+        parent_id="parent_demo_001",
+        name="李国华",
+        phone="13800138000",
+        email="liguohua@example.com",
+        password_hash=hash_password("123456"),
+        status="active"
+    )
+    db.add(parent)
+    db.commit()
+
+    # 2. 创建家长账号
+    parent_account = Account(
+        account_id="acc_parent_demo",
+        username="13800138000",
+        password_hash=hash_password("123456"),
+        role="parent",
+        parent_id=parent.parent_id,
+        status="active"
+    )
+    db.add(parent_account)
+
+    # 3. 绑定到学生 202610101（李雨萱）
+    binding = StudentParentBinding(
+        binding_id=f"bind_{parent.parent_id}_202610101",
+        student_id="202610101",
+        parent_id=parent.parent_id,
+        relation="父亲",
+        status="active",
+        bind_code=f"BIND{random.randint(100000, 999999)}"
+    )
+    db.add(binding)
+
+    db.commit()
+    print(f"已创建家长账号: 13800138000 / 123456 (李国华 → 李雨萱)")
+
+
+def create_demo_exam_data(db):
+    """创建演示考试/答题数据（两个班、两位老师）"""
+    from sqlalchemy import text
+
+    print("\n9. 创建演示考试数据...")
+
+    # 检查是否已有数据
+    if db.query(ExamRecord).count() > 0:
+        print("考试记录已存在，跳过演示数据创建")
+        return
+
+    exam_date = datetime(2026, 3, 15, 8, 0, 0)
+
+    # ===== 从 SQL 文件加载题目基础数据 =====
+    sql_content = load_sql_file("demo_exam_data.sql")
+    statements = []
+    for line in sql_content.split("\n"):
+        stripped = line.strip()
+        if stripped.startswith("--") or stripped == "":
+            continue
+        statements.append(stripped)
+    db.execute(text("\n".join(statements)))
+    db.flush()
+
+    # 读取已创建的题目
+    questions = db.query(Question).order_by(Question.question_id).all()
+    print(f"  已加载 {len(questions)} 道题目")
+
+    # ===== 9a. 创建两次考试（每个班一次） =====
+    exams_data = [
+        {
+            "record_id": "demo_exam_001",
+            "class_id": "class_2025_1",
+            "name": "高一(1)班 第一次月考 - 化学",
+            "teacher_id": "teacher_hai",
+            "present": 34
+        },
+        {
+            "record_id": "demo_exam_002",
+            "class_id": "class_2025_2",
+            "name": "高一(2)班 第一次月考 - 化学",
+            "teacher_id": "teacher_liu",
+            "present": 33
+        }
+    ]
+
+    exam_map = {}
+    for ed in exams_data:
+        exam = ExamRecord(
+            record_id=ed["record_id"],
+            class_id=ed["class_id"],
+            type=RecordType.EXAM,
+            name=ed["name"],
+            question_stats={},
+            avg_score=0,
+            total_students=ed["present"],
+            present_students=ed["present"],
+            source=QuestionSource.AI_GENERATED,
+            exam_date=exam_date,
+            generated_at=exam_date - timedelta(days=3),
+            created_at=exam_date - timedelta(days=3)
+        )
+        db.add(exam)
+        exam_map[ed["record_id"]] = ed
+
+    # 题目关联到两次考试
+    for q in questions:
+        q.record_id = "demo_exam_001"  # 题目属于高一(1)班考试
+        # 再创建一套副本题目给高一(2)班
+        q2_id = q.question_id.replace("demo_q_", "demo_q2_")
+        q2 = Question(
+            question_id=q2_id,
+            record_id="demo_exam_002",
+            content=q.content,
+            options=q.options,
+            answer=q.answer,
+            analysis=q.analysis,
+            knowledge_points=q.knowledge_points,
+            difficulty=q.difficulty,
+            source=QuestionSource.AI_GENERATED,
+            audit_status=AuditStatus.PASSED,
+            coefficient_correct=True,
+            condition_correct=True,
+            product_correct=True,
+            structure_correct=True
+        )
+        db.add(q2)
+
+    db.flush()
+    all_questions = db.query(Question).all()
+    print(f"  已创建 2 场考试，共 {len(all_questions)} 道题目")
+
+    # ===== 9b. 创建学生作答记录（两个班） =====
+    students = db.query(Student).order_by(Student.student_id).all()
+
+    # 错误率配置（用于高一1班）
+    q_error_rates_1 = {
+        "demo_q_001": 0.15, "demo_q_002": 0.40, "demo_q_003": 0.20,
+        "demo_q_004": 0.45, "demo_q_005": 0.50, "demo_q_006": 0.10,
+        "demo_q_007": 0.40, "demo_q_008": 0.65, "demo_q_009": 0.60,
+        "demo_q_010": 0.70, "demo_q_011": 0.35, "demo_q_012": 0.20,
+        "demo_q_013": 0.65, "demo_q_014": 0.15, "demo_q_015": 0.35,
+    }
+    # 高一2班调整错误率（略低，表现稍好）
+    q_error_rates_2 = {k: max(0.05, v - 0.08) for k, v in q_error_rates_1.items()}
+
+    wrong_answers = {
+        "demo_q_001": ["A", "B", "D"], "demo_q_002": ["B", "C", "D"],
+        "demo_q_003": ["A", "B", "C"], "demo_q_004": ["A", "C", "D"],
+        "demo_q_005": ["A", "B", "C"], "demo_q_006": ["A", "B", "D"],
+        "demo_q_007": ["A", "B", "D"], "demo_q_008": ["A", "C", "D"],
+        "demo_q_009": ["A", "B", "D"], "demo_q_010": ["A", "C", "D"],
+        "demo_q_011": ["A", "B", "C"], "demo_q_012": ["A", "C", "D"],
+        "demo_q_013": ["A", "B", "C"], "demo_q_014": ["A", "B", "D"],
+        "demo_q_015": ["A", "B", "C"],
+    }
+
+    barrier_map = {
+        "demo_q_001": BarrierType.CONCEPT, "demo_q_005": BarrierType.CONCEPT,
+        "demo_q_009": BarrierType.CONCEPT, "demo_q_002": BarrierType.READING,
+        "demo_q_004": BarrierType.READING, "demo_q_011": BarrierType.READING,
+        "demo_q_008": BarrierType.EXPRESSION, "demo_q_010": BarrierType.EXPRESSION,
+        "demo_q_013": BarrierType.EXPRESSION,
+    }
+
+    random.seed(42)
+    answer_count = 0
+    total_correct = 0
+
+    for student in students:
+        # 确定学生所属班级，选择对应的考试ID和错误率
+        if student.class_id == "class_2025_1":
+            exam_id = "demo_exam_001"
+            q_prefix = "demo_q_"
+            error_rates = q_error_rates_1
+        else:
+            exam_id = "demo_exam_002"
+            q_prefix = "demo_q2_"
+            error_rates = q_error_rates_2
+
+        consecutive_errors = 0
+        consecutive_correct = 0
+
+        for i, q in enumerate(questions):
+            qid_base = q.question_id  # e.g. "demo_q_001"
+            qid = qid_base
+            # 对2班，题目ID是 demo_q2_001
+            if student.class_id == "class_2025_2":
+                qid = qid_base.replace("demo_q_", "demo_q2_")
+
+            error_rate = error_rates.get(qid_base, 0.3)
+            is_correct = random.random() > error_rate
+
+            if is_correct:
+                answer_text = q.answer
+                consecutive_correct += 1
+                consecutive_errors = 0
+                barrier = None
+            else:
+                answer_text = random.choice(wrong_answers.get(qid_base, ["A"]))
+                consecutive_errors += 1
+                consecutive_correct = 0
+                barrier = barrier_map.get(qid_base)
+
+            answer = StudentAnswer(
+                answer_id=f"sa_{student.student_id}_{qid}",
+                student_id=student.student_id,
+                question_id=qid,
+                exam_record_id=exam_id,
+                student_answer=answer_text,
+                is_correct=is_correct,
+                barrier_type=barrier,
+                consecutive_errors=min(consecutive_errors, 5),
+                consecutive_correct=min(consecutive_correct, 5),
+                answered_at=exam_date + timedelta(minutes=i * 5 + random.randint(0, 3))
+            )
+            db.add(answer)
+            answer_count += 1
+            if is_correct:
+                total_correct += 1
+
+    db.flush()
+    print(f"  已创建 {answer_count} 条作答记录 ({len(students)}学生 × {len(questions)}题)")
+
+    # ===== 9c. 统计错题数据（按考试） =====
+    for exam_id in ["demo_exam_001", "demo_exam_002"]:
+        exam_record = db.query(ExamRecord).filter(ExamRecord.record_id == exam_id).first()
+        if not exam_record:
+            continue
+
+        q_prefix = "demo_q_" if exam_id == "demo_exam_001" else "demo_q2_"
+        question_stats = {}
+
+        for q in questions:
+            qid = q.question_id.replace("demo_q_", q_prefix)
+            answers = db.query(StudentAnswer).filter(
+                StudentAnswer.question_id == qid,
+                StudentAnswer.exam_record_id == exam_id
+            ).all()
+            total = len(answers)
+            wrong = sum(1 for a in answers if not a.is_correct)
+            question_stats[qid] = {
+                "total": total,
+                "correct": total - wrong,
+                "wrong": wrong,
+                "error_rate": round(wrong / total, 2) if total > 0 else 0
+            }
+
+        exam_record.question_stats = question_stats
+        exam_record.avg_score = round(
+            sum(1 for a in db.query(StudentAnswer).filter(
+                StudentAnswer.exam_record_id == exam_id
+            ).all() if a.is_correct) / max(
+                db.query(StudentAnswer).filter(
+                    StudentAnswer.exam_record_id == exam_id
+                ).count(), 1
+            ) * 100, 1
+        )
+
+    # ===== 9d. 创建两位老师的障碍诊断配置 =====
+    for teacher_id in ["teacher_hai", "teacher_liu"]:
+        config = BarrierConfig(
+            config_id=f"bc_{teacher_id}",
+            teacher_id=teacher_id,
+            concept_threshold=3,
+            reading_threshold=2,
+            expression_threshold=3,
+            mastery_threshold=3,
+            auto_sync_to_student=True
+        )
+        db.add(config)
+
+    db.commit()
+
+    # 最终统计
+    exam_1 = db.query(ExamRecord).filter(ExamRecord.record_id == "demo_exam_001").first()
+    exam_2 = db.query(ExamRecord).filter(ExamRecord.record_id == "demo_exam_002").first()
+    print(f"\n  ✅ 演示数据创建完成!")
+    print(f"  - 考试1: 高一(1)班 ｜ 34人 ｜ 平均正确率 {exam_1.avg_score}%")
+    print(f"  - 考试2: 高一(2)班 ｜ 33人 ｜ 平均正确率 {exam_2.avg_score}%")
+    print(f"  - 题目: {len(questions)} 道 × 2套 = {len(all_questions)} 道")
+    print(f"  - 作答: {answer_count} 条")
+    print(f"  - 障碍诊断配置: 2 位老师")
+
+
 def init_database():
     """初始化数据库并创建演示数据"""
     print("=" * 60)
@@ -375,6 +682,12 @@ def init_database():
         print("\n8. 创建67名学生...")
         total = create_all_students(db)
 
+        print("\n9. 创建演示考试/答题数据...")
+        create_demo_exam_data(db)
+
+        print("\n10. 创建演示家长账号...")
+        create_demo_parents(db)
+
         print("\n" + "=" * 60)
         print("数据库初始化完成!")
         print("=" * 60)
@@ -382,7 +695,11 @@ def init_database():
 邵阳县第一中学演示数据:
   - 高一(1)班: 34人 (学号 202610101~202610134)
   - 高一(2)班: 33人 (学号 202610201~202610233)
-  - 共计: 67名学生
+  - 共计: 67名学生, 2个班级
+  - 考试1: 高一(1)班 第一次月考 - 化学 (15道题, 34人作答)
+  - 考试2: 高一(2)班 第一次月考 - 化学 (15道题, 33人作答)
+  - 作答: 1005条学生作答记录
+  - 障碍诊断: 海老师 + 刘老师 配置
 
 演示账号:
   admin / admin123          - 系统管理员
@@ -392,7 +709,11 @@ def init_database():
 
 学生账号:
   学号 / 123456 (如: 202610101 / 123456)
+
+家长账号:
+  13800138000 / 123456      - 李国华（李雨萱的家长）
 """)
+
     except Exception as e:
         db.rollback()
         print(f"\n初始化失败: {e}")

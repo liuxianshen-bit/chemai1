@@ -394,28 +394,29 @@ async def get_historical_questions(
     knowledge_point: Optional[str] = None,
     difficulty: Optional[str] = None,
     page: int = 1,
-    page_size: int = 50,
-    db: Session = Depends(get_db)
+    page_size: int = 50
 ):
     """
     查询历年真题
     支持按地区、年份、知识点、难度筛选
+    从 ExamBankService（内存加载JSON文件）读取，而非数据库表
     """
-    query = db.query(HistoricalExam)
+    from app.services.exam_bank import exam_bank_service
 
-    if region:
-        query = query.filter(HistoricalExam.source.contains(region))
-    if year:
-        query = query.filter(HistoricalExam.year == year)
-    if knowledge_point:
-        query = query.filter(HistoricalExam.knowledge_points.contains([knowledge_point]))
-    if difficulty:
-        query = query.filter(HistoricalExam.difficulty == Difficulty[difficulty.upper()])
+    # 参数映射：region 映射到 service 的 source（"全国卷" → 匹配 "全国卷2024"）
+    results = exam_bank_service.search_questions(
+        source=region,
+        year=year,
+        knowledge_point=knowledge_point,
+        difficulty=difficulty
+    )
 
-    query = query.order_by(HistoricalExam.year.desc(), HistoricalExam.exam_id)
+    total = len(results)
 
-    total = query.count()
-    exams = query.offset((page - 1) * page_size).limit(page_size).all()
+    # 分页
+    start = (page - 1) * page_size
+    end = start + page_size
+    page_results = results[start:end]
 
     return {
         "success": True,
@@ -425,18 +426,18 @@ async def get_historical_questions(
             "page_size": page_size,
             "questions": [
                 {
-                    "exam_id": e.exam_id,
-                    "source": e.source,
-                    "year": e.year,
-                    "question_number": e.question_number,
-                    "content": e.content,
-                    "answer": e.answer,
-                    "analysis": e.analysis,
-                    "knowledge_points": e.knowledge_points,
-                    "difficulty": e.difficulty.value if e.difficulty else "medium",
-                    "discrimination": e.discrimination
+                    "exam_id": q.exam_id,
+                    "source": q.source,
+                    "year": q.year,
+                    "question_number": q.question_number,
+                    "content": q.content,
+                    "answer": q.answer,
+                    "analysis": q.analysis or "",
+                    "knowledge_points": q.knowledge_points,
+                    "difficulty": q.difficulty or "medium",
+                    "discrimination": q.discrimination
                 }
-                for e in exams
+                for q in page_results
             ]
         }
     }

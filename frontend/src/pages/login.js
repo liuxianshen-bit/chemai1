@@ -25,7 +25,7 @@ async function handleLogin(e) {
 
   try {
     Toast.info('登录中...')
-    const result = await authService.login(username, password, role)
+    const result = await authService.login(username, password)
 
     if (result.success && result.data) {
       // 保存token和用户信息到session
@@ -34,7 +34,9 @@ async function handleLogin(e) {
 
       Toast.success('登录成功')
       setTimeout(() => {
-        window.location.href = '/index.html'
+        // role-based 重定向
+        const target = user.role === 'student' ? '/student_v2.html' : '/teacher_v2.html'
+        window.location.href = target
       }, 500)
     } else {
       Toast.error(result.message || '登录失败')
