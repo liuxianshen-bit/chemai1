@@ -1,62 +1,105 @@
 /**
- * ChemAI Frontend — 公共函数
- * login.html 依赖此文件中的 apiRequest 函数
+ * ChemAI — 全局应用逻辑
+ * 认证检查 / 侧边栏渲染 / fetch token 注入 / 页面路由
  */
-async function apiRequest(endpoint, options = {}) {
-  var session = sessionStorage.getItem('chemai_user')
-  var token = session ? JSON.parse(session).token : null
-  var headers = { 'Content-Type': 'application/json' }
-  if (token) headers['Authorization'] = 'Bearer ' + token
+(function () {
+  'use strict'
 
-  try {
-    var resp = await fetch(endpoint, {
-      method: options.method || 'GET',
-      headers: Object.assign(headers, options.headers || {}),
-      body: options.body || undefined
-    })
-    if (resp.status === 401) {
-      sessionStorage.removeItem('chemai_user')
-      window.location.href = '/login.html'
-      throw new Error('登录已过期')
+  // ─── 认证检查 ───
+  var user = getUser()
+  if (!user) { window.location.href = '/login.html'; return }
+
+  // ─── fetch 拦截：自动注入 token ───
+  var _fetch = window.fetch
+  window.fetch = function (url, opts) {
+    opts = opts || {}
+    var u = typeof url === 'string' ? url : (url.url || '')
+    if (u.indexOf('/api/') >= 0) {
+      var token = getToken()
+      if (token) {
+        opts.headers = opts.headers || {}
+        if (opts.headers instanceof Headers) {
+          if (!opts.headers.has('Authorization'))
+            opts.headers = Object.assign({ Authorization: 'Bearer ' + token }, Object.fromEntries(opts.headers.entries()))
+        } else if (!opts.headers.Authorization && !opts.headers['Authorization']) {
+          opts.headers['Authorization'] = 'Bearer ' + token
+        }
+      }
     }
-    if (!resp.ok) throw new Error('HTTP ' + resp.status)
-    return await resp.json()
-  } catch (e) {
-    console.error('API请求失败 [' + endpoint + ']:', e.message)
-    throw e
+    return _fetch.call(this, url, opts)
   }
-}
-window.apiRequest = apiRequest
 
-function handleOcrClassSelect() {
-  var dropdown = document.getElementById('ocr-class-dropdown')
-  if (!dropdown) return
-  if (dropdown.options.length <= 1 && !dropdown._loading) {
-    dropdown._loading = true
-    apiRequest('/api/classes')
-      .then(function(data) {
-        dropdown._loading = false
-        var list = (data && data.classes) || (Array.isArray(data) ? data : [])
-        dropdown.innerHTML = '<option value="">请选择班级...</option>'
-        list.forEach(function(c) {
-          var opt = document.createElement('option')
-          opt.value = c.class_id || ''
-          opt.textContent = c.name || '未知班级'
-          dropdown.appendChild(opt)
-        })
-      })
-      .catch(function(e) {
-        dropdown._loading = false
-        console.error('加载班级失败:', e)
-      })
-    return
+  // ─── 侧边栏渲染 ───
+  function renderSidebar(active) {
+    var nav = [
+      { id: 'chat', icon: 'psychology', label: 'AI 教研助手', href: '/' },
+      { id: 'ocr', icon: 'document_scanner', label: '答题卡识别', href: '/pages/ocr.html' },
+      { id: 'exam', icon: 'assignment', label: '考试管理', href: '/pages/exam.html' },
+      { id: 'questions', icon: 'menu_book', label: '题目管理', href: '/pages/questions.html' },
+      { id: 'diagnosis', icon: 'health_and_safety', label: '障碍诊断', href: '/pages/diagnosis.html' },
+      { id: 'report', icon: 'description', label: '学情报告', href: '/pages/report.html' },
+      { id: 'panel', icon: 'analytics', label: '学情面板', href: '/pages/panel.html' },
+      { id: 'students', icon: 'group', label: '学生管理', href: '/pages/students.html' },
+    ]
+    var html = nav.map(function (n) {
+      var cls = n.id === active ? 'sidebar-link active' : 'sidebar-link'
+      return '<a class="' + cls + '" href="' + n.href + '">' +
+        '<span class="material-symbols-outlined">' + n.icon + '</span>' +
+        n.label + '</a>'
+    }).join('')
+
+    // 如果页面有 #sidebar-nav 就渲染
+    var sidebar = document.getElementById('sidebar-nav')
+    if (sidebar) sidebar.innerHTML = html
+
+    // 顶部导航
+    var topnav = document.getElementById('topbar-nav')
+    if (topnav) {
+      topnav.innerHTML = nav.map(function (n) {
+        return '<a class="topbar-tab' + (n.id === active ? ' active' : '') + '" href="' + n.href + '">' + n.label + '</a>'
+      }).join('')
+    }
   }
-  if (!dropdown.value) {
-    alert('请先选择班级，再上传答题卡')
-    dropdown.focus()
-    return
+
+  // ─── 用户信息渲染 ───
+  function renderUser() {
+    var el = document.getElementById('user-name')
+    if (el) el.textContent = user.name || '教师'
+    var el2 = document.getElementById('user-role')
+    if (el2) el2.textContent = user.school || '智辅化学'
   }
-  var fileInput = document.getElementById('file-input')
-  if (fileInput) fileInput.click()
-}
-window.handleOcrClassSelect = handleOcrClassSelect
+
+  // ─── 辅助函数 ───
+  function getUser() {
+    try { return JSON.parse(sessionStorage.getItem('chemai_user')) } catch (e) { return null }
+  }
+  function getToken() {
+    var u = getUser(); return u ? u.token : ''
+  }
+
+  // ─── 暴露到全局 ───
+  window.ChemAI = {
+    user: user,
+    renderSidebar: renderSidebar,
+    renderUser: renderUser,
+    getToken: getToken,
+    getUser: getUser,
+    logout: function () { sessionStorage.removeItem('chemai_user'); window.location.href = '/login.html' }
+  }
+
+  // ─── 页面加载时自动渲染 ───
+  document.addEventListener('DOMContentLoaded', function () {
+    renderUser()
+    // 根据路径判断 active
+    var path = window.location.pathname
+    var active = 'chat'
+    if (path.indexOf('ocr') >= 0) active = 'ocr'
+    else if (path.indexOf('exam') >= 0) active = 'exam'
+    else if (path.indexOf('questions') >= 0) active = 'questions'
+    else if (path.indexOf('diagnosis') >= 0) active = 'diagnosis'
+    else if (path.indexOf('report') >= 0) active = 'report'
+    else if (path.indexOf('panel') >= 0) active = 'panel'
+    else if (path.indexOf('students') >= 0) active = 'students'
+    renderSidebar(active)
+  })
+})()

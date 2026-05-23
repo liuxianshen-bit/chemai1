@@ -1,0 +1,218 @@
+/*
+ * Academic Catalyst Design System — 智辅化学 ChemAI
+ * Modern Academic style: Oxford Blue + Parchment Neutrals + Glassmorphism AI
+ */
+
+/* ─── Material Symbols ─── */
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+.material-symbols-outlined.filled {
+  font-variation-settings: 'FILL' 1;
+}
+
+/* ─── Scrollbar ─── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background-color: #c4c6cf; border-radius: 10px; }
+
+/* ─── Sidebar ─── */
+.sidebar-link {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 16px; border-radius: 8px;
+  color: #86a0cd; transition: all .2s;
+  font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 500;
+  text-decoration: none;
+}
+.sidebar-link:hover { color: #fff; background: rgba(255,255,255,.08); }
+.sidebar-link.active { background: rgba(255,255,255,.12); color: #fff; font-weight: 700; border-right: 3px solid #fff; }
+
+/* ─── TopBar ─── */
+.topbar {
+  position: sticky; top: 0; z-index: 40;
+  background: rgba(251,249,245,.85); backdrop-filter: blur(12px);
+  display: flex; align-items: center; justify-content: space-between;
+  height: 64px; padding: 0 32px;
+  border-bottom: 1px solid rgba(215,196,177,.3);
+}
+.topbar-tab {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px; font-weight: 500;
+  color: #43474e; padding-bottom: 4px;
+  text-decoration: none; transition: .15s;
+}
+.topbar-tab:hover, .topbar-tab.active { color: #002045; border-bottom: 2px solid #002045; font-weight: 700; }
+
+/* ─── Cards ─── */
+.card {
+  background: #fff; border-radius: 8px;
+  border: 1px solid rgba(215,196,177,.3);
+  padding: 24px; transition: box-shadow .2s;
+}
+.card:hover { box-shadow: 0 4px 20px rgba(26,54,93,.06); }
+.card-accent { border-top: 4px solid #D7C4B1; }
+
+/* ─── AI Chat Bubbles ─── */
+.msg-user {
+  background: #002045; color: #fff; align-self: flex-end;
+  border-radius: 8px 8px 4px 8px; max-width: 75%;
+  padding: 12px 16px; font-size: 14px; line-height: 1.6;
+}
+.msg-ai {
+  background: rgba(224,242,241,.5); backdrop-filter: blur(12px);
+  border: 1px solid rgba(19,105,106,.15); align-self: flex-start;
+  border-radius: 8px 8px 8px 4px; max-width: 80%;
+  padding: 14px 18px; font-size: 14px; line-height: 1.65;
+}
+.msg-ai .ai-avatar {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: 'JetBrains Mono', monospace; font-size: 11px;
+  color: #13696a; margin-bottom: 6px;
+}
+
+/* ─── Tool Card ─── */
+.tool-card {
+  align-self: flex-start; max-width: 85%;
+  background: #fff; border: 1px solid rgba(215,196,177,.4);
+  border-left: 3px solid #455f88; border-radius: 8px;
+  padding: 10px 14px; cursor: pointer;
+  font-family: 'JetBrains Mono', monospace; font-size: 12px;
+}
+.tool-card-header { display: flex; align-items: center; gap: 8px; }
+.tool-card-body {
+  display: none; margin-top: 8px; padding: 8px;
+  background: rgba(0,0,0,.03); border-radius: 4px;
+  font-size: 12px; max-height: 200px; overflow-y: auto;
+  white-space: pre-wrap;
+}
+
+/* ─── Suggestion Chips ─── */
+.chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 6px 16px; border-radius: 9999px;
+  border: 1px solid rgba(215,196,177,.5);
+  background: #fff; font-size: 14px; cursor: pointer;
+  transition: all .15s; white-space: nowrap;
+  color: #1b1c1a;
+}
+.chip:hover { border-color: #002045; background: rgba(0,32,69,.05); }
+
+/* ─── Agent Status Bar ─── */
+.agent-status {
+  display: none; align-items: center; gap: 8px;
+  padding: 6px 24px; font-size: 12px; color: #43474e;
+  border-top: 1px solid rgba(215,196,177,.3);
+  background: rgba(251,249,245,.9);
+  font-family: 'JetBrains Mono', monospace;
+}
+.agent-status .dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: linear-gradient(135deg, #002045, #13696a);
+  animation: pulse-dot 1.2s ease-in-out infinite;
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: .3; transform: scale(1.5); }
+}
+
+/* ─── Buttons ─── */
+.btn-primary {
+  background: #002045; color: #fff; border: none;
+  border-radius: 8px; padding: 10px 20px;
+  font-family: 'IBM Plex Sans', sans-serif; font-size: 14px; font-weight: 500;
+  cursor: pointer; transition: all .15s;
+}
+.btn-primary:hover { background: #1a365d; box-shadow: 0 2px 8px rgba(0,32,69,.2); }
+.btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+
+.btn-secondary {
+  background: #fff; color: #002045; border: 1px solid #002045;
+  border-radius: 8px; padding: 10px 20px;
+  font-family: 'IBM Plex Sans', sans-serif; font-size: 14px; font-weight: 500;
+  cursor: pointer; transition: all .15s;
+}
+.btn-secondary:hover { background: rgba(0,32,69,.05); }
+
+.btn-teal {
+  background: #13696a; color: #fff; border: none;
+  border-radius: 8px; padding: 10px 20px;
+  font-family: 'IBM Plex Sans', sans-serif; font-size: 14px; font-weight: 500;
+  cursor: pointer; transition: all .15s;
+}
+.btn-teal:hover { background: #0d4f50; }
+
+/* ─── Input Fields ─── */
+.input-field {
+  border: 1px solid rgba(215,196,177,.6); border-radius: 8px;
+  padding: 10px 14px; font-size: 14px; font-family: 'IBM Plex Sans', sans-serif;
+  outline: none; transition: .15s; background: #fff; width: 100%;
+}
+.input-field:focus {
+  border-color: #002045;
+  box-shadow: 0 0 0 3px rgba(0,32,69,.1);
+}
+
+/* ─── Tags / Badges ─── */
+.tag {
+  display: inline-block; padding: 2px 10px;
+  border-radius: 9999px; font-size: 12px; font-weight: 500;
+  font-family: 'JetBrains Mono', monospace;
+}
+.tag-easy { background: #a2eded; color: #004f50; }
+.tag-medium { background: #d6e3ff; color: #2d476f; }
+.tag-hard { background: #ffdad6; color: #93000a; }
+.tag-concept { background: #eaddff; color: #5429a6; }
+.tag-reading { background: #d6e3ff; color: #2d476f; }
+.tag-expression { background: #a5eff0; color: #004f50; }
+
+/* ─── Progress Bar ─── */
+.progress-bar {
+  height: 6px; background: #e4e2de; border-radius: 9999px; overflow: hidden;
+}
+.progress-fill {
+  height: 100%; border-radius: 9999px;
+  background: linear-gradient(90deg, #002045, #13696a);
+  transition: width .3s ease;
+}
+.progress-fill.pulse { animation: progress-glow 2s ease-in-out infinite; }
+@keyframes progress-glow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .7; }
+}
+
+/* ─── Modal ─── */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 100;
+  background: rgba(0,0,0,.3); backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center;
+}
+.modal-card {
+  background: #fff; border-radius: 16px; padding: 32px;
+  max-width: 640px; width: 90%; max-height: 80vh; overflow-y: auto;
+  box-shadow: 0 8px 40px rgba(26,54,93,.15);
+}
+
+/* ─── Table ─── */
+.data-table { width: 100%; border-collapse: collapse; }
+.data-table th {
+  text-align: left; padding: 12px 16px;
+  font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 500;
+  color: #43474e; border-bottom: 2px solid rgba(215,196,177,.5);
+  text-transform: uppercase; letter-spacing: .5px;
+}
+.data-table td {
+  padding: 12px 16px; font-size: 14px;
+  border-bottom: 1px solid rgba(215,196,177,.2);
+}
+
+/* ─── Page transitions ─── */
+.page { display: none; }
+.page.active { display: block; }
+#page-home.active { display: flex; flex-direction: column; height: 100%; }
+
+/* ─── Empty State ─── */
+.empty-state {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; padding: 48px; color: #74777f;
+  text-align: center;
+}

@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 教研助手 - 智辅化学</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script>tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#002045","on-primary":"#ffffff","primary-container":"#1a365d","on-primary-container":"#86a0cd",secondary:"#13696a","secondary-container":"#a2eded","on-secondary-container":"#1a6d6e",surface:"#fbf9f5","surface-warm":"#F5EFE6","surface-container-low":"#f5f3ef","surface-container-high":"#eae8e4","on-surface":"#1b1c1a","on-surface-variant":"#43474e","wood-accent":"#D7C4B1","outline-variant":"#c4c6cf","ai-glow":"#E0F2F1",background:"#fbf9f5","on-background":"#1b1c1a","formula-green":"#2F855A","academic-red":"#C53030",tertiary:"#290068","tertiary-container":"#420e95","error":"#ba1a1a","error-container":"#ffdad6"},borderRadius:{DEFAULT:"0.25rem",lg:"0.5rem",xl:"0.75rem",full:"9999px"},spacing:{"sidebar-width":"240px","gutter":"24px","margin-desktop":"32px","margin-mobile":"16px","component-gap":"16px","section-gap":"40px"},fontFamily:{sans:["IBM Plex Sans"],mono:["JetBrains Mono"],display:["Manrope"]}}}}</script>
+<link rel="stylesheet" href="/design-system.css">
+</head>
+<body class="bg-background text-on-surface flex h-screen overflow-hidden" style="font-family:'IBM Plex Sans'">
+
+<!-- Sidebar -->
+<aside class="fixed left-0 top-0 h-screen flex flex-col z-50" style="width:240px;background:#002045">
+  <div class="h-16 flex items-center px-4 mb-4 mt-2">
+    <span class="material-symbols-outlined text-[28px] mr-2" style="color:#86a0cd">science</span>
+    <div>
+      <h1 class="text-white font-bold tracking-tight" style="font-family:Manrope;font-size:20px">智辅化学</h1>
+      <p class="text-xs" style="color:#86a0cd;font-family:'JetBrains Mono'">智慧教育辅助系统</p>
+    </div>
+  </div>
+  <div class="px-4 mb-6">
+    <button onclick="location.reload()" class="w-full py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-all text-sm"
+      style="background:rgba(255,255,255,.1);color:#86a0cd;font-family:'JetBrains Mono'"
+      onmouseover="this.style.background='rgba(255,255,255,.15)';this.style.color='#fff'"
+      onmouseout="this.style.background='rgba(255,255,255,.1)';this.style.color='#86a0cd'">
+      <span class="material-symbols-outlined text-[18px]">add</span> 新建对话
+    </button>
+  </div>
+  <nav class="flex-1 overflow-y-auto px-2 flex flex-col gap-1" id="sidebar-nav"></nav>
+  <div class="p-2 border-t mt-auto" style="border-color:rgba(255,255,255,.1)">
+    <a class="sidebar-link" href="#" onclick="ChemAI.logout()">
+      <span class="material-symbols-outlined">logout</span> 退出登录
+    </a>
+  </div>
+</aside>
+
+<!-- Main -->
+<main class="flex-1 flex flex-col relative h-screen bg-background" style="margin-left:240px">
+
+<!-- TopBar -->
+<header class="topbar">
+  <div class="flex items-center gap-6">
+    <span class="font-bold" style="font-family:Manrope;font-size:20px;color:#002045">「智辅化学」教师端</span>
+    <nav class="hidden md:flex gap-6 ml-8" id="topbar-nav"></nav>
+  </div>
+  <div class="flex items-center gap-4">
+    <span class="text-sm" style="color:#43474e" id="user-name">教师</span>
+    <div class="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold" style="background:#002045" id="user-avatar">教</div>
+  </div>
+</header>
+
+<!-- Chat Area -->
+<div class="flex-1 flex flex-col min-h-0">
+  <div class="flex-1 overflow-y-auto px-8 py-6 flex flex-col gap-4" id="chat-messages">
+    <!-- Welcome -->
+    <div class="msg-ai">
+      <div class="ai-avatar">
+        <span class="material-symbols-outlined text-[16px]">psychology</span> AI 教研助手
+      </div>
+      <p class="mb-2">👋 你好！我是 ChemAI 教研助手。</p>
+      <p class="text-sm" style="color:#43474e">我能帮你：配平化学方程式 · 生成练习题 · 诊断学习障碍 · 搜索历年真题 · 模拟化学实验 · 生成学习周报</p>
+    </div>
+  </div>
+
+  <!-- Quick Actions -->
+  <div class="px-8 py-3 flex flex-wrap gap-2" id="suggestion-chips">
+    <button class="chip" data-prompt="帮我配平 Fe + O2 = Fe2O3"><span class="material-symbols-outlined text-[18px]">balance</span>配平方程式</button>
+    <button class="chip" data-prompt="出3道关于盐类水解的选择题"><span class="material-symbols-outlined text-[18px]">edit_note</span>出题练习</button>
+    <button class="chip" data-prompt="模拟钠与水的反应实验"><span class="material-symbols-outlined text-[18px]">experiment</span>模拟实验</button>
+    <button class="chip" data-prompt="请讲解氧化还原反应的基本概念"><span class="material-symbols-outlined text-[18px]">school</span>讲解概念</button>
+    <button class="chip" data-prompt="搜索关于化学平衡的高考真题"><span class="material-symbols-outlined text-[18px]">search</span>查真题</button>
+    <button class="chip" data-prompt="分析班级最近的错题情况并给出教学建议"><span class="material-symbols-outlined text-[18px]">health_and_safety</span>错题诊断</button>
+  </div>
+
+  <!-- Input -->
+  <div class="px-8 py-3 border-t flex gap-3" style="border-color:rgba(215,196,177,.3);background:rgba(251,249,245,.8)">
+    <textarea id="chat-input" placeholder="输入化学教学问题，Enter 发送，Shift+Enter 换行..." rows="1"
+      class="flex-1 px-4 py-3 rounded-lg border text-sm outline-none resize-none"
+      style="border-color:rgba(215,196,177,.6);font-family:'IBM Plex Sans';min-height:44px;max-height:120px;background:#fff"
+      onfocus="this.style.borderColor='#002045';this.style.boxShadow='0 0 0 3px rgba(0,32,69,.1)'"
+      onblur="this.style.borderColor='rgba(215,196,177,.6)';this.style.boxShadow='none'"></textarea>
+    <button id="chat-send" onclick="sendMessage()"
+      class="px-6 py-3 rounded-lg text-white font-medium text-sm transition-all"
+      style="background:#002045;font-family:'IBM Plex Sans'"
+      onmouseover="this.style.background='#1a365d'"
+      onmouseout="this.style.background='#002045'">发送</button>
+  </div>
+
+  <!-- Status Bar -->
+  <div class="agent-status" id="agent-status">
+    <div class="dot"></div>
+    <span id="status-text">思考中...</span>
+  </div>
+</div>
+</main>
+
+<script src="/app.js"></script>
+<script src="/js/agent.js"></script>
+</body>
+</html>
