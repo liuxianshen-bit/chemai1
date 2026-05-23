@@ -93,7 +93,7 @@ async function handleLogin(e) {
       authService.saveSession(user, token, refreshToken)
       Toast.success('登录成功')
       setTimeout(() => {
-        window.location.href = user.role === 'student' ? '/student_v2.html' : '/teacher_v2.html'
+        window.location.href = '/index_new.html'
       }, 500)
     } else {
       Toast.error(result.message || result.error || '登录失败')

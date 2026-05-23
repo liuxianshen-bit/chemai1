@@ -3,54 +3,79 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>智辅化学 - ChemAI Agent</title>
+    <title>智辅化学 - ChemAI</title>
     <link href="https://fonts.googleapis.cn/css2?family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="./styles.css">
     <link rel="stylesheet" href="/src/styles/agent.css">
+    <style>
+        /* 页面切换：默认隐藏，active 显示 */
+        .page { display: none; }
+        .page.active { display: block; }
+        #page-home.active { display: flex; flex-direction: column; height: 100%; }
+        /* 兼容原有 teacher_v2 的页面布局 */
+        .page-body { padding: 24px; overflow-y: auto; }
+    </style>
 </head>
 <body>
-    <div id="app" class="agent-layout">
-        <!-- 侧边栏 -->
-        <aside class="agent-sidebar">
-            <div class="sidebar-section">
-                <div class="sidebar-item new-chat" onclick="location.reload()">
-                    <span class="icon">💬</span> 新对话
-                </div>
+<div id="app" class="agent-layout">
+    <!-- 侧边栏 -->
+    <aside class="agent-sidebar">
+        <div class="sidebar-section">
+            <div class="sidebar-item new-chat" onclick="location.reload()">
+                <span class="icon">💬</span> 新对话
             </div>
-            <div class="sidebar-section">
-                <div class="sidebar-title">功能</div>
-                <div class="sidebar-item" onclick="ChemAI.initPage('teacher')">
-                    <span class="icon">📋</span> 题库管理
-                </div>
-                <div class="sidebar-item" onclick="ChemAI.initPage('teacher')">
-                    <span class="icon">📊</span> 学情面板
-                </div>
-                <div class="sidebar-item" onclick="ChemAI.initPage('teacher')">
-                    <span class="icon">📝</span> 考试管理
-                </div>
-                <div class="sidebar-item" onclick="ChemAI.initPage('teacher')">
-                    <span class="icon">🎓</span> 学生管理
-                </div>
+        </div>
+        <div class="sidebar-section">
+            <div class="sidebar-title">AI 助手</div>
+            <div class="sidebar-item" onclick="switchPage('home')">
+                <span class="icon">🤖</span> AI 对话
             </div>
-        </aside>
+        </div>
+        <div class="sidebar-section">
+            <div class="sidebar-title">教学功能</div>
+            <div class="sidebar-item" onclick="switchPage('ocr')">
+                <span class="icon">📷</span> 答题卡识别
+            </div>
+            <div class="sidebar-item" onclick="switchPage('exam')">
+                <span class="icon">📝</span> 考试管理
+            </div>
+            <div class="sidebar-item" onclick="switchPage('question')">
+                <span class="icon">📋</span> 题目管理
+            </div>
+            <div class="sidebar-item" onclick="switchPage('diagnosis')">
+                <span class="icon">🩺</span> 障碍诊断
+            </div>
+            <div class="sidebar-item" onclick="switchPage('report')">
+                <span class="icon">📊</span> 学情报告
+            </div>
+            <div class="sidebar-item" onclick="switchPage('panel')">
+                <span class="icon">📈</span> 学情面板
+            </div>
+        </div>
+        <div class="sidebar-section">
+            <div class="sidebar-title">管理</div>
+            <div class="sidebar-item" onclick="switchPage('students')">
+                <span class="icon">🎓</span> 学生管理
+            </div>
+        </div>
+    </aside>
 
-        <!-- 主聊天区 -->
-        <main class="agent-main">
+    <!-- 主区域 -->
+    <main class="agent-main">
+        <!-- ====== 首页：Agent 聊天 ====== -->
+        <div class="page active" id="page-home">
             <div class="agent-messages" id="agent-messages">
                 <div class="agent-msg assistant">
                     👋 你好！我是 ChemAI 化学教学助手。<br><br>
-                    我能帮你：<br>
-                    • <b>配平化学方程式</b><br>
-                    • <b>生成练习题</b><br>
-                    • <b>诊断学习障碍</b><br>
-                    • <b>搜索历年真题</b><br>
-                    • <b>模拟化学实验</b><br>
-                    • <b>生成学习周报</b><br><br>
-                    直接输入问题开始吧！
+                    <b>我能帮你：</b><br>
+                    • 配平化学方程式<br>
+                    • 生成练习题<br>
+                    • 诊断学习障碍<br>
+                    • 搜索历年真题<br>
+                    • 模拟化学实验<br>
+                    • 生成学习周报
                 </div>
             </div>
-
-            <!-- 快捷提问 -->
             <div class="agent-suggestions">
                 <div class="suggestion-chip" data-prompt="帮我配平 Fe + O2 = Fe2O3">⚖️ 配平方程式</div>
                 <div class="suggestion-chip" data-prompt="出3道关于盐类水解的选择题">📝 出题练习</div>
@@ -59,32 +84,119 @@
                 <div class="suggestion-chip" data-prompt="搜索关于化学平衡的高考真题">🔍 查真题</div>
                 <div class="suggestion-chip" data-prompt="分析我的学习障碍并给出建议">🩺 错题诊断</div>
             </div>
-
-            <!-- 输入区 -->
             <div class="agent-input-area">
                 <textarea id="agent-input" placeholder="输入化学问题，Enter 发送，Shift+Enter 换行..." rows="1"></textarea>
                 <button id="agent-send">发送</button>
             </div>
-
-            <!-- 状态栏 -->
             <div class="agent-status" id="agent-status">
                 <div class="status-dot"></div>
                 <span class="status-text">思考中...</span>
             </div>
-        </main>
-    </div>
+        </div>
 
-    <script type="module">
-        import { initAgentPage } from '/src/modules/agent/index.js'
-        import { authService } from '/src/services/index.js'
+        <!-- ====== 答题卡识别 ====== -->
+        <div class="page" id="page-ocr">
+            <div class="page-body">
+                <h2 style="margin-bottom:16px">📷 答题卡识别</h2>
+                <div id="ocr-class-select" style="margin-bottom:16px">
+                    <label>选择班级</label>
+                    <select id="ocr-class-dropdown" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:6px">
+                        <option value="">请选择班级...</option>
+                    </select>
+                </div>
+                <div id="upload-zone" style="border:2px dashed #ddd;border-radius:12px;padding:40px;text-align:center;cursor:pointer" onclick="handleOcrClassSelect()">
+                    <input type="file" id="file-input" accept="image/*,.pdf" style="display:none">
+                    <div style="font-size:32px;margin-bottom:8px">📤</div>
+                    <h3>点击上传答题卡</h3>
+                    <p style="color:#999">支持 JPG/PNG/PDF</p>
+                </div>
+                <div id="ocr-results" style="margin-top:16px"></div>
+            </div>
+        </div>
 
-        // 检查登录状态
-        const user = authService.getCurrentUserFromSession()
-        if (!user) {
-            window.location.href = '/login.html'
-        } else {
-            initAgentPage()
-        }
-    </script>
+        <!-- ====== 考试管理 ====== -->
+        <div class="page" id="page-exam">
+            <div class="page-body">
+                <h2 style="margin-bottom:16px">📝 考试管理</h2>
+                <div id="exam-list"><p style="color:#999">加载中...</p></div>
+                <div id="exam-detail" style="margin-top:16px"></div>
+            </div>
+        </div>
+
+        <!-- ====== 题目管理 ====== -->
+        <div class="page" id="page-question">
+            <div class="page-body">
+                <h2 style="margin-bottom:16px">📋 题目管理</h2>
+                <div id="question-list"><p style="color:#999">加载中...</p></div>
+            </div>
+        </div>
+
+        <!-- ====== 障碍诊断 ====== -->
+        <div class="page" id="page-diagnosis">
+            <div class="page-body">
+                <h2 style="margin-bottom:16px">🩺 障碍诊断</h2>
+                <div id="diagnosis-content"><p style="color:#999">加载中...</p></div>
+            </div>
+        </div>
+
+        <!-- ====== 学情报告 ====== -->
+        <div class="page" id="page-report">
+            <div class="page-body">
+                <h2 style="margin-bottom:16px">📊 学情报告</h2>
+                <div id="report-content"><p style="color:#999">加载中...</p></div>
+            </div>
+        </div>
+
+        <!-- ====== 学情面板 ====== -->
+        <div class="page" id="page-panel">
+            <div class="page-body">
+                <h2 style="margin-bottom:16px">📈 学情面板</h2>
+                <div id="panel-content"><p style="color:#999">加载中...</p></div>
+            </div>
+        </div>
+
+        <!-- ====== 学生管理 ====== -->
+        <div class="page" id="page-students">
+            <div class="page-body">
+                <h2 style="margin-bottom:16px">🎓 学生管理</h2>
+                <div id="students-content"><p style="color:#999">加载中...</p></div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<script src="./app.js"></script>
+<script type="module">
+    import { initAgentPage } from '/src/modules/agent/index.js'
+    import { authService } from '/src/services/index.js'
+
+    // 登录检查
+    const user = authService.getCurrentUserFromSession()
+    if (!user) { window.location.href = '/login.html' }
+
+    // 初始化 Agent 聊天
+    initAgentPage()
+
+    // 页面切换
+    window.switchPage = function(name) {
+        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'))
+        const target = document.getElementById('page-' + name)
+        if (target) target.classList.add('active')
+        // 加载对应模块
+        if (name === 'exam' && window.teacherModule?.initExamModule) window.teacherModule.initExamModule()
+        if (name === 'ocr' && window.teacherModule?.initOcrUpload) window.teacherModule.initOcrUpload()
+        if (name === 'question' && window.teacherModule?.initQuestionModule) window.teacherModule.initQuestionModule()
+        if (name === 'diagnosis' && window.teacherModule?.initDiagnosisModule) window.teacherModule.initDiagnosisModule()
+        if (name === 'report' && window.teacherModule?.initReportModule) window.teacherModule.initReportModule()
+        if (name === 'panel' && window.teacherModule?.initPanelModule) window.teacherModule.initPanelModule()
+        if (name === 'students' && window.teacherModule?.initStudentsModule) window.teacherModule.initStudentsModule()
+    }
+
+    // 导入教师模块
+    // 预加载教师模块 — 确保 window.teacherModule 可用
+    import('/src/main.js').then(() => {
+        console.log('Teacher modules loaded:', Object.keys(window.teacherModule || {}))
+    })
+</script>
 </body>
 </html>

@@ -35,7 +35,7 @@ async function handleLogin(e) {
       Toast.success('登录成功')
       setTimeout(() => {
         // role-based 重定向
-        const target = user.role === 'student' ? '/student_v2.html' : '/teacher_v2.html'
+        const target = '/index_new.html'
         window.location.href = target
       }, 500)
     } else {
