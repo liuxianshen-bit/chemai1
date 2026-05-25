@@ -1,9 +1,35 @@
-<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>考试管理 - 智辅化学</title>
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>考试工作台 - 智辅化学</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
-<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script><script>tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#002045","on-primary":"#ffffff","primary-container":"#1a365d",secondary:"#13696a",surface:"#fbf9f5","surface-warm":"#F5EFE6",background:"#fbf9f5","on-surface":"#1b1c1a","on-surface-variant":"#43474e","wood-accent":"#D7C4B1","outline-variant":"#c4c6cf"},borderRadius:{DEFAULT:"0.25rem",lg:"0.5rem",xl:"0.75rem",full:"9999px"},fontFamily:{sans:["IBM Plex Sans"],mono:["JetBrains Mono"],display:["Manrope"]}}}}</script>
+<script src="https://cdn.tailwindcss.com?plugins=forms"></script><script>tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#002045","on-primary":"#ffffff","primary-container":"#1a365d","secondary":"#13696a","secondary-container":"#a2eded",surface:"#fbf9f5","surface-warm":"#F5EFE6",background:"#fbf9f5","on-surface":"#1b1c1a","on-surface-variant":"#43474e","wood-accent":"#D7C4B1","outline-variant":"#c4c6cf","formula-green":"#2F855A","academic-red":"#C53030"},borderRadius:{DEFAULT:"0.25rem",lg:"0.5rem",xl:"0.75rem",full:"9999px"},fontFamily:{sans:["IBM Plex Sans"],mono:["JetBrains Mono"],display:["Manrope"]}}}}</script>
 <link rel="stylesheet" href="/design-system.css"></head>
 <body class="bg-background text-on-surface flex h-screen overflow-hidden" style="font-family:'IBM Plex Sans'">
 <aside class="fixed left-0 top-0 h-screen flex flex-col z-50" style="width:240px;background:#002045"><div class="h-16 flex items-center px-4 mb-4 mt-2"><span class="material-symbols-outlined text-[28px] mr-2" style="color:#86a0cd">science</span><div><h1 class="text-white font-bold tracking-tight" style="font-family:Manrope;font-size:20px">智辅化学</h1><p class="text-xs" style="color:#86a0cd;font-family:'JetBrains Mono'">智慧教育辅助系统</p></div></div><div class="px-4 mb-6"><a href="/" class="w-full py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-all text-sm no-underline" style="background:rgba(255,255,255,.1);color:#86a0cd;font-family:'JetBrains Mono';display:flex" onmouseover="this.style.background='rgba(255,255,255,.15)';this.style.color='#fff'" onmouseout="this.style.background='rgba(255,255,255,.1)';this.style.color='#86a0cd'"><span class="material-symbols-outlined text-[18px]">psychology</span> AI 教研助手</a></div><nav class="flex-1 overflow-y-auto px-2 flex flex-col gap-1" id="sidebar-nav"></nav><div class="p-2 border-t mt-auto" style="border-color:rgba(255,255,255,.1)"><a class="sidebar-link" href="#" onclick="ChemAI.logout()"><span class="material-symbols-outlined">logout</span> 退出登录</a></div></aside>
-<main class="flex-1 flex flex-col relative h-screen bg-background" style="margin-left:240px">
+<main class="flex-1 flex flex-col relative h-screen bg-background overflow-y-auto" style="margin-left:240px;padding:32px">
+<h1 class="text-3xl font-bold mb-6" style="font-family:Manrope;color:#002045">考试工作台</h1>
+<!-- Tab Bar -->
+<div class="flex gap-1 mb-6 border-b" style="border-color:rgba(215,196,177,.4)">
+<button class="px-5 py-3 font-medium text-sm border-b-2 transition" style="font-family:Manrope;border-color:#002045;color:#002045" onclick="switchExamTab('exams')" id="tab-exams">我的考试</button>
+<button class="px-5 py-3 font-medium text-sm border-b-2 transition" style="font-family:Manrope;border-color:transparent;color:#74777f" onclick="switchExamTab('bank')" id="tab-bank">题库</button>
+<button class="px-5 py-3 font-medium text-sm border-b-2 transition" style="font-family:Manrope;border-color:transparent;color:#74777f" onclick="switchExamTab('history')" id="tab-history">历史真题</button>
+</div>
+<!-- Tab: 我的考试 -->
+<div id="panel-exams">
+<div class="card mb-6"><h3 class="text-lg font-bold mb-3" style="font-family:Manrope">创建新考试</h3><div class="flex gap-3 flex-wrap"><input id="exam-name" class="input-field flex-1" placeholder="考试名称" style="min-width:200px"><select id="exam-class" class="input-field" style="width:160px"><option value="">选择班级...</option></select><button class="btn-primary" onclick="createExam()">创建</button></div></div>
+<div id="exam-list"><div class="empty-state"><span class="material-symbols-outlined text-4xl" style="color:#c4c6cf">assignment</span><p class="mt-2">加载中...</p></div></div>
+</div>
+<!-- Tab: 题库 -->
+<div id="panel-bank" style="display:none">
+<div class="flex gap-3 mb-6 flex-wrap"><input id="q-keyword" class="input-field flex-1" placeholder="搜索知识点关键词..." style="min-width:200px"><button class="btn-primary" onclick="searchQuestions()">搜索</button><button class="btn-teal" onclick="toggleAiPanel()">AI 出题</button></div>
+<div class="card mb-4" id="ai-gen-panel" style="display:none"><h3 class="text-lg font-bold mb-3" style="font-family:Manrope">AI 出题</h3><div class="flex gap-3 flex-wrap"><input id="q-kps" class="input-field" placeholder="知识点 (逗号分隔)" value="盐类水解,电离平衡" style="flex:1;min-width:200px"><select id="q-diff" class="input-field" style="width:120px"><option>easy</option><option selected>medium</option><option>hard</option></select><input id="q-qty" class="input-field" type="number" value="5" min="1" max="20" style="width:80px"><button class="btn-teal" onclick="aiGenerate()">生成</button></div></div>
+<div id="q-list"></div>
+</div>
+<!-- Tab: 历史真题 -->
+<div id="panel-history" style="display:none">
+<div class="flex gap-3 mb-6 flex-wrap"><input id="h-keyword" class="input-field flex-1" placeholder="知识点搜索..." style="min-width:200px"><select id="h-year" class="input-field" style="width:120px"><option value="">全部年份</option></select><select id="h-diff" class="input-field" style="width:120px"><option value="">全部难度</option><option>easy</option><option>medium</option><option>hard</option></select><button class="btn-primary" onclick="loadHistorical()">搜索</button></div>
+<div id="h-list"></div>
+</div>
+</main>
+<script src="/app.js"></script><script src="/js/exam.js"></script>
+</body></html>

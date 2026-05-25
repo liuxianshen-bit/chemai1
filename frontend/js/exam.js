@@ -1,26 +1,15 @@
-// 考试管理
+// 考试工作台 — 三Tab + R4 完整闭环
 (function(){
-  document.addEventListener('DOMContentLoaded',function(){loadClasses();loadExams()})
-  function loadClasses(){
-    fetch('/api/classes').then(function(r){return r.json()}).then(function(d){
-      var sel=document.getElementById('exam-class'),list=d.classes||[]
-      list.forEach(function(c){var o=document.createElement('option');o.value=c.class_id;o.textContent=c.name;sel.appendChild(o)})
-    })
-  }
-  window.loadExams=function(){
-    fetch('/api/classes').then(function(r){return r.json()}).then(function(d){
-      var list=d.classes||(Array.isArray(d)?d:[]),exams=[]
-      Promise.all(list.map(function(c){return fetch('/api/exam/list/'+c.class_id).then(function(r){return r.json()}).catch(function(){return[]})})).then(function(results){
-        results.forEach(function(r,i){if(r&&r.length)r.forEach(function(e){e.class_name=list[i].name;exams.push(e)})})
-        document.getElementById('exam-list').innerHTML=exams.length?exams.map(function(e){return'<div class="card card-accent"><div class="flex justify-between items-center"><div><span class="font-bold">'+e.name+'</span><span class="text-sm ml-4" style="color:#43474e">'+e.class_name+'</span></div></div><div class="flex gap-4 mt-2 text-sm" style="color:#43474e"><span>'+e.total_students+'人参试</span><span>均分: '+(e.avg_score||0)+'</span></div></div>'}).join(''):'<div class="empty-state"><span class="material-symbols-outlined text-4xl" style="color:#c4c6cf">assignment</span><p>暂无考试</p></div>'
-      })
-    })
-  }
-  window.createExam=function(){
-    var name=document.getElementById('exam-name').value,cls=document.getElementById('exam-class').value
-    if(!name){alert('请输入考试名称');return}
-    if(!cls){alert('请选择班级');return}
-    fetch('/api/exam/create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,class_id:cls,total_students:34})})
-      .then(function(r){return r.json()}).then(function(d){alert('创建成功!');loadExams()}).catch(function(e){alert('创建失败: '+e.message)})
-  }
+  document.addEventListener('DOMContentLoaded',function(){loadClasses();loadExams();loadHistorical()})
+  var years=[];for(var y=2025;y>=2008;y--)years.push(y)
+  window.switchExamTab=function(t){['exams','bank','history'].forEach(function(x){document.getElementById('panel-'+x).style.display=x===t?'block':'none';var b=document.getElementById('tab-'+x);b.style.borderColor=x===t?'#002045':'transparent';b.style.color=x===t?'#002045':'#74777f'})}
+  function loadClasses(){fetch('/api/classes').then(function(r){return r.json()}).then(function(d){var sel=document.getElementById('exam-class'),list=d.classes||[];list.forEach(function(c){var o=document.createElement('option');o.value=c.class_id;o.textContent=c.name;sel.appendChild(o)})})}
+  window.loadExams=function(){fetch('/api/classes').then(function(r){return r.json()}).then(function(d){var list=d.classes||[],exams=[];Promise.all(list.map(function(c){return fetch('/api/exam/list/'+c.class_id).then(function(r){return r.json()}).catch(function(){return[]})})).then(function(results){results.forEach(function(r,i){if(r&&r.length)r.forEach(function(e){e.class_name=list[i].name;exams.push(e)})});document.getElementById('exam-list').innerHTML=exams.length?exams.map(function(e){return'<div class="card card-accent"><div class="flex justify-between items-center"><div><span class="font-bold">'+e.name+'</span><span class="text-sm ml-4" style="color:#43474e">'+e.class_name+'</span></div></div><div class="flex gap-4 mt-2 text-sm" style="color:#43474e"><span>'+e.total_students+'人参试</span></div></div>'}).join(''):'<div class="empty-state"><span class="material-symbols-outlined text-4xl" style="color:#c4c6cf">assignment</span><p>暂无考试</p></div>'})})}
+  window.createExam=function(){var name=document.getElementById('exam-name').value,cls=document.getElementById('exam-class').value;if(!name){alert('请输入考试名称');return}if(!cls){alert('请选择班级');return}fetch('/api/exam/create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,class_id:cls,total_students:34})}).then(function(r){return r.json()}).then(function(){alert('创建成功!');loadExams()}).catch(function(e){alert('失败: '+e.message)})}
+  window.toggleAiPanel=function(){var p=document.getElementById('ai-gen-panel');p.style.display=p.style.display==='none'?'block':'none'}
+  window.searchQuestions=function(){loadBank(document.getElementById('q-keyword').value)}
+  window.aiGenerate=function(){var kps=document.getElementById('q-kps').value,diff=document.getElementById('q-diff').value,qty=document.getElementById('q-qty').value;fetch('/api/question/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({knowledge_points:kps.split(','),difficulty:diff,quantity:parseInt(qty)||5})}).then(function(r){return r.json()}).then(function(d){showResult(d.questions||[],'AI 生成 ('+d.total+'题)')}).catch(function(e){alert('失败: '+e.message)})}
+  function loadBank(kw){var url='/api/exam-bank/historical?limit=50'+(kw?'&keyword='+encodeURIComponent(kw):'');fetch(url).then(function(r){return r.json()}).then(function(d){var list=d.questions||[];document.getElementById('q-list').innerHTML=list.length?list.map(function(q){return'<div class="card card-accent"><div class="flex justify-between items-start"><div class="flex-1"><p class="font-bold text-sm" style="color:#002045">'+q.source+' T'+q.question_number+'</p><p class="text-sm mt-1">'+q.content+'</p><div class="flex gap-2 mt-2">'+(q.knowledge_points||[]).map(function(k){return'<span class="tag tag-medium">'+k+'</span>'}).join('')+'</div></div><span class="tag tag-'+q.difficulty+'">'+q.difficulty+'</span></div></div>'}).join(''):'<div class="empty-state"><span class="material-symbols-outlined text-4xl" style="color:#c4c6cf">menu_book</span><p>暂无题目</p></div>'})})}
+  function showResult(qs,title){var h='<h3 class="text-lg font-bold mt-4 mb-2" style="font-family:Manrope">'+title+'</h3>';qs.forEach(function(q,i){h+='<div class="card card-accent mt-2"><span class="tag tag-medium" style="float:right">'+(q.difficulty||'medium')+'</span><p class="font-bold">#'+(i+1)+'</p><p class="text-sm mt-1">'+q.content+'</p><div class="mt-2">'+(q.options||[]).map(function(o){return'<span class="text-sm mr-3" style="font-family:JetBrains Mono">'+o+'</span>'}).join('')+'</div><p class="text-sm mt-2" style="color:#2F855A">答案: '+q.answer+'</p></div>'});document.getElementById('q-list').insertAdjacentHTML('afterbegin',h)}
+  window.loadHistorical=function(){var kw=document.getElementById('h-keyword')?.value||'',yr=document.getElementById('h-year')?.value||'',df=document.getElementById('h-diff')?.value||'';var url='/api/exam-bank/historical?limit=100'+(kw?'&keyword='+encodeURIComponent(kw):'')+(yr?'&year='+yr:'')+(df?'&difficulty='+df:'');fetch(url).then(function(r){return r.json()}).then(function(d){var list=d.questions||[];document.getElementById('h-list').innerHTML=list.length?list.map(function(q){return'<div class="card card-accent"><div class="flex justify-between items-start"><div class="flex-1"><p class="font-bold text-sm" style="color:#002045">'+q.source+' T'+q.question_number+'</p><p class="text-sm mt-1">'+q.content+'</p><div class="flex gap-2 mt-2">'+(q.knowledge_points||[]).map(function(k){return'<span class="tag tag-medium">'+k+'</span>'}).join('')+'</div></div><span class="tag tag-'+q.difficulty+'">'+q.difficulty+'</span></div></div>'}).join(''):'<div class="empty-state"><span class="material-symbols-outlined text-4xl" style="color:#c4c6cf">history_edu</span><p>加载中...</p></div>'});var sy=document.getElementById('h-year');if(!sy.options.length)years.forEach(function(y){var o=document.createElement('option');o.value=y;o.textContent=y;sy.appendChild(o)})}
 })()
