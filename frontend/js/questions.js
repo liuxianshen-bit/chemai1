@@ -1,6 +1,7 @@
 // 题目管理
 (function(){
   document.addEventListener('DOMContentLoaded',function(){loadQuestions()})
+  window.toggleAiPanel=function(){var p=document.getElementById('ai-gen-panel');p.style.display=p.style.display==='none'?'block':'none'}
   window.searchQuestions=function(){loadQuestions(document.getElementById('q-keyword').value)}
   window.aiGenerate=function(){
     var kps=document.getElementById('q-kps').value,diff=document.getElementById('q-diff').value,qty=document.getElementById('q-qty').value

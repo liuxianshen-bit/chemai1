@@ -15,14 +15,32 @@
     if(!files||!files.length)return
     var container=document.getElementById('ocr-results')
     container.innerHTML='<div class="card mt-4"><p>正在识别 '+files.length+' 个文件...</p><div class="progress-bar mt-3"><div class="progress-fill pulse" style="width:60%"></div></div></div>'
+    var results=[]
     Array.from(files).forEach(function(f){
       var fd=new FormData();fd.append('file',f)
-      fetch('/api/ocr/recognize',{method:'POST',body:fd}).then(r=>r.json()).then(d=>{
-        var cls=d.success?'formula-green':'academic-red'
-        container.innerHTML+='<div class="card card-accent mt-3"><div class="flex justify-between items-center"><span style="font-family:JetBrains Mono;font-size:13px">'+f.name+'</span><span style="color:var(--color-'+cls+')">'+(d.success?'识别完成':'识别失败')+'</span></div><pre style="font-family:JetBrains Mono;font-size:11px;margin-top:8px;color:#43474e">'+JSON.stringify(d,null,2)+'</pre></div>'
+      fetch('/api/ocr/recognize',{method:'POST',body:fd}).then(function(r){return r.json()}).then(function(d){
+        results.push({name:f.name,data:d})
+        if(results.length===files.length)renderOcrResults(results,container)
       }).catch(function(e){
-        container.innerHTML+='<div class="card mt-3" style="border-left:3px solid #C53030">❌ '+f.name+': '+e.message+'</div>'
+        results.push({name:f.name,data:{success:false,error:e.message}})
+        if(results.length===files.length)renderOcrResults(results,container)
       })
     })
+  }
+  function renderOcrResults(results,container){
+    var html='<h3 class="text-lg font-bold mt-4 mb-2" style="font-family:Manrope">识别结果</h3>'
+    results.forEach(function(r){
+      var d=r.data,ok=d.success,answers=d.answers||{}
+      var aHtml=Object.keys(answers).map(function(k){return'<span class="text-sm mr-2" style="font-family:JetBrains Mono">'+k+': '+answers[k]+'</span>'}).join('')
+      html+='<div class="card card-accent mt-2"><div class="flex justify-between items-center"><span style="font-family:JetBrains Mono;font-size:13px">'+r.name+'</span><span style="color:'+(ok?'#2F855A':'#C53030')+'">'+(ok?'✅ 识别完成':'❌ '+(d.error||'失败'))+'</span></div>'+
+        '<p class="text-sm mt-1" style="color:#43474e">学号: '+(d.student_id||'未知')+' | 姓名: '+(d.student_name||'未知')+'</p><div class="mt-1">'+aHtml+'</div>'+
+        (ok?'<button class="btn-teal text-sm mt-2" onclick="confirmOcr(\''+d.student_id+'\')">确认入库</button>':'')+
+        '</div>'
+    })
+    container.innerHTML=html
+  }
+  window.confirmOcr=function(sid){
+    fetch('/api/ocr/confirm',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({student_id:sid,class_id:document.getElementById('ocr-class').value})})
+      .then(function(r){return r.json()}).then(function(){alert('入库成功!')}).catch(function(e){alert('入库失败: '+e.message)})
   }
 })()

@@ -13,7 +13,7 @@
   <div class="flex gap-3 mb-6 flex-wrap">
     <input id="q-keyword" class="input-field flex-1" placeholder="搜索知识点关键词..." style="min-width:200px">
     <button class="btn-primary" onclick="searchQuestions()"><span class="material-symbols-outlined text-[16px] align-middle">search</span> 搜索</button>
-    <button class="btn-teal" onclick="aiGenerate()"><span class="material-symbols-outlined text-[16px] align-middle">smart_toy</span> AI 出题</button>
+    <button class="btn-teal" onclick="toggleAiPanel()"><span class="material-symbols-outlined text-[16px] align-middle">smart_toy</span> AI 出题</button>
     <button class="btn-secondary" onclick="document.getElementById('q-pdf').click()"><span class="material-symbols-outlined text-[16px] align-middle">upload_file</span> 导入试卷</button>
     <input type="file" id="q-pdf" accept=".pdf" style="display:none" onchange="importPaper()">
   </div>
@@ -30,5 +30,4 @@
 </div>
 </main>
 <script src="/app.js"></script><script src="/js/questions.js"></script>
-<script>document.querySelector('.btn-teal:first-of-type').addEventListener('click',function(){var p=document.getElementById('ai-gen-panel');p.style.display=p.style.display==='none'?'block':'none'})</script>
 </body></html>
