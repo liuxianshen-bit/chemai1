@@ -10,10 +10,7 @@ export default defineConfig({
       login: 'login.html',
       ocr: 'pages/ocr.html',
       exam: 'pages/exam.html',
-      questions: 'pages/questions.html',
       diagnosis: 'pages/diagnosis.html',
-      report: 'pages/report.html',
-      panel: 'pages/panel.html',
       students: 'pages/students.html',
     }
   },

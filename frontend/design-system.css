@@ -69,6 +69,19 @@
   font-family: 'JetBrains Mono', monospace; font-size: 11px;
   color: #13696a; margin-bottom: 6px;
 }
+/* Typing indicator — 三点跳动动画 */
+.typing-dots { display: inline-flex; gap: 3px; padding: 4px 0; }
+.typing-dots span {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: #13696a; display: inline-block;
+  animation: dot-bounce 1.4s ease-in-out infinite;
+}
+.typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+.typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes dot-bounce {
+  0%, 80%, 100% { transform: scale(0.4); opacity: 0.4; }
+  40% { transform: scale(1); opacity: 1; }
+}
 
 /* ─── Tool Card ─── */
 .tool-card {

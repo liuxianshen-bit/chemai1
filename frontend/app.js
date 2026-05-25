@@ -34,11 +34,8 @@
     var nav = [
       { id: 'chat', icon: 'psychology', label: 'AI 教研助手', href: '/' },
       { id: 'ocr', icon: 'document_scanner', label: '答题卡识别', href: '/pages/ocr.html' },
-      { id: 'exam', icon: 'assignment', label: '考试管理', href: '/pages/exam.html' },
-      { id: 'questions', icon: 'menu_book', label: '题目管理', href: '/pages/questions.html' },
+      { id: 'exam', icon: 'assignment', label: '考试工作台', href: '/pages/exam.html' },
       { id: 'diagnosis', icon: 'health_and_safety', label: '障碍诊断', href: '/pages/diagnosis.html' },
-      { id: 'report', icon: 'description', label: '学情报告', href: '/pages/report.html' },
-      { id: 'panel', icon: 'analytics', label: '学情面板', href: '/pages/panel.html' },
       { id: 'students', icon: 'group', label: '学生管理', href: '/pages/students.html' },
     ]
     var html = nav.map(function (n) {
@@ -48,17 +45,9 @@
         n.label + '</a>'
     }).join('')
 
-    // 如果页面有 #sidebar-nav 就渲染
+    // 渲染侧边栏导航
     var sidebar = document.getElementById('sidebar-nav')
     if (sidebar) sidebar.innerHTML = html
-
-    // 顶部导航
-    var topnav = document.getElementById('topbar-nav')
-    if (topnav) {
-      topnav.innerHTML = nav.map(function (n) {
-        return '<a class="topbar-tab' + (n.id === active ? ' active' : '') + '" href="' + n.href + '">' + n.label + '</a>'
-      }).join('')
-    }
   }
 
   // ─── 用户信息渲染 ───

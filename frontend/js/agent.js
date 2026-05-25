@@ -37,8 +37,9 @@
     addMsg('user', msg)
     history.push({ role: 'user', content: msg })
 
-    var bubble = addMsg('ai', '')
     showStatus(true, '思考中...', '')
+    // 打字动画气泡 — 不等首 token 就给反馈
+    var bubble = addMsg('ai', '<span class="typing-dots"><span>.</span><span>.</span><span>.</span></span>')
 
     fetch('/api/agent/chat/stream', {
       method: 'POST',
@@ -77,6 +78,7 @@
               showStatus(true, evt.phase === 'thinking' ? '思考中...' : evt.phase === 'executing' ? '执行中...' : '回复中...', '')
               break
             case 'text':
+              if (!reply) bubble.innerHTML = ''  // 清除 typing dots
               reply += evt.content
               bubble.innerHTML = renderMarkdown(reply)
               scrollBottom()
