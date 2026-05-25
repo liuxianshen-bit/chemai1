@@ -62,7 +62,7 @@
   }
 
   function loadBank(kw) {
-    var url = '/api/exam-bank/historical?limit=50' + (kw ? '&keyword=' + encodeURIComponent(kw) : '')
+    var url = '/api/question/historical?limit=50' + (kw ? '&keyword=' + encodeURIComponent(kw) : '')
     fetch(url).then(function (r) { return r.json() }).then(function (d) {
       var list = d.questions || [], el = document.getElementById('q-list'); if (!el) return
       el.innerHTML = list.length
@@ -96,7 +96,7 @@
     var ye = document.getElementById('h-year'), yr = ye ? ye.value : ''
     var de = document.getElementById('h-diff'), df = de ? de.value : ''
 
-    var url = '/api/exam-bank/historical?limit=30&offset=' + ((historyPage - 1) * 30) +
+    var url = '/api/question/historical?limit=30&offset=' + ((historyPage - 1) * 30) +
       (kw ? '&keyword=' + encodeURIComponent(kw) : '') + (yr ? '&year=' + yr : '') + (df ? '&difficulty=' + df : '')
 
     var listEl = document.getElementById('h-list'); if (!listEl) { historyLoading = false; return }
