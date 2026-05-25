@@ -280,18 +280,12 @@ class ChemAgent:
                 if delta:
                     yield self._sse_event("text", {"content": delta})
         else:
-            # Direct reply
+            # Direct reply — 解析 JSON 决策，提取纯文本内容
             yield self._sse_event("phase", {"phase": "reply"})
             self.memory.add_turn("user", user_input)
 
-            async for chunk in self._provider.chat_stream(
-                messages=messages,
-                temperature=self.config.temperature,
-                max_tokens=2048,
-            ):
-                delta = self._extract_delta(chunk)
-                if delta:
-                    yield self._sse_event("text", {"content": delta})
+            reply_content = self._parse_direct_reply(think_result.content)
+            yield self._sse_event("text", {"content": reply_content})
 
         # Done
         yield self._sse_event("done", {})
@@ -299,6 +293,19 @@ class ChemAgent:
     def _sse_event(self, event_type: str, data: dict) -> str:
         """格式化 SSE 事件"""
         return f"data: {json.dumps({'type': event_type, **data}, ensure_ascii=False)}\n\n"
+
+    def _parse_direct_reply(self, content: str) -> str:
+        """从 LLM 的 JSON 决策中提取纯文本回复"""
+        try:
+            import re
+            match = re.search(r'\{[\s\S]*\}', content)
+            if match:
+                data = json.loads(match.group())
+                if data.get("action") == "reply":
+                    return data.get("content", content)
+        except (json.JSONDecodeError, KeyError):
+            pass
+        return content  # 解析失败则返回原始文本
 
     def _extract_delta(self, chunk: str) -> str:
         """从 SSE chunk 提取文本增量"""
