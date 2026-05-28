@@ -8,6 +8,14 @@
 <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
 <style>
 body{font-family:'IBM Plex Sans',sans-serif;background:#f7f4ed;color:#1a1a1a;margin:0}
+/* 按钮系统 — 学术风格 */
+.btn-save{background:transparent;color:#b43c28;border:1.5px solid #b43c28;padding:5px 14px;font-size:12px;cursor:pointer;border-radius:4px;transition:all .15s}.btn-save:hover{background:#b43c28;color:#faf7f0}
+.btn-remove{background:transparent;color:rgba(0,0,0,.5);border:1.5px solid rgba(0,0,0,.12);padding:5px 14px;font-size:12px;cursor:pointer;border-radius:4px;transition:all .15s}.btn-remove:hover{background:rgba(0,0,0,.04);color:#b43c28;border-color:#b43c28}
+.btn-save-all{background:transparent;color:#b43c28;border:1.5px solid #b43c28;padding:6px 16px;font-size:13px;cursor:pointer;border-radius:4px;transition:all .15s}.btn-save-all:hover{background:#b43c28;color:#faf7f0}
+.btn-save-all:disabled{opacity:.4;pointer-events:none}
+.btn-del-all{background:transparent;color:rgba(0,0,0,.5);border:1.5px solid rgba(0,0,0,.12);padding:6px 16px;font-size:13px;cursor:pointer;border-radius:4px;transition:all .15s}.btn-del-all:hover{background:rgba(0,0,0,.04);color:#b43c28;border-color:#b43c28}
+.btn-del-confirm{background:transparent;color:#b43c28;border:1.5px solid #b43c28;padding:6px 16px;font-size:13px;cursor:pointer;border-radius:4px;transition:all .15s}.btn-del-confirm:hover{background:#b43c28;color:#faf7f0}
+.btn-regen{background:transparent;padding:6px 16px;border:1.5px solid rgba(0,0,0,.25);font-size:13px;cursor:pointer;border-radius:4px;transition:all .15s}.btn-regen:hover{background:rgba(0,0,0,.03);border-color:rgba(0,0,0,.4)}
 .sidebar{width:240px;position:fixed;left:0;top:0;height:100vh;z-index:50;background:#f5efe0;border-right:1px solid rgba(0,0,0,.05);display:flex;flex-direction:column}
 .sidebar .brand-area{padding:20px 16px 4px}
 .sidebar .brand-area h1{font-family:'Cormorant Garamond',Georgia,serif;font-size:28px;font-weight:600;line-height:1.1;margin:0}
@@ -16,6 +24,8 @@ body{font-family:'IBM Plex Sans',sans-serif;background:#f7f4ed;color:#1a1a1a;mar
 .sidebar .home-link:hover{border-color:#b43c28;color:#b43c28}
 .elem-nav{display:flex;align-items:center;gap:10px;padding:10px 14px;margin:2px 8px;border-radius:4px;text-decoration:none;color:#555;font-size:15px;transition:.12s}
 .elem-nav .sym{font-family:'Cormorant Garamond',Georgia,serif;font-weight:600;font-size:17px;min-width:32px;text-align:center;padding:4px 6px;border-radius:3px;background:rgba(0,0,0,.03);color:#1a1a1a}
+.elem-nav:hover{background:rgba(0,0,0,.02)}.elem-nav:hover .sym{background:#1a1a1a;color:#faf7f0}
+.elem-nav.active{background:rgba(0,0,0,.03);font-weight:500}.elem-nav.active .sym{background:#b43c28;color:#fff}
 .main{margin-left:240px;padding:24px 32px;min-height:100vh;background-image:linear-gradient(rgba(0,0,0,.012) 1px,transparent 1px),linear-gradient(90deg,rgba(0,0,0,.012) 1px,transparent 1px);background-size:28px 28px;background-position:-1px -1px}
 .card{background:#fff;border:1px solid rgba(0,0,0,.06);border-radius:4px;padding:20px;margin-bottom:12px}
 .input{border:none;border-bottom:1.5px solid rgba(0,0,0,.08);background:transparent;padding:9px 4px;font-size:15px;font-family:'IBM Plex Sans',sans-serif;outline:none;transition:border-color .3s;width:100%}
@@ -155,22 +165,22 @@ select.input{-webkit-appearance:none;border-radius:0}
         <div><span style="font-family:'Cormorant Garamond',serif;font-size:16px;font-weight:600">#{{i+1}}</span><span style="font-size:11px;color:#999;margin-left:8px">{{q._typeLabel}}</span><span style="font-size:11px;color:#999;margin-left:4px">{{q._source}}</span><span v-if="q._saved" style="margin-left:8px;color:#27ae60;font-size:11px">✓ 已保存</span></div>
         <div style="display:flex;gap:4px"><span v-for="d in auditDims" class="audit-badge" :class="(q[d.key]||{}).status||'passed'">{{d.label}}:{{(q[d.key]||{}).status==='warning'?'⚠':(q[d.key]||{}).status==='blocked'?'✗':'✓'}}</span></div>
       </div>
-      <template v-if="q._editing"><div class="edit-form"><textarea v-model="q.content" rows="3"></textarea><div style="display:flex;gap:6px"><input v-model="q.answer" placeholder="答案" style="flex:1"><input v-model="q._kpsStr" placeholder="知识点" style="flex:1"></div><div style="margin-top:6px"><button class="btn btn-sm" style="background:#27ae60;color:#fff;border:none;margin-right:6px" @click="q._editing=false">完成</button><button class="btn btn-sm" @click="q._editing=false">取消</button></div></div></template>
+      <template v-if="q._editing"><div class="edit-form"><textarea v-model="q.content" rows="3"></textarea><div style="display:flex;gap:6px"><input v-model="q.answer" placeholder="答案" style="flex:1"><input v-model="q._kpsStr" placeholder="知识点" style="flex:1"></div><div style="margin-top:6px"><button class="btn-save" style="margin-right:6px" @click="q._editing=false">完成</button><button class="btn btn-sm" @click="q._editing=false">取消</button></div></div></template>
       <template v-else>
         <div class="qcard-body" v-html="renderChem(q.content)"></div>
         <div v-if="q.options&&q.options.length" style="font-size:12px;color:#555;margin-top:4px"><span v-for="o in q.options" style="margin-right:10px">{{o}}</span></div>
         <div class="qcard-meta"><span class="tag" style="background:#e0f2f1;color:#2c6e49">答案: {{q.answer}}</span><span v-if="q.difficulty" class="tag" :class="'tag-'+q.difficulty">{{q.difficulty}}</span><span v-for="kp in (q.knowledge_points||[])" class="tag tag-medium">{{kp}}</span></div>
       </template>
-      <div class="qcard-actions"><button class="btn btn-sm" @click="q._editing=!q._editing">编辑</button><button v-if="!q._saved" class="btn btn-sm" style="background:#27ae60;color:#fff;border:1.5px solid #27ae60" @click="saveOne(i)">保存</button><button class="btn btn-sm" style="border-color:#b43c28;color:#b43c28" @click="removeOne(i)">移除</button></div>
+      <div class="qcard-actions"><button class="btn btn-sm" @click="q._editing=!q._editing">编辑</button><button v-if="!q._saved" class="btn-save" @click="saveOne(i)">保存</button><button class="btn-remove" @click="removeOne(i)">移除</button></div>
     </div>
     <!-- ═══ 底部操作栏（所有来源共享） ═══ -->
     <div v-if="questions.filter(function(q){return !q._removed}).length" class="bottom-bar">
       <span style="font-size:13px;color:#999">{{questions.filter(function(q){return !q._removed}).length}} 题 · {{questions.filter(function(q){return q._saved}).length}} 已保存</span>
       <div style="display:flex;gap:8px">
-        <button class="btn btn-sm" style="background:#27ae60;color:#fff;border:1.5px solid #27ae60" @click="saveAll" :disabled="savingAll">{{savingAll?'保存中...':'全部保存'}}</button>
-        <button v-if="!showDelConfirm" class="btn btn-sm" style="border:1.5px solid #e74c3c;color:#e74c3c" @click="showDelConfirm=true">全部删除</button>
-        <template v-if="showDelConfirm"><button class="btn btn-sm" style="background:#e74c3c;color:#fff;border:1.5px solid #e74c3c" @click="deleteAll">确认删除</button><button class="btn btn-sm" @click="showDelConfirm=false">取消</button></template>
-        <button class="btn btn-sm" @click="aiGenerate">全部重出</button>
+        <button class="btn-save-all" @click="saveAll" :disabled="savingAll">{{savingAll?'保存中...':'全部保存'}}</button>
+        <button v-if="!showDelConfirm" class="btn-del-all" @click="showDelConfirm=true">全部删除</button>
+        <template v-if="showDelConfirm"><button class="btn-del-confirm" @click="deleteAll">确认删除</button><button class="btn btn-sm" @click="showDelConfirm=false">取消</button></template>
+        <button class="btn-regen" @click="aiGenerate">全部重出</button>
       </div>
     </div>
 
@@ -240,7 +250,7 @@ select.input{-webkit-appearance:none;border-radius:0}
       <div style="flex:1;min-width:160px"><div class="section-label">搜索真题</div><input v-model="histSearch" class="input" placeholder="知识点/关键词" @keyup.enter="searchHistory"></div>
       <div style="width:120px"><div class="section-label">年份</div><select v-model="histYear" class="input"><option value="">全部</option><option v-for="y in histYears" :value="y">{{y}}</option></select></div>
       <button class="btn btn-sm" @click="searchHistory">搜索</button>
-      <button class="btn btn-sm" v-if="histResults.length" @click="addHistToCanvas" style="background:#27ae60;color:#fff;border:none">加入画布 ({{histResults.filter(function(x){return x._sel}).length}})</button>
+      <button class="btn-save-all" v-if="histResults.length" @click="addHistToCanvas">加入画布 ({{histResults.filter(function(x){return x._sel}).length}})</button>
     </div>
     <div v-if="histResults.length===0" class="empty-state"><p>输入关键词搜索历年真题（共 {{histTotal||250}} 题）</p></div>
     <div v-for="(hq,i) in histResults" class="card" style="margin-bottom:6px;border-left:3px solid transparent" :style="{borderLeftColor:hq._sel?'#b43c28':'transparent'}" @click="hq._sel=!hq._sel">

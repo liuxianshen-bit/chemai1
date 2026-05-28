@@ -32,6 +32,8 @@ class QuestionSource(PyEnum):
     """题目来源枚举"""
     AI_GENERATED = "ai_generated"
     MANUAL_SELECTED = "manual_selected"
+    DAILY_PRACTICE = "daily_practice"
+    OCR_IMPORT = "ocr_import"
 
 
 class AuditStatus(PyEnum):

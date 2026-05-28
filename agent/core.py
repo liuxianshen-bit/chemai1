@@ -341,13 +341,15 @@ class ChemAgent:
             ):
                 delta = self._extract_delta(chunk)
                 if delta:
-                    yield self._sse_event("text", {"content": delta})
+                    async for piece in self._stream_delta(delta):
+                        yield self._sse_event("text", {"content": piece})
         else:
-            # Direct reply — 使用已解析的干净内容
+            # Direct reply — 拆成小块逐字推送
             clean_text = decision.get("content", "")
             if clean_text:
                 yield self._sse_event("phase", {"phase": "reply"})
-                yield self._sse_event("text", {"content": clean_text})
+                async for piece in self._stream_delta(clean_text):
+                    yield self._sse_event("text", {"content": piece})
                 yield self._sse_event("done", {})
                 return
 
@@ -368,7 +370,8 @@ class ChemAgent:
                 delta = self._extract_delta(chunk)
                 if delta:
                     reply_full += delta
-                    yield self._sse_event("text", {"content": delta})
+                    async for piece in self._stream_delta(delta):
+                        yield self._sse_event("text", {"content": piece})
 
             self.memory.add_turn("assistant", reply_full)
 
@@ -393,7 +396,7 @@ class ChemAgent:
         return content  # 解析失败则返回原始文本
 
     def _extract_delta(self, chunk: str) -> str:
-        """从 SSE chunk 提取文本增量"""
+        """从 SSE chunk 提取文本增量。大块拆成小块，保证前端逐字渲染。"""
         try:
             if chunk.startswith("data: "):
                 chunk = chunk[6:]
@@ -405,6 +408,18 @@ class ChemAgent:
             return delta.get("content", "")
         except (json.JSONDecodeError, KeyError, IndexError):
             return ""
+
+    async def _stream_delta(self, delta: str):
+        """将文本增量拆成小块逐字推送，保证前端流畅渲染"""
+        if len(delta) <= 3:
+            yield delta
+            return
+        # 大块拆成 2-5 字一组
+        i = 0
+        while i < len(delta):
+            n = min(2 + (len(delta[i:]) % 3), len(delta) - i)
+            yield delta[i:i+n]
+            i += n
 
     async def close(self):
         if hasattr(self._provider, "close"):
