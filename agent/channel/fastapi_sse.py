@@ -38,6 +38,8 @@ async def agent_chat(request: ChatRequest):
     import agent.skills.experiment
     import agent.skills.weekly_report
     import agent.skills.import_exam
+    import agent.skills.web_search
+    import agent.skills.practice
 
     config = AgentConfig(
         persona=request.persona,
@@ -82,6 +84,8 @@ async def agent_chat_stream(request: ChatRequest):
     import agent.skills.experiment
     import agent.skills.weekly_report
     import agent.skills.import_exam
+    import agent.skills.web_search
+    import agent.skills.practice
 
     config = AgentConfig(
         persona=request.persona,
@@ -95,7 +99,8 @@ async def agent_chat_stream(request: ChatRequest):
     async def generate():
         try:
             async for chunk in agent.run_stream(request.message, request.history):
-                yield chunk  # chunk 已包含 SSE 格式
+                yield f"data: {chunk}\n\n"
+                yield ": heartbeat\n\n"
             yield "data: [DONE]\n\n"
         except Exception as e:
             yield f"data: {json.dumps({'error': str(e)})}\n\n"

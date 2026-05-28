@@ -3,6 +3,7 @@ ChemAI Main Application
 基于FastAPI的高中化学AI辅助教学工具后端服务
 """
 import os
+import json as json_lib
 
 # 禁用 ChromaDB posthog telemetry (修复版本兼容性问题)
 try:
@@ -12,15 +13,21 @@ try:
 except ImportError:
     pass
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse, JSONResponse
 from app.core.config import settings
 
+# ── 铁律：全局化学式渲染 — 所有 JSON 响应中的化学式自动转 Unicode 下标/上标 ──
+from app.utils.chem_render import render_chem_deep
+_original_json_render = JSONResponse.render
+def _patched_render(self, content):
+    return _original_json_render(self, render_chem_deep(content))
+JSONResponse.render = _patched_render
+
 # API路由
 from app.api import ocr, exam, question, diagnosis, report, practice, panel, auth, user, class_api, exam_bank, memory, school, grade, teacher_application, log, parent, review, warning, analytics, integration, notification, knowledge
 from app.api.practice_api import wrong_topic
-from app.api.hermes_proxy import router as hermes_proxy_router
 from app.mcp import mcp_router
 
 app = FastAPI(
@@ -44,7 +51,7 @@ app.add_middleware(
 )
 
 # 无需认证的路径
-PUBLIC_PREFIXES = ["/api/auth/", "/api/agent/", "/api/hermes/", "/api/classes", "/docs", "/redoc", "/openapi.json", "/health"]
+PUBLIC_PREFIXES = ["/api/auth/", "/api/agent/", "/api/classes", "/docs", "/redoc", "/openapi.json", "/health"]
 PUBLIC_EXTENSIONS = {".html", ".js", ".css", ".png", ".ico", ".svg", ".woff2"}
 
 @app.middleware("http")
@@ -95,7 +102,6 @@ app.include_router(integration.router, prefix="/api/integration", tags=["LMS集�
 app.include_router(notification.router, prefix="/api/notification", tags=["通知推送"])
 app.include_router(wrong_topic.router, prefix="/api/practice/wrong-topic", tags=["错题强化"])
 app.include_router(mcp_router, tags=["MCP工具"])
-app.include_router(hermes_proxy_router, prefix="/api/hermes", tags=["Hermes代理"])
 app.include_router(knowledge.router, prefix="/api/knowledge", tags=["知识卡片"])
 
 # ChemAgent
@@ -103,9 +109,20 @@ from agent.channel.fastapi_sse import router as agent_router
 app.include_router(agent_router, prefix="/api/agent", tags=["AI Agent"])
 
 
+def _nocache_file(path, **kw):
+    """返回文件并禁用缓存"""
+    from starlette.responses import FileResponse as _FR
+    resp = _FR(path, **kw)
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    return resp
+
 @app.get("/")
 async def root():
-    # 直接跳转到登录页面
+    html_file = os.path.join(FRONTEND_DIR, "index.html")
+    if os.path.exists(html_file):
+        return _nocache_file(html_file)
     return RedirectResponse(url="/login.html")
 
 
@@ -145,7 +162,7 @@ async def serve_css():
 async def serve_login_html():
     html_file = os.path.join(FRONTEND_DIR, "login.html")
     if os.path.exists(html_file):
-        return FileResponse(html_file)
+        return _nocache_file(html_file)
     return RedirectResponse(url="/")
 
 
@@ -157,18 +174,44 @@ async def serve_index_html():
     return FileResponse(html_file)
 
 
-# HTML页面路由（兜底）
+# 前端静态资源精确路由（必须在兜底 /{page} 之前）
+@app.get("/design-system.css")
+async def serve_design_css():
+    return FileResponse(os.path.join(FRONTEND_DIR, "design-system.css"))
+
+@app.get("/js/{filename}")
+async def serve_js(filename: str):
+    fp = os.path.join(FRONTEND_DIR, "js", filename)
+    if os.path.isfile(fp):
+        return FileResponse(fp)
+    raise HTTPException(status_code=404)
+
+@app.get("/pages/{filename}")
+async def serve_pages(filename: str):
+    fp = os.path.join(FRONTEND_DIR, "pages", filename)
+    if os.path.isfile(fp):
+        return FileResponse(fp)
+    raise HTTPException(status_code=404)
+
+# HTML页面路由（兜底 — 必须放在所有精确路由之后）
 @app.get("/{page}")
 async def serve_page(page: str):
     if ".." in page or page.startswith("/"):
         return RedirectResponse(url="/")
     # 如果已经是完整文件名（如 teacher.html），直接用
     if page.endswith(".html"):
-        html_file = os.path.join(FRONTEND_DIR, page)
+        candidates = [
+            os.path.join(FRONTEND_DIR, page),
+            os.path.join(FRONTEND_DIR, "pages", page),
+        ]
     else:
-        html_file = os.path.join(FRONTEND_DIR, f"{page}.html")
-    if os.path.exists(html_file):
-        return FileResponse(html_file)
+        candidates = [
+            os.path.join(FRONTEND_DIR, f"{page}.html"),
+            os.path.join(FRONTEND_DIR, "pages", f"{page}.html"),
+        ]
+    for html_file in candidates:
+        if os.path.exists(html_file):
+            return _nocache_file(html_file)
     return RedirectResponse(url="/")
 
 
@@ -181,6 +224,13 @@ async def startup_event():
 
     from app.utils.init_db import init_database
     init_database()
+
+    # 注册 Agent Skills
+    try:
+        from agent.skills_init import register_all_skills
+        register_all_skills()
+    except Exception as e:
+        print(f"Skills 注册失败: {e}")
 
     # 启动调度器
     try:

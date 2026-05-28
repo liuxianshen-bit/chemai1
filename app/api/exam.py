@@ -95,7 +95,8 @@ async def list_exams(class_id: str, db: Session = Depends(get_db)):
                 "total_students": e.total_students or 0,
                 "present_students": e.present_students or 0,
                 "avg_score": e.avg_score,
-                "exam_date": e.exam_date.strftime("%Y-%m-%d") if e.exam_date else None
+                "exam_date": e.exam_date.strftime("%Y-%m-%d") if e.exam_date else None,
+                "question_stats": e.question_stats
             }
             for e in exams
         ]
@@ -260,4 +261,150 @@ async def get_student_exam_result(exam_id: str, student_id: str, db: Session = D
         "accuracy": accuracy,
         "score": round(accuracy * 100, 1),
         "questions": question_results
+    }
+
+
+# ============================================================
+# redesign-4: 考试工作台 — 选题 / 发布 / 结果
+# ============================================================
+
+class AddQuestionsRequest(BaseModel):
+    """批量添加题目请求"""
+    question_ids: List[str]
+
+
+@router.post("/{exam_id}/questions")
+async def add_questions_to_exam(exam_id: str, request: AddQuestionsRequest, db: Session = Depends(get_db)):
+    """批量将已有题目关联到考试"""
+    exam = db.query(ExamRecord).filter(ExamRecord.record_id == exam_id).first()
+    if not exam:
+        raise HTTPException(status_code=404, detail=f"考试记录 {exam_id} 不存在")
+
+    updated = 0
+    for qid in request.question_ids:
+        q = db.query(Question).filter(Question.question_id == qid).first()
+        if q:
+            q.record_id = exam_id
+            updated += 1
+
+    db.commit()
+    return {"success": True, "updated": updated, "total": len(request.question_ids)}
+
+
+@router.get("/{exam_id}/questions")
+async def get_exam_questions(exam_id: str, db: Session = Depends(get_db)):
+    """获取考试关联的题目列表"""
+    exam = db.query(ExamRecord).filter(ExamRecord.record_id == exam_id).first()
+    if not exam:
+        raise HTTPException(status_code=404, detail=f"考试记录 {exam_id} 不存在")
+
+    questions = db.query(Question).filter(Question.record_id == exam_id).all()
+    return {
+        "exam_id": exam_id,
+        "exam_name": exam.name,
+        "total": len(questions),
+        "questions": [
+            {
+                "question_id": q.question_id,
+                "content": q.content,
+                "options": q.options,
+                "answer": q.answer,
+                "analysis": q.analysis,
+                "knowledge_points": q.knowledge_points,
+                "difficulty": q.difficulty.value if q.difficulty else None,
+                "source": q.source.value if q.source else None
+            }
+            for q in questions
+        ]
+    }
+
+
+@router.delete("/{exam_id}/questions/{question_id}")
+async def remove_question_from_exam(exam_id: str, question_id: str, db: Session = Depends(get_db)):
+    """从考试中移除题目"""
+    q = db.query(Question).filter(
+        Question.question_id == question_id,
+        Question.record_id == exam_id
+    ).first()
+    if not q:
+        raise HTTPException(status_code=404, detail="题目不在该考试中")
+
+    q.record_id = None
+    db.commit()
+    return {"success": True, "message": "题目已移除"}
+
+
+@router.post("/{exam_id}/publish")
+async def publish_exam(exam_id: str, db: Session = Depends(get_db)):
+    """发布考试"""
+    exam = db.query(ExamRecord).filter(ExamRecord.record_id == exam_id).first()
+    if not exam:
+        raise HTTPException(status_code=404, detail=f"考试记录 {exam_id} 不存在")
+
+    questions = db.query(Question).filter(Question.record_id == exam_id).count()
+    if questions == 0:
+        raise HTTPException(status_code=400, detail="考试没有题目，无法发布")
+
+    # 设置发布状态 (用 question_stats 存状态标记)
+    stats = exam.question_stats or {}
+    stats["published"] = True
+    stats["published_at"] = datetime.now().isoformat()
+    stats["question_count"] = questions
+    exam.question_stats = stats
+
+    exam.total_students = db.query(Student).filter(Student.class_id == exam.class_id).count()
+
+    db.commit()
+    return {
+        "success": True,
+        "exam_id": exam_id,
+        "exam_name": exam.name,
+        "published": True,
+        "question_count": questions,
+        "total_students": exam.total_students
+    }
+
+
+@router.get("/{exam_id}/results")
+async def get_exam_results(exam_id: str, db: Session = Depends(get_db)):
+    """获取考试结果总览（所有学生）"""
+    exam = db.query(ExamRecord).filter(ExamRecord.record_id == exam_id).first()
+    if not exam:
+        raise HTTPException(status_code=404, detail=f"考试记录 {exam_id} 不存在")
+
+    questions = db.query(Question).filter(Question.record_id == exam_id).all()
+    students = db.query(Student).filter(Student.class_id == exam.class_id).all()
+
+    student_results = []
+    for student in students:
+        answers = db.query(StudentAnswer).filter(
+            StudentAnswer.exam_record_id == exam_id,
+            StudentAnswer.student_id == student.student_id
+        ).all()
+        correct = sum(1 for a in answers if a.is_correct)
+        total = len(answers)
+        student_results.append({
+            "student_id": student.student_id,
+            "student_name": student.name,
+            "answered": total,
+            "correct": correct,
+            "accuracy": round(correct / total, 2) if total > 0 else 0,
+            "score": round(correct / total * 100, 1) if total > 0 else 0
+        })
+
+    stats = exam.question_stats or {}
+    published = stats.get("published", False)
+
+    return {
+        "exam_id": exam_id,
+        "exam_name": exam.name,
+        "class_name": exam.exam_class.name if exam.exam_class else "",
+        "published": published,
+        "total_questions": len(questions),
+        "total_students": len(students),
+        "completed_count": sum(1 for s in student_results if s["answered"] > 0),
+        "class_avg_accuracy": round(
+            sum(s["accuracy"] for s in student_results) / len(student_results), 2
+        ) if student_results else 0,
+        "students": student_results
     }

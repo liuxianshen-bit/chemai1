@@ -17,8 +17,14 @@ class Settings(BaseSettings):
     # 数据库配置 (SQLite for MVP, 可切换MySQL)
     DATABASE_URL: str = "sqlite:///./chemai.db"
 
-    # 通义千问API配置
-    DASHSCOPE_API_KEY: str = ""  # 需在环境变量设置
+    # 小米 MiMo-V2.5 API (主力)
+    XIAOMI_API_KEY: str = ""
+    MIMO_MODEL: str = "mimo-v2.5"
+    MIMO_API_URL: str = "https://api.xiaomimimo.com/v1/chat/completions"
+    LLM_PROVIDER: str = "mimo"  # mimo / dashscope / deepseek
+
+    # 通义千问API配置 (备选)
+    DASHSCOPE_API_KEY: str = ""
     LLM_MODEL: str = "qwen-turbo"
     LLM_API_URL: str = "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation"
 
@@ -61,6 +67,16 @@ class Settings(BaseSettings):
 
     # MVP月度成本上限
     MAX_MONTHLY_COST: float = 500.0  # ¥500/月
+
+    # 频率限制
+    LLM_RATE_LIMIT_PER_MINUTE: int = 30  # LLM API 每分钟最大请求数
+    FILE_UPLOAD_MAX_SIZE: int = 10 * 1024 * 1024  # 10MB
+
+    # 数据库
+    SQLITE_WAL_MODE: bool = True  # WAL模式提升并发
+
+    # 缓存
+    CACHE_TTL_SECONDS: int = 300  # 内存缓存默认TTL
 
     class Config:
         env_file = ".env"

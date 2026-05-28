@@ -152,6 +152,9 @@ class MinerUClient:
         if not file_path_obj.exists():
             return ParseResult(success=False, error=f"文件不存在: {file_path}")
 
+        # Always use absolute path (subprocess runs in mineru_root, not project root)
+        file_path_abs = str(file_path_obj.resolve())
+
         if output_dir is None:
             output_dir = tempfile.mkdtemp(prefix="mineru_parse_")
 
@@ -159,7 +162,7 @@ class MinerUClient:
             sys.executable,
             "-m",
             "mineru.cli.client",
-            "-p", str(file_path),
+            "-p", file_path_abs,
             "-o", output_dir,
             "-b", backend,
             "-l", lang,
@@ -403,6 +406,13 @@ class MinerUClient:
         # 提取化学式
         formulas = self._extract_formulas(md_content) if md_content else []
 
+        # LaTeX 标准化
+        try:
+            from hermes_skills.chemistry_parser.engine.latex_standardizer import standardize_latex_chemical
+            formulas = [standardize_latex_chemical(f) for f in formulas]
+        except ImportError:
+            pass
+
         # 提取题目
         questions = self._extract_questions(md_content) if md_content else []
 
@@ -416,7 +426,7 @@ class MinerUClient:
         return base_result
 
     def _extract_formulas(self, md_content: str) -> List[str]:
-        """从 Markdown 内容中提取化学式"""
+        """从 Markdown 内容中提取化学式（含 LaTeX 和文本式）"""
         import re
 
         formulas = []
@@ -428,18 +438,24 @@ class MinerUClient:
             r'\\\(([^\)]+)\\\)',  # \(...\)
             r'\\\[([^\]]+)\\\]',  # \[...\]
         ]
-
         for pattern in latex_patterns:
-            matches = re.finditer(pattern, md_content)
-            for match in matches:
+            for match in re.finditer(pattern, md_content):
                 formulas.append(match.group(1))
 
-        # 化学式模式（如 H2O, Ca(OH)2, Fe2(SO4)3 等）
-        chem_pattern = r'\b([A-Z][a-z]?(?:\([A-Za-z0-9]+\))?(?:\d+)?(?:\d+)?)\b'
-        chem_matches = re.findall(chem_pattern, md_content)
-        for formula in chem_matches:
-            if len(formula) > 1 and formula not in formulas:
-                formulas.append(formula)
+        # 化学式模式（如 H2O, Ca(OH)2, Fe2(SO4)3, Na2CO3·10H2O 等）
+        chem_patterns = [
+            # 带括号的复杂化学式: Ca(OH)2, Fe2(SO4)3, [Ag(NH3)2]+
+            r'\b[A-Z][a-z]?\d*(?:\((?:[A-Z][a-z]?\d*)+\)\d*)+\+?',
+            # 水合物: Na2CO3·10H2O, CuSO4·5H2O
+            r'\b[A-Z][a-z]?\d*(?:[A-Z][a-z]?\d*)*·\d+H2O',
+            # 简单化学式: H2O, CO2, Fe3O4
+            r'\b[A-Z][a-z]?\d*(?:[A-Z][a-z]?\d*){1,}',
+        ]
+        for pattern in chem_patterns:
+            for match in re.findall(pattern, md_content):
+                formula = match.group(0) if hasattr(match, 'group') else match
+                if len(formula) > 1 and formula not in formulas:
+                    formulas.append(formula)
 
         return list(set(formulas))
 

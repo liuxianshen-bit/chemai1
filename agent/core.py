@@ -20,7 +20,7 @@ from .provider.base import ChatResult
 @dataclass
 class AgentConfig:
     persona: str = "tutor"  # tutor / teacher / parent
-    provider: str = "deepseek"  # deepseek / zhipu / dashscope
+    provider: str = "deepseek"  # deepseek (fast) / mimo (multimodal/search) / zhipu / dashscope
     model: str = ""  # 留空用默认
     max_turns: int = 5
     temperature: float = 0.7
@@ -54,11 +54,13 @@ class ChemAgent:
 
     def _init_provider(self):
         """初始化 LLM Provider"""
+        from .provider.mimo import MiMoProvider
         from .provider.deepseek import DeepSeekProvider
         from .provider.zhipu import ZhipuProvider
         from .provider.dashscope import DashScopeProvider
 
         providers = {
+            "mimo": MiMoProvider,
             "deepseek": DeepSeekProvider,
             "zhipu": ZhipuProvider,
             "dashscope": DashScopeProvider,
@@ -92,7 +94,7 @@ class ChemAgent:
         result = await self._provider.chat(
             messages=messages,
             temperature=self.config.temperature,
-            max_tokens=2048,
+            max_tokens=8192,
             tools=tools,
         )
 
@@ -120,15 +122,36 @@ class ChemAgent:
                 "args": json.loads(func.get("arguments", "{}")),
             }
 
-        # 尝试从 content 中提取 JSON
+        # 尝试从 content 中提取 JSON action（处理嵌套大括号）
         try:
-            # 提取 JSON 块
-            match = re.search(r"\{[\s\S]*\}", content)
-            if match:
-                data = json.loads(match.group())
-                if "action" in data:
-                    return data
-        except (json.JSONDecodeError, KeyError):
+            # 先去掉 markdown 代码块
+            clean_content = content
+            for fence in ("```json", "```"):
+                if fence in clean_content:
+                    clean_content = clean_content.split(fence)[1] if len(clean_content.split(fence)) > 1 else clean_content
+            # 匹配嵌套大括号
+            start = clean_content.find("{")
+            if start >= 0:
+                depth = 0
+                end = start
+                for i in range(start, len(clean_content)):
+                    if clean_content[i] == "{": depth += 1
+                    elif clean_content[i] == "}":
+                        depth -= 1
+                        if depth == 0:
+                            end = i + 1
+                            break
+                if end > start:
+                    json_str = clean_content[start:end]
+                    data = json.loads(json_str)
+                    if "action" in data:
+                        # Strip the JSON block from content for clean display
+                        before = content[:content.find(json_str[:20])] if json_str[:20] in content else ""
+                        after = content[content.find(json_str[:20])+len(json_str):] if json_str[:20] in content else ""
+                        clean = (before + after).strip()
+                        data["content"] = clean or data.get("content", "")
+                        return data
+        except (json.JSONDecodeError, KeyError, IndexError):
             pass
 
         # fallback: 当作直接回复
@@ -177,7 +200,7 @@ class ChemAgent:
                 final_result = await self._provider.chat(
                     messages=final_messages,
                     temperature=self.config.temperature,
-                    max_tokens=2048,
+                    max_tokens=8192,
                 )
                 total_tokens += final_result.usage.get("total_tokens", 0)
 
@@ -219,7 +242,33 @@ class ChemAgent:
         messages = [{"role": "system", "content": system_prompt}]
         messages.extend(self.memory.build_context(user_input))
 
-        tools = registry.to_openai_tools() if registry._skills else None
+        # Intent recognition + model routing
+        def _classify(msg: str):
+            """Return (provider_override, tools_list). provider_override=None means use default."""
+            all_tools = registry.to_openai_tools() if registry._skills else []
+            by_name = {t["function"]["name"]: t for t in all_tools}
+            # Multimodal / web search → MiMo (slow)
+            # Search: use DeepSeek for fast thinking, MiMo only for web_search execution
+            if any(kw in msg for kw in ["搜", "查", "找", "真题", "高考", "图片", "照片", "图像", "识别", "OCR", "上传"]):
+                return ("deepseek", [by_name[n] for n in ["search_exam_bank", "web_search"] if n in by_name])
+            # Generate → DeepSeek (fast) with generate tools
+            if any(kw in msg for kw in ["出题", "生成", "练习", "组卷", "题目"]):
+                return ("deepseek", [by_name[n] for n in ["generate_questions", "search_exam_bank"] if n in by_name])
+            # Diagnosis → DeepSeek (fast) with diagnosis tools
+            if any(kw in msg for kw in ["诊断", "学生", "学情", "班级", "薄弱"]):
+                return ("deepseek", [by_name[n] for n in ["diagnose_barrier", "search_exam_bank"] if n in by_name])
+            # Chat → DeepSeek (fast), no tools
+            return ("deepseek", None)
+
+        provider_override, tools = _classify(user_input) if registry._skills else (None, None)
+        if provider_override and provider_override != self.config.provider:
+            # Switch provider on-the-fly for this request
+            if provider_override == "deepseek":
+                from .provider.deepseek import DeepSeekProvider
+                self._provider = DeepSeekProvider(model="deepseek-chat")
+            elif provider_override == "mimo":
+                from .provider.mimo import MiMoProvider
+                self._provider = MiMoProvider()
 
         # Phase 1: Thinking
         yield self._sse_event("phase", {"phase": "thinking"})
@@ -230,69 +279,105 @@ class ChemAgent:
             tools=tools,
         )
 
-        if think_result.tool_calls:
-            # Phase 2: Tool call
-            tc = think_result.tool_calls[0]
-            func = tc.get("function", {})
-            skill_name = func.get("name", "")
-            skill_args = json.loads(func.get("arguments", "{}"))
+        # Parse decision: native tool_calls first, then JSON from content
+        decision = self._parse_decision(think_result.content, think_result.tool_calls)
+        if decision.get("action") == "use_skill":
+            skill_name = decision["skill"]
+            skill_args = decision.get("args", {})
 
+            tool_category = skill_name.split("_")[0] if "_" in skill_name else skill_name
             yield self._sse_event("tool_call", {
                 "name": skill_name,
+                "tool": tool_category,
                 "args": skill_args,
             })
             yield self._sse_event("phase", {"phase": "executing"})
-
             # Execute skill
             try:
                 skill_result = await registry.execute(skill_name, skill_args)
                 yield self._sse_event("tool_result", {
                     "name": skill_name,
+                    "tool": tool_category,
                     "success": "error" not in skill_result,
                     "result": skill_result,
                 })
             except Exception as e:
                 yield self._sse_event("tool_error", {
                     "name": skill_name,
+                    "tool": tool_category,
                     "error": str(e),
                 })
                 yield self._sse_event("done", {})
-                return  # 工具失败，不继续回复
+                return
 
-            # Phase 3: Generate reply with tool result
-            observation = f"工具 {skill_name} 返回结果:\n{json.dumps(skill_result, ensure_ascii=False)}"
+            # Auto-retry: if search_exam_bank returns 0, try web_search
+            if skill_name == "search_exam_bank" and skill_result.get("total", 0) == 0 and "web_search" in registry.list_skills():
+                yield self._sse_event("phase", {"phase": "thinking"})
+                try:
+                    web_q = user_input  # 直接用用户的原始问题搜索，不加"高考化学真题"
+                    web_result = await registry.execute("web_search", {"query": web_q})
+                    yield self._sse_event("tool_call", {"name": "web_search", "tool": "web", "args": {"query": web_q}})
+                    yield self._sse_event("phase", {"phase": "executing"})
+                    yield self._sse_event("tool_result", {"name": "web_search", "tool": "web", "success": True, "result": web_result})
+                    observation = f"search_exam_bank 无结果。web_search 返回:\n{web_result.get('result', '')[:3000]}"
+                except Exception as e:
+                    observation = f"search_exam_bank 无结果，web_search 也失败: {e}"
+            else:
+                observation = f"工具 {skill_name} 返回结果:\n{json.dumps(skill_result, ensure_ascii=False)}"
             self.memory.add_turn("user", user_input)
             self.memory.add_turn("assistant", observation)
 
-            final_messages = [{"role": "system", "content": system_prompt}]
-            final_messages.extend(
-                self.memory.build_context("请基于以上工具结果生成回复")
-            )
+            # Reply phase: clean prompt, no JSON format
+            reply_sp = "你是高中化学教研助手。下面是工具执行结果和用户问题。请用自然语言回复。直接写回复内容，不要JSON。不要markdown代码块。"
+            final_messages = [{"role": "system", "content": reply_sp}]
+            final_messages.extend(self.memory.build_context(""))
 
             yield self._sse_event("phase", {"phase": "reply"})
 
             async for chunk in self._provider.chat_stream(
                 messages=final_messages,
                 temperature=self.config.temperature,
-                max_tokens=2048,
+                max_tokens=8192,
             ):
                 delta = self._extract_delta(chunk)
                 if delta:
                     yield self._sse_event("text", {"content": delta})
         else:
-            # Direct reply — 解析 JSON 决策，提取纯文本内容
-            yield self._sse_event("phase", {"phase": "reply"})
-            self.memory.add_turn("user", user_input)
+            # Direct reply — 使用已解析的干净内容
+            clean_text = decision.get("content", "")
+            if clean_text:
+                yield self._sse_event("phase", {"phase": "reply"})
+                yield self._sse_event("text", {"content": clean_text})
+                yield self._sse_event("done", {})
+                return
 
-            reply_content = self._parse_direct_reply(think_result.content)
-            yield self._sse_event("text", {"content": reply_content})
+            # 空回复时再调用流式
+            self.memory.add_turn("user", user_input)
+            reply_prompt = "你是高中化学教研助手。请用自然有帮助的方式直接回答。"
+            reply_messages = [{"role": "system", "content": reply_prompt}]
+            reply_messages.extend(self.memory.build_context(""))
+
+            yield self._sse_event("phase", {"phase": "reply"})
+
+            reply_full = ""
+            async for chunk in self._provider.chat_stream(
+                messages=reply_messages,
+                temperature=self.config.temperature,
+                max_tokens=8192,
+            ):
+                delta = self._extract_delta(chunk)
+                if delta:
+                    reply_full += delta
+                    yield self._sse_event("text", {"content": delta})
+
+            self.memory.add_turn("assistant", reply_full)
 
         # Done
         yield self._sse_event("done", {})
 
     def _sse_event(self, event_type: str, data: dict) -> str:
         """格式化 SSE 事件"""
-        return f"data: {json.dumps({'type': event_type, **data}, ensure_ascii=False)}\n\n"
+        return json.dumps({"type": event_type, **data}, ensure_ascii=False)
 
     def _parse_direct_reply(self, content: str) -> str:
         """从 LLM 的 JSON 决策中提取纯文本回复"""

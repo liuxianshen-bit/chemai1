@@ -108,7 +108,8 @@ class ExamBankService:
         year: Optional[int] = None,
         knowledge_point: Optional[str] = None,
         difficulty: Optional[str] = None,
-        keyword: Optional[str] = None
+        keyword: Optional[str] = None,
+        limit: int = 50
     ) -> List[HistoricalQuestion]:
         """
         查询真题
@@ -135,7 +136,7 @@ class ExamBankService:
                       if keyword_lower in q.content.lower()
                       or keyword_lower in q.answer.lower()]
 
-        return results
+        return results[:limit]
 
     def get_by_exam_id(self, exam_id: str) -> Optional[HistoricalQuestion]:
         """根据ID获取题目"""

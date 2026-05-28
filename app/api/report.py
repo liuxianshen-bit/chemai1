@@ -4,6 +4,7 @@ F3: 三层错题报告生成 API
 注: 家长摘要版暂不做，仅实现老师详情版+学生筛选版
 """
 from fastapi import APIRouter, HTTPException, Depends
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
@@ -648,4 +649,66 @@ async def get_student_learning_trend(student_id: str, db: Session = Depends(get_
         "latest_score": trend_data[-1]["score"] if trend_data else 0,
         "earliest_score": trend_data[0]["score"] if trend_data else 0
     }
+
+
+@router.get("/print/{exam_record_id}")
+async def print_report(
+    exam_record_id: str,
+    type: str = "teacher",  # teacher or student
+    db: Session = Depends(get_db)
+):
+    """
+    F3: 导出/打印报告为 HTML 页面（浏览器打印即 PDF）
+    """
+    from app.services.export_service import generate_report_html
+    from app.models.database import ExamRecord, Question, StudentAnswer
+
+    exam = db.query(ExamRecord).filter(ExamRecord.record_id == exam_record_id).first()
+    if not exam:
+        raise HTTPException(status_code=404, detail="考试记录不存在")
+
+    # Build exam data
+    questions = db.query(Question).filter(Question.record_id == exam_record_id).all()
+    question_stats = []
+    kp_errors = {}
+
+    for q in questions:
+        answers = db.query(StudentAnswer).filter(
+            StudentAnswer.question_id == q.question_id
+        ).all()
+        total = len(answers)
+        wrong = sum(1 for a in answers if not a.is_correct)
+        rate = wrong / total if total > 0 else 0
+
+        question_stats.append({
+            "question_number": q.question_id[-4:],
+            "knowledge_points": q.knowledge_points or [],
+            "error_count": wrong,
+            "error_rate": rate,
+        })
+
+        for kp in (q.knowledge_points or []):
+            if kp not in kp_errors:
+                kp_errors[kp] = {"errors": 0, "total": 0}
+            kp_errors[kp]["errors"] += wrong
+            kp_errors[kp]["total"] += total
+
+    knowledge_point_stats = [
+        {"knowledge_point": kp, "error_count": v["errors"],
+         "error_rate": v["errors"] / v["total"] if v["total"] > 0 else 0}
+        for kp, v in kp_errors.items()
+    ]
+
+    exam_data = {
+        "exam_name": exam.name,
+        "total_students": exam.total_students,
+        "present_students": exam.present_students,
+        "avg_score": exam.avg_score or 0,
+        "question_stats": question_stats,
+        "knowledge_point_stats": knowledge_point_stats,
+        "encouragement": "建议重点复习高频错误知识点，针对性练习同类题目。",
+    }
+
+    html = generate_report_html(exam_data, report_type=type)
+    return HTMLResponse(content=html)
 

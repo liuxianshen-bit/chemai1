@@ -63,3 +63,4 @@ tmp/
 # Local data (keep sample_answer_sheets for testing)
 data/sample_answer_sheets/
 !data/sample_answer_sheets/.gitkeep
+.gstack/

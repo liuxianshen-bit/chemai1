@@ -39,37 +39,51 @@ class DocumentParseService:
         try:
             from hermes_skills.chemistry_parser.mineru_client import get_mineru_client
             return get_mineru_client()
-        except Exception:
+        except Exception as e:
+            print(f"[MinerU] Init failed: {e}")
             return None
+
+    def _is_mineru_actually_available(self) -> bool:
+        """检测 MinerU 是否真正可用（不仅仅是代码存在）"""
+        if self.mineru_client is None:
+            return False
+        # 简单检查：模型目录是否有内容
+        import os as _os
+        home = _os.path.expanduser("~")
+        cache_dirs = [
+            _os.path.join(home, ".cache", "modelscope", "hub"),
+            _os.path.join(home, ".cache", "huggingface", "hub"),
+            _os.path.join(home, ".mineru", "models"),
+        ]
+        for d in cache_dirs:
+            if _os.path.exists(d) and any(_os.scandir(d)):
+                return True
+        # 模型未下载，标记为不可用
+        print("[MinerU] Models not downloaded — MinerU unavailable")
+        return False
 
     def check_services_status(self) -> Dict[str, Any]:
         """
         检测所有解析服务可用性
-
-        返回:
-            {
-                "ocr": {"available": bool, "provider": str},
-                "mineru": {"available": bool},
-                "vision": {"available": bool}
-            }
         """
         zhipu_key = settings.ZHIPU_API_KEY or os.getenv("ZHIPU_API_KEY", "")
+        mineru_available = self._is_mineru_actually_available()
 
         return {
             "ocr": {
                 "available": bool(zhipu_key),
                 "provider": "zhipu",
-                "note": "智谱GLM-OCR" if zhipu_key else "未配置ZHIPU_API_KEY"
+                "note": "智谱GLM-OCR" if zhipu_key else "未配置ZHIPU_API_KEY",
             },
             "mineru": {
-                "available": self.mineru_client is not None,
-                "note": "MinerU CLI" if self.mineru_client else "未找到MinerU或不可用"
+                "available": mineru_available,
+                "note": "MinerU CLI 就绪" if mineru_available else "MinerU 模型未下载，需先下载模型",
             },
             "vision": {
                 "available": bool(zhipu_key),
                 "provider": "zhipu-glm-4v",
-                "note": "智谱GLM-4V多模态" if zhipu_key else "未配置ZHIPU_API_KEY"
-            }
+                "note": "智谱GLM-4V多模态" if zhipu_key else "未配置ZHIPU_API_KEY",
+            },
         }
 
     def parse_document(
@@ -246,18 +260,15 @@ class DocumentParseService:
 
     def _parse_pdf(self, file_data: bytes) -> Dict[str, Any]:
         """
-        PDF解析: MinerU优先，失败则降级到OCR
-
-        注意: 当前OCR服务不支持直接解析PDF，这里仅实现MinerU解析
+        PDF解析: MinerU优先，失败则返回错误（模型未下载）
         """
-        if not self.mineru_client:
-            # MinerU不可用，返回错误
+        if not self._is_mineru_actually_available():
             return {
                 "success": False,
                 "provider": "none",
-                "error": "MinerU不可用，无法解析PDF文档",
+                "error": "MinerU 模型未下载，无法解析PDF。请先下载模型或使用图片模式。",
                 "fallback_used": False,
-                "mineru_available": False
+                "mineru_available": False,
             }
 
         # 保存临时文件
@@ -283,9 +294,10 @@ class DocumentParseService:
                     "formulas": result.formulas or [],
                     "images": result.images or [],
                     "output_dir": result.output_dir,
-                    "error": result.error
+                    "error": result.error,
                 },
-                "fallback_used": False
+                "fallback_used": False,
+                "error": result.error if not result.success else None,
             }
         except Exception as e:
             return {

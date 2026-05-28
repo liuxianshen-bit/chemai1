@@ -3,91 +3,237 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AI 教研助手 - 智辅化学</title>
+<title>AI 教研助手 · 智辅化学</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,400&family=IBM+Plex+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
-<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-<script>tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#002045","on-primary":"#ffffff","primary-container":"#1a365d","on-primary-container":"#86a0cd",secondary:"#13696a","secondary-container":"#a2eded","on-secondary-container":"#1a6d6e",surface:"#fbf9f5","surface-warm":"#F5EFE6","surface-container-low":"#f5f3ef","surface-container-high":"#eae8e4","on-surface":"#1b1c1a","on-surface-variant":"#43474e","wood-accent":"#D7C4B1","outline-variant":"#c4c6cf","ai-glow":"#E0F2F1",background:"#fbf9f5","on-background":"#1b1c1a","formula-green":"#2F855A","academic-red":"#C53030",tertiary:"#290068","tertiary-container":"#420e95","error":"#ba1a1a","error-container":"#ffdad6"},borderRadius:{DEFAULT:"0.25rem",lg:"0.5rem",xl:"0.75rem",full:"9999px"},spacing:{"sidebar-width":"240px","gutter":"24px","margin-desktop":"32px","margin-mobile":"16px","component-gap":"16px","section-gap":"40px"},fontFamily:{sans:["IBM Plex Sans"],mono:["JetBrains Mono"],display:["Manrope"]}}}}</script>
-<link rel="stylesheet" href="/design-system.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script src="https://cdn.tailwindcss.com?plugins=forms"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/mhchem.min.js"></script>
+<script>tailwind.config={darkMode:"class",theme:{extend:{colors:{ink:"#1a1a1a",paper:"#faf7f0",paperWarm:"#f5efe0",inkLight:"#555",congoRed:"#b43c28",methylGreen:"#2c6e49"},fontFamily:{sans:["IBM Plex Sans"],mono:["JetBrains Mono"],serif:["Cormorant Garamond","Georgia","serif"]}}}}</script>
+<style>
+/* ─── B · 实验室手稿 — 首页 ─── */
+
+body{background:#f7f4ed;font-family:'IBM Plex Sans',sans-serif;color:#1a1a1a}
+
+/* ─── 侧边栏 ─── */
+.sidebar{
+  width:240px;position:fixed;left:0;top:0;height:100vh;z-index:50;
+  background:#f5efe0;border-right:1px solid rgba(0,0,0,.05);
+  display:flex;flex-direction:column;
+}
+.sidebar .brand-area{padding:20px 16px 4px}
+.sidebar .brand-area h1{font-family:'Cormorant Garamond',Georgia,serif;font-size:28px;font-weight:600;line-height:1.1}
+.sidebar .brand-area .sub{font-family:'JetBrains Mono',monospace;font-size:10px;color:#999;margin-top:3px;letter-spacing:.5px}
+.sidebar .new-chat-btn{margin:14px 12px 10px;padding:9px 0;text-align:center;font-size:14px;font-family:'IBM Plex Sans',sans-serif;border:1px solid rgba(0,0,0,.1);background:transparent;color:#555;border-radius:4px;cursor:pointer;transition:.15s}
+.sidebar .new-chat-btn:hover{border-color:#b43c28;color:#b43c28}
+
+/* ─── 元素符号导航 ─── */
+.elem-nav{
+  display:flex;align-items:center;gap:10px;padding:10px 14px;margin:2px 8px;
+  border-radius:4px;text-decoration:none;color:#555;font-size:15px;transition:.12s;
+}
+.elem-nav .sym{
+  font-family:'Cormorant Garamond',Georgia,serif;font-weight:600;font-size:17px;
+  min-width:32px;text-align:center;padding:4px 6px;border-radius:3px;
+  background:rgba(0,0,0,.03);color:#1a1a1a;
+}
+.elem-nav:hover{background:rgba(0,0,0,.02)}
+.elem-nav:hover .sym{background:#1a1a1a;color:#faf7f0}
+.elem-nav.active{background:rgba(0,0,0,.03);font-weight:500}
+.elem-nav.active .sym{background:#b43c28;color:#fff}
+.elem-nav:nth-child(1){animation:nav-in .3s 0s ease both}
+.elem-nav:nth-child(2){animation:nav-in .3s .04s ease both}
+.elem-nav:nth-child(3){animation:nav-in .3s .08s ease both}
+.elem-nav:nth-child(4){animation:nav-in .3s .12s ease both}
+.elem-nav:nth-child(5){animation:nav-in .3s .16s ease both}
+@keyframes nav-in{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:translateX(0)}}
+
+/* ─── 主区域 ─── */
+.main{margin-left:240px;height:100vh;display:flex;flex-direction:column;
+  background-image:linear-gradient(rgba(0,0,0,.012) 1px,transparent 1px),linear-gradient(90deg,rgba(0,0,0,.012) 1px,transparent 1px);
+  background-size:28px 28px;background-position:-1px -1px}
+
+/* ─── 聊天消息 ─── */
+.chat-area{flex:1;overflow-y:auto;padding:24px 32px;display:flex;flex-direction:column;gap:16px}
+.msg-ai{
+  align-self:flex-start;max-width:78%;padding:16px 20px;border-radius:4px;
+  background:#f5efe0;border:1px solid rgba(0,0,0,.04);font-size:15px;line-height:1.7;
+  position:relative;
+}
+.msg-ai .avatar{font-family:'JetBrains Mono',monospace;font-size:11px;color:#b43c28;margin-bottom:6px;letter-spacing:.5px}
+.msg-user{
+  align-self:flex-end;max-width:72%;padding:12px 16px;border-radius:6px 6px 2px 6px;
+  background:#1a1a1a;color:#fff;font-size:15px;line-height:1.6;
+}
+
+/* ─── 思考动画 ─── */
+.think-dots{display:flex;gap:5px;padding:4px 0}
+.think-dots span{width:6px;height:6px;border-radius:50%;background:#b43c28;animation:think .8s ease-in-out infinite}
+.think-dots span:nth-child(2){animation-delay:.15s}
+.think-dots span:nth-child(3){animation-delay:.3s}
+@keyframes think{0%,80%,100%{opacity:.3;transform:scale(.8)}40%{opacity:1;transform:scale(1.2)}}
+
+/* ─── ToolCard ─── */
+.tool-card{
+  align-self:flex-start;max-width:92%;background:#fff;border:1px solid rgba(0,0,0,.06);
+  border-left:3px solid #b43c28;border-radius:4px;padding:10px 14px;margin:4px 0;
+  font-family:'JetBrains Mono',monospace;font-size:11px;cursor:pointer;
+  animation:tool-in .35s cubic-bezier(.34,1.56,.64,1) both;
+}
+@keyframes tool-in{0%{opacity:0;transform:translateY(6px) scale(.98)}100%{opacity:1;transform:translateY(0) scale(1)}}
+.tool-card-header{display:flex;align-items:center;gap:8px;color:#555}
+.tool-card-body{max-height:0;overflow:hidden;transition:max-height .4s ease,padding .4s ease;padding:0 8px}
+.tool-card-body.open{max-height:600px;padding:8px;overflow-y:auto}
+
+/* ─── 快捷提问 ─── */
+.chips-area{padding:10px 32px;display:flex;flex-wrap:wrap;gap:8px}
+.chip{
+  padding:8px 18px;border-radius:9999px;border:1px solid rgba(0,0,0,.08);
+  background:transparent;font-size:14px;font-family:'IBM Plex Sans',sans-serif;
+  cursor:pointer;color:#555;transition:.15s;
+}
+.chip:hover{border-color:#b43c28;color:#b43c28;background:rgba(180,60,40,.03)}
+
+/* ─── 输入区 ─── */
+.input-area{padding:12px 32px;display:flex;gap:12px;border-top:1px solid rgba(0,0,0,.04)}
+.input-area textarea{
+  flex:1;border:none;outline:none;background:transparent;padding:10px 4px;
+  font-size:16px;font-family:'IBM Plex Sans',sans-serif;resize:none;
+  min-height:20px;max-height:120px;border-bottom:1.5px solid rgba(0,0,0,.08);
+  transition:border-color .3s,box-shadow .3s;
+}
+.input-area textarea:focus{border-bottom-color:#b43c28;box-shadow:0 4px 12px -4px rgba(180,60,40,.1)}
+.input-area textarea:disabled{opacity:.4}
+.btn-send{
+  padding:10px 28px;border:1.5px solid #1a1a1a;background:transparent;color:#1a1a1a;
+  font-size:15px;font-family:'IBM Plex Sans',sans-serif;cursor:pointer;letter-spacing:.5px;
+  border-radius:4px;transition:.15s;align-self:flex-end;
+}
+.btn-send:hover{background:#1a1a1a;color:#faf7f0}
+.btn-send:disabled{opacity:.3;cursor:wait}
+
+/* ─── 上下文指示器 ─── */
+.ctx-bar{display:none;align-items:center;gap:8px;padding:6px 32px;border-top:1px solid rgba(0,0,0,.03);font-size:12px;background:rgba(0,0,0,.01)}
+.ctx-bar .ctx-label{font-family:'JetBrains Mono',monospace;font-size:9px;color:#999;text-transform:uppercase;letter-spacing:.5px}
+.ctx-bar .ctx-tag{padding:2px 10px;border-radius:9999px;font-size:11px;font-family:'JetBrains Mono',monospace;background:rgba(0,0,0,.04);color:#555}
+
+/* ─── 气泡内思考状态 ─── */
+.think-status{display:flex;align-items:center;gap:6px;font-family:'JetBrains Mono',monospace;font-size:11px;color:#b43c28;margin-bottom:8px}
+.think-status .dot{width:5px;height:5px;border-radius:50%;background:#b43c28;animation:pulse 1.2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.2}}
+
+/* ─── AI 输出排版 ─── */
+.msg-ai h3{font-family:'Cormorant Garamond',Georgia,serif;font-size:20px;font-weight:600;color:#1a1a1a;margin:16px 0 6px;line-height:1.3}
+.msg-ai h3:first-child{margin-top:0}
+.msg-ai h4{font-family:'Cormorant Garamond',Georgia,serif;font-size:17px;font-weight:600;color:#1a1a1a;margin:12px 0 4px}
+.msg-ai p{margin:0 0 8px}
+.msg-ai p:last-child{margin-bottom:0}
+.msg-ai ul,.msg-ai ol{margin:4px 0 8px;padding-left:20px}
+.msg-ai li{margin-bottom:4px;line-height:1.6}
+.msg-ai strong{color:#b43c28;font-weight:600}
+.msg-ai code{font-family:'JetBrains Mono',monospace;font-size:13px;background:rgba(0,0,0,.04);padding:2px 6px;border-radius:3px;color:#b43c28}
+.msg-ai pre{background:rgba(0,0,0,.02);border:1px solid rgba(0,0,0,.04);border-radius:4px;padding:12px 14px;overflow-x:auto;margin:8px 0;font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.6}
+.msg-ai pre code{background:none;padding:0;color:#1a1a1a}
+.msg-ai blockquote{border-left:3px solid #b43c28;margin:8px 0;padding:4px 12px;color:#555;font-style:italic}
+.msg-ai table{border-collapse:collapse;width:100%;margin:8px 0;font-size:13px}
+.msg-ai table th{text-align:left;padding:8px 12px;border-bottom:2px solid rgba(0,0,0,.06);font-family:'JetBrains Mono',monospace;font-size:10px;color:#999;text-transform:uppercase}
+.msg-ai table td{padding:8px 12px;border-bottom:1px solid rgba(0,0,0,.04)}
+.msg-ai hr{border:none;height:1px;background:linear-gradient(90deg,rgba(180,60,40,.2),rgba(180,60,40,.04) 70%,transparent);margin:16px 0}
+
+/* ─── 历史对话 · 元素周期表书签 ─── */
+.history-panel{position:fixed;left:240px;top:0;bottom:0;z-index:49;pointer-events:none}
+.elem-bookmark{position:absolute;left:0;top:50%;transform:translateY(-50%);pointer-events:auto;cursor:pointer;
+  width:28px;height:36px;background:#faf7f0;border:2px solid #b43c28;border-left:none;border-radius:0 4px 4px 0;
+  display:flex;align-items:center;justify-content:center;transition:.2s cubic-bezier(.34,1.56,.64,1);
+  box-shadow:1px 1px 4px rgba(0,0,0,.06)}
+.elem-bookmark .sym{font-family:'Cormorant Garamond',Georgia,serif;font-size:24px;font-weight:700;color:#b43c28;line-height:1}
+.elem-bookmark .num{font-family:'JetBrains Mono',monospace;font-size:7px;color:#999;position:absolute;top:2px;left:4px}
+.elem-bookmark:hover{width:32px;border-color:#8a2a1a;box-shadow:2px 2px 10px rgba(180,60,40,.15)}
+.elem-bookmark:hover .sym{color:#8a2a1a}
+.elem-bookmark.open{left:200px}
+.history-drawer{position:absolute;left:-200px;top:0;bottom:0;width:200px;background:#faf7f0;
+  border-right:1px solid rgba(0,0,0,.05);display:flex;flex-direction:column;pointer-events:auto;
+  transition:left .25s cubic-bezier(.22,.61,.36,1);box-shadow:2px 0 16px rgba(0,0,0,.04)}
+.history-drawer.open{left:0}
+.history-drawer .hd-header{display:flex;align-items:center;justify-content:space-between;padding:12px 14px 8px;
+  border-bottom:1px solid rgba(0,0,0,.04)}
+.history-drawer .hd-title{font-family:'Cormorant Garamond',Georgia,serif;font-size:17px;font-weight:600;color:#1a1a1a}
+.history-drawer .hd-close{background:none;border:none;cursor:pointer;color:#999;font-size:16px;padding:2px 4px}
+.history-drawer .hd-close:hover{color:#b43c28}
+.history-drawer .hd-list{flex:1;overflow-y:auto;padding:4px 8px}
+.history-drawer .hd-new{padding:8px 14px;border-top:1px solid rgba(0,0,0,.04)}
+.history-drawer .hd-new button{width:100%;padding:6px 0;border:1px solid rgba(0,0,0,.08);background:transparent;color:#555;font-size:13px;font-family:'IBM Plex Sans',sans-serif;cursor:pointer;border-radius:4px;transition:.15s}
+.history-drawer .hd-new button:hover{border-color:#b43c28;color:#b43c28}
+.history-item{display:flex;align-items:center;padding:7px 8px;margin:1px 0;border-radius:4px;cursor:pointer;transition:.1s;font-size:13px;color:#555;gap:6px}
+.history-item:hover{background:rgba(0,0,0,.03)}
+.history-item.active{background:rgba(0,0,0,.04);color:#1a1a1a}
+.history-item .title{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:'IBM Plex Sans',sans-serif}
+.history-item .del{opacity:0;background:none;border:none;cursor:pointer;color:#999;font-size:14px;padding:0 2px;transition:.1s}
+.history-item:hover .del{opacity:.6}
+.history-item .del:hover{opacity:1;color:#b43c28}
+</style>
 </head>
-<body class="bg-background text-on-surface flex h-screen overflow-hidden" style="font-family:'IBM Plex Sans'">
+<body>
 
 <!-- Sidebar -->
-<aside class="fixed left-0 top-0 h-screen flex flex-col z-50" style="width:240px;background:#002045">
-  <div class="h-16 flex items-center px-4 mb-4 mt-2">
-    <span class="material-symbols-outlined text-[28px] mr-2" style="color:#86a0cd">science</span>
-    <div>
-      <h1 class="text-white font-bold tracking-tight" style="font-family:Manrope;font-size:20px">智辅化学</h1>
-      <p class="text-xs" style="color:#86a0cd;font-family:'JetBrains Mono'">智慧教育辅助系统</p>
-    </div>
-  </div>
-  <div class="px-4 mb-6">
-    <button onclick="location.reload()" class="w-full py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-all text-sm"
-      style="background:rgba(255,255,255,.1);color:#86a0cd;font-family:'JetBrains Mono'"
-      onmouseover="this.style.background='rgba(255,255,255,.15)';this.style.color='#fff'"
-      onmouseout="this.style.background='rgba(255,255,255,.1)';this.style.color='#86a0cd'">
-      <span class="material-symbols-outlined text-[18px]">add</span> 新建对话
-    </button>
-  </div>
-  <nav class="flex-1 overflow-y-auto px-2 flex flex-col gap-1" id="sidebar-nav"></nav>
-  <div class="p-2 border-t mt-auto" style="border-color:rgba(255,255,255,.1)">
-    <a class="sidebar-link" href="#" onclick="ChemAI.logout()">
-      <span class="material-symbols-outlined">logout</span> 退出登录
-    </a>
+<aside class="sidebar">
+  <div class="brand-area"><h1>智辅化学</h1><p class="sub">CHEMAI · 教师工作台</p></div>
+  <button class="new-chat-btn" onclick="newConversation()">+ 新建对话</button>
+  <nav class="flex-1 overflow-y-auto flex flex-col" id="sidebar-nav" style="padding:4px 0"></nav>
+  <div style="padding:8px 12px;border-top:1px solid rgba(0,0,0,.04)">
+    <a class="elem-nav" href="#" onclick="ChemAI.logout()" style="font-size:12px;color:#999">退出登录</a>
   </div>
 </aside>
 
-<!-- Main -->
-<main class="flex-1 flex flex-col relative h-screen bg-background" style="margin-left:240px">
+<!-- 历史对话书签面板 -->
+<div class="history-panel" id="history-panel">
+  <div class="elem-bookmark" id="history-tab" onclick="event.stopPropagation();toggleHistory()"><span class="num">1</span><span class="sym">H</span></div>
+  <div class="history-drawer" id="history-drawer">
+    <div class="hd-header"><span class="hd-title">对话记录</span><button class="hd-close" onclick="toggleHistory()">×</button></div>
+    <div class="hd-list" id="hd-list"></div>
+    <div class="hd-new"><button onclick="newConversation()">+ 新建对话</button></div>
+  </div>
+</div>
 
-<!-- Chat Area -->
-<div class="flex-1 flex flex-col min-h-0">
-  <div class="flex-1 overflow-y-auto px-8 py-6 flex flex-col gap-4" id="chat-messages">
-    <!-- Welcome -->
+<!-- Main -->
+<main class="main">
+  <div class="chat-area" id="chat-messages">
     <div class="msg-ai">
-      <div class="ai-avatar">
-        <span class="material-symbols-outlined text-[16px]">psychology</span> AI 教研助手
-      </div>
-      <p class="mb-2">👋 你好！我是 ChemAI 教研助手。</p>
-      <p class="text-sm" style="color:#43474e">我能帮你：配平化学方程式 · 生成练习题 · 诊断学习障碍 · 搜索历年真题 · 模拟化学实验 · 生成学习周报</p>
+      <div class="avatar">CHEMAI · 教研助手</div>
+      <p>你好，老师。</p>
+      <p style="font-size:13px;color:#555;margin-top:4px;line-height:1.7">我能帮你：配平化学方程式 · 生成练习题 · 诊断学习障碍 · 搜索历年真题 · 模拟化学实验 · 生成学习报告</p>
     </div>
   </div>
 
-  <!-- Quick Actions -->
-  <div class="px-8 py-3 flex flex-wrap gap-2" id="suggestion-chips">
-    <button class="chip" data-prompt="帮我配平 Fe + O2 = Fe2O3"><span class="material-symbols-outlined text-[18px]">balance</span>配平方程式</button>
-    <button class="chip" data-prompt="出3道关于盐类水解的选择题"><span class="material-symbols-outlined text-[18px]">edit_note</span>出题练习</button>
-    <button class="chip" data-prompt="模拟钠与水的反应实验"><span class="material-symbols-outlined text-[18px]">experiment</span>模拟实验</button>
-    <button class="chip" data-prompt="请讲解氧化还原反应的基本概念"><span class="material-symbols-outlined text-[18px]">school</span>讲解概念</button>
-    <button class="chip" data-prompt="搜索关于化学平衡的高考真题"><span class="material-symbols-outlined text-[18px]">search</span>查真题</button>
-    <button class="chip" data-prompt="分析班级最近的错题情况并给出教学建议"><span class="material-symbols-outlined text-[18px]">health_and_safety</span>错题诊断</button>
+  <div class="ctx-bar" id="agent-context">
+    <span class="ctx-label">上下文</span>
+    <span class="ctx-tag" id="ctx-class" style="display:none"></span>
+    <span class="ctx-tag" id="ctx-exam" style="display:none"></span>
+    <span class="ctx-tag" id="ctx-student" style="display:none"></span>
+    <button onclick="clearContext()" style="background:none;border:none;cursor:pointer;color:#999;font-size:14px;padding:0 4px">&times;</button>
   </div>
 
-  <!-- Input -->
-  <div class="px-8 py-3 border-t flex gap-3" style="border-color:rgba(215,196,177,.3);background:rgba(251,249,245,.8)">
-    <textarea id="chat-input" placeholder="输入化学教学问题，Enter 发送，Shift+Enter 换行..." rows="1"
-      class="flex-1 px-4 py-3 rounded-lg border text-sm outline-none resize-none"
-      style="border-color:rgba(215,196,177,.6);font-family:'IBM Plex Sans';min-height:44px;max-height:120px;background:#fff"
-      onfocus="this.style.borderColor='#002045';this.style.boxShadow='0 0 0 3px rgba(0,32,69,.1)'"
-      onblur="this.style.borderColor='rgba(215,196,177,.6)';this.style.boxShadow='none'"></textarea>
-    <button id="chat-send" onclick="sendMessage()"
-      class="px-6 py-3 rounded-lg text-white font-medium text-sm transition-all"
-      style="background:#002045;font-family:'IBM Plex Sans'"
-      onmouseover="this.style.background='#1a365d'"
-      onmouseout="this.style.background='#002045'">发送</button>
+  <div class="chips-area" id="chips">
+    <button class="chip" data-prompt="帮我配平 Fe + O2 = Fe2O3">配平方程式</button>
+    <button class="chip" data-prompt="出3道关于盐类水解的选择题">出题练习</button>
+    <button class="chip" data-prompt="模拟钠与水的反应实验">模拟实验</button>
+    <button class="chip" data-prompt="请讲解氧化还原反应的基本概念">讲解概念</button>
+    <button class="chip" data-prompt="搜索关于化学平衡的高考真题">查真题</button>
+    <button class="chip" data-prompt="分析班级最近的错题情况并给出教学建议">错题诊断</button>
   </div>
 
-  <!-- Status Bar -->
-  <div class="agent-status" id="agent-status">
-    <div class="dot"></div>
-    <span id="status-text">思考中...</span>
+  <div class="input-area">
+    <textarea id="chat-input" placeholder="输入化学教学问题，Enter 发送..." rows="1"></textarea>
+    <button class="btn-send" id="chat-send" onclick="sendMessage()">发送</button>
   </div>
-</div>
+
 </main>
 
-<script src="/app.js"></script>
-<script src="/js/agent.js"></script>
+<script src="/app.js?v=3"></script>
+<script src="/js/agent-renderers.js?v=3"></script>
+<script src="/js/agent.js?v=3"></script>
 </body>
 </html>

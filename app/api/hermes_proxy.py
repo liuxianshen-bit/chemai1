@@ -31,6 +31,8 @@ async def chemistry_chat(request: ChemistryChatRequest):
     import agent.skills.experiment
     import agent.skills.weekly_report
     import agent.skills.import_exam
+    import agent.skills.practice
+    import agent.skills.web_search
 
     agent = ChemAgent(AgentConfig(persona="tutor"))
 
@@ -38,13 +40,15 @@ async def chemistry_chat(request: ChemistryChatRequest):
         try:
             async for chunk in agent.run_stream(request.message, request.history):
                 yield f"data: {chunk}\n\n"
+                # 强制刷新缓冲区 — 用注释帧做心跳
+                yield ": heartbeat\n\n"
             yield "data: [DONE]\n\n"
         except Exception as e:
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
         finally:
             await agent.close()
 
-    return StreamingResponse(generate(), media_type="text/event-stream")
+    return StreamingResponse(generate(), media_type="text/event-stream", headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"})
 
 
 @router.get("/health")

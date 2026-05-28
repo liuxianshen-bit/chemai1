@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.models.database import (
     Student, Question, StudentAnswer, ExamRecord,
-    get_db, RecordType, Difficulty, AuditStatus, BarrierType
+    get_db, RecordType, Difficulty, AuditStatus, BarrierType, QuestionSource
 )
 
 router = APIRouter()
@@ -74,21 +74,167 @@ class PracticeAssignRequest(BaseModel):
     deadline: Optional[str] = None
 
 
+def _calculate_zpd_difficulty(student_id: str, db: Session) -> str:
+    """计算最近发展区难度
+    读取学生最近10次答题正确率:
+      < 40% → easy
+      40-70% → medium
+      > 70% → hard
+    """
+    recent_answers = db.query(StudentAnswer).filter(
+        StudentAnswer.student_id == student_id
+    ).order_by(StudentAnswer.answered_at.desc()).limit(30).all()
+
+    if not recent_answers:
+        return "medium"  # 默认
+
+    correct = sum(1 for a in recent_answers if a.is_correct)
+    rate = correct / len(recent_answers)
+    if rate < 0.4:
+        return "easy"
+    elif rate <= 0.7:
+        return "medium"
+    else:
+        return "hard"
+
+
+def _get_weak_kps(student_id: str, db: Session, top_n: int = 3) -> List[str]:
+    """从学生错题统计中提取薄弱知识点 TOP N"""
+    from collections import Counter
+    wrong_answers = db.query(StudentAnswer).filter(
+        StudentAnswer.student_id == student_id,
+        StudentAnswer.is_correct == False,
+    ).all()
+
+    kp_counter = Counter()
+    for ans in wrong_answers:
+        question = db.query(Question).filter(
+            Question.question_id == ans.question_id
+        ).first()
+        if question and question.knowledge_points:
+            for kp in question.knowledge_points:
+                kp_counter[kp] += 1
+
+    return [kp for kp, _ in kp_counter.most_common(top_n)]
+
+
+def _get_dominant_barrier(student_id: str, db: Session) -> str:
+    """获取学生主要障碍类型"""
+    student = db.query(Student).filter(Student.student_id == student_id).first()
+    if student and student.barrier_type and isinstance(student.barrier_type, dict):
+        bt = student.barrier_type
+        return max(bt, key=bt.get)
+    return "concept"
+
+
 @router.post("/assign")
 async def assign_practice(request: PracticeAssignRequest, db: Session = Depends(get_db)):
     """
     布置自适应练习
-    系统根据全班学生的障碍类型,分别推送差异化练习
+    为每个学生根据障碍类型 + 最近发展区 + 薄弱知识点 生成个性化练习
     """
-    # TODO: 为每个学生生成个性化练习(需要LLM集成)
-    # 目前仅创建练习记录
     practice_id = f"practice_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    students = db.query(Student).filter(Student.class_id == request.class_id).all()
+
+    if not students:
+        return {"success": False, "message": "班级无学生"}
+
+    from app.services.llm_service import llm_service
+
+    import traceback as _tb
+    assigned = []
+    for student in students[:5]:  # 限制批次，避免LLM过载
+        try:
+            barrier = _get_dominant_barrier(student.student_id, db)
+            zpd_diff = _calculate_zpd_difficulty(student.student_id, db)
+            weak_kps = _get_weak_kps(student.student_id, db)
+            kps = weak_kps if weak_kps else request.knowledge_points
+
+            if not kps:
+                continue
+
+            # 尝试从题库获取相似真题作为RAG上下文
+            rag_context = None
+            try:
+                from app.services.exam_bank import exam_bank_service
+                rag_context = exam_bank_service.find_similar_questions(
+                    knowledge_points=kps, difficulty=zpd_diff, limit=3
+                )
+                rag_context = [
+                    {"content": q.content, "answer": q.answer, "knowledge_points": q.knowledge_points}
+                    for q in rag_context
+                ]
+            except Exception:
+                pass
+
+            result = llm_service.generate_questions(
+                knowledge_points=kps,
+                difficulty=zpd_diff,
+                quantity=request.question_count,
+                question_types=["choice"],
+                rag_context=rag_context,
+            )
+
+            if result.get("success"):
+                content = result.get("content", "{}")
+                import re as _re, json as _json
+                _match = _re.search(r'\{[\s\S]*\}', content)
+                try:
+                    q_data = _json.loads(_match.group()) if _match else {}
+                    questions = q_data.get("questions", [])
+                except _json.JSONDecodeError:
+                    questions = []
+
+                if questions:
+                    exam_record = ExamRecord(
+                        record_id=f"{practice_id}_{student.student_id}",
+                        class_id=request.class_id,
+                        name=f"自适应练习-{student.name}",
+                        type=RecordType.PRACTICE,
+                        total_students=1,
+                        present_students=1,
+                        exam_date=datetime.utcnow(),
+                    )
+                    db.add(exam_record)
+
+                    for i, q in enumerate(questions):
+                        question = Question(
+                            question_id=f"q_{practice_id}_{student.student_id}_{i}",
+                            record_id=exam_record.record_id,
+                            content=q.get("content", ""),
+                            options=q.get("options"),
+                            answer=q.get("answer", ""),
+                            analysis=q.get("analysis", ""),
+                            knowledge_points=q.get("knowledge_points", kps),
+                            difficulty=Difficulty.MEDIUM,
+                            source=QuestionSource.AI_GENERATED,
+                            audit_status=AuditStatus.PASSED,
+                        )
+                        db.add(question)
+
+                    assigned.append({
+                        "student_id": student.student_id,
+                        "student_name": student.name,
+                        "zpd_difficulty": zpd_diff,
+                        "barrier": barrier,
+                        "weak_kps": weak_kps,
+                        "question_count": len(questions),
+                    })
+            else:
+                print(f"[Practice] LLM failed for {student.name}: {result.get('error','?')}")
+        except Exception as e:
+            print(f"[Practice] Error for {student.name}: {e}")
+            _tb.print_exc()
+
+    if assigned:
+        db.commit()
 
     return {
         "success": True,
         "practice_id": practice_id,
-        "assigned_count": 0,
-        "message": "练习布置功能需要LLM集成支持"
+        "assigned_count": len(assigned),
+        "assigned": assigned,
+        "message": f"已为 {len(assigned)} 名学生生成个性化练习",
     }
 
 
@@ -230,7 +376,6 @@ async def submit_practice(request: PracticeSubmitRequest, db: Session = Depends(
                 exam_record_id=request.practice_id,
                 student_answer=student_answer,
                 is_correct=is_correct,
-                barrier_type=None  # TODO: 根据答题情况判定障碍类型
             )
             db.add(answer_record)
 
@@ -240,6 +385,31 @@ async def submit_practice(request: PracticeSubmitRequest, db: Session = Depends(
             student.last_exercise_at = datetime.utcnow()
 
         db.commit()
+
+        # 异步更新 barrier_type（基于最近答题正确率）
+        try:
+            all_recent = db.query(StudentAnswer).filter(
+                StudentAnswer.student_id == request.student_id,
+            ).order_by(StudentAnswer.answered_at.desc()).limit(20).all()
+
+            correct = sum(1 for a in all_recent if a.is_correct)
+            total = len(all_recent)
+            if all_recent and total > 0:
+                rate = correct / total
+                if rate < 0.4:
+                    dominant = "concept"  # 正确率很低 → 概念障碍
+                elif rate < 0.7:
+                    dominant = "reading"
+                else:
+                    dominant = "expression"
+                student.barrier_type = {
+                    k: (0.7 if k == dominant else 0.15)
+                    for k in ("concept", "reading", "expression")
+                }
+                student.barrier_last_updated = datetime.utcnow()
+                db.commit()
+        except Exception:
+            pass  # barrier 更新非关键路径
 
         accuracy = correct_count / total_count if total_count > 0 else 0
 

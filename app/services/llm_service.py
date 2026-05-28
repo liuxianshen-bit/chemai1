@@ -1,706 +1,241 @@
 """
-通义千问(LLM)服务
-用于: AI出题/题目审核/障碍诊断/历年真题关联
+ChemAI LLM Service — MiMo-V2.5 (主力) / DashScope / DeepSeek
 """
-import os
-import json
-import base64
+import os, json, base64, time, threading, httpx
 from typing import List, Dict, Optional
 from app.core.config import settings
 
+_rate_lock = threading.Lock()
+_rate_window: Dict[str, list] = {}
+
+def _check_rate_limit(key: str, max_per_minute: int = 30) -> bool:
+    now = time.time()
+    with _rate_lock:
+        if key not in _rate_window: _rate_window[key] = []
+        _rate_window[key] = [t for t in _rate_window[key] if now - t < 60]
+        if len(_rate_window[key]) >= max_per_minute: return False
+        _rate_window[key].append(now)
+        return True
+
+cache: Dict[str, tuple] = {}
+_cache_lock = threading.Lock()
+
+def cache_get(key: str):
+    with _cache_lock:
+        e = cache.get(key)
+        if e and time.time() < e[1]: return e[0]
+        if e: del cache[key]
+    return None
+
+def cache_set(key: str, value, ttl: int = 300):
+    with _cache_lock: cache[key] = (value, time.time() + ttl)
+
 
 class LLMService:
-    """
-    LLM服务封装
-    支持: 通义千问 / ChatGLM(备选)
-
-    使用方式:
-    1. 通义千问: 设置 DASHSCOPE_API_KEY 环境变量
-    2. ChatGLM: 设置 CHATGLM_API_URL 环境变量
-    """
+    MIMO_URL = "https://api.xiaomimimo.com/v1/chat/completions"
+    MIMO_MODEL = "mimo-v2.5"
+    DASHSCOPE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
+    DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
+    ZHIPU_VISION_URL = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
 
     def __init__(self):
+        self.mimo_key = settings.XIAOMI_API_KEY or os.getenv("XIAOMI_API_KEY", "")
         self.dashscope_key = settings.DASHSCOPE_API_KEY or os.getenv("DASHSCOPE_API_KEY", "")
+        self.deepseek_key = getattr(settings, "DEEPSEEK_API_KEY", "") or os.getenv("DEEPSEEK_API_KEY", "")
         self.model = settings.LLM_MODEL
-        self.enabled = bool(self.dashscope_key)
+        self.enabled = bool(self.mimo_key or self.dashscope_key or self.deepseek_key)
 
-    def generate_text(
-        self,
-        prompt: str,
-        system_prompt: Optional[str] = None,
-        temperature: float = 0.7,
-        max_tokens: int = 2000
-    ) -> Dict:
-        """
-        通用文本生成 (使用curl调用DashScope API)
-        """
-        if not self.enabled:
-            return self._mock_generate(prompt)
+    def _call_llm_api(self, url: str, key: str, payload: dict, timeout: float = 30.0) -> Dict:
+        h = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+        with httpx.Client(timeout=timeout) as c:
+            r = c.post(url, headers=h, json=payload)
+        if r.status_code == 200:
+            d = r.json()
+            if d.get("error"): return {"success": False, "error": str(d["error"])}
+            choices = d.get("choices", [{}])
+            content = choices[0].get("message", {}).get("content", "") if choices else ""
+            return {"success": True, "content": content, "usage": d.get("usage", {}), "request_id": d.get("id", "")}
+        return {"success": False, "error": f"HTTP {r.status_code}: {r.text[:200]}"}
 
-        try:
-            import subprocess
-            import shlex
+    def _call_with_retry(self, url: str, key: str, payload: dict, timeout: float = 30.0, max_retries: int = 3) -> Dict:
+        last = None
+        for i in range(max_retries):
+            try:
+                r = self._call_llm_api(url, key, payload, timeout)
+                if r.get("success"): return r
+                last = r.get("error", "unknown")
+            except httpx.TimeoutException: last = f"timeout ({timeout}s)"
+            except Exception as e: last = str(e)
+            if i < max_retries - 1: time.sleep(2 ** i)
+        return {"success": False, "error": last or "retries exhausted"}
 
-            messages = []
-            if system_prompt:
-                messages.append({"role": "system", "content": system_prompt})
-            messages.append({"role": "user", "content": prompt})
+    def generate_text(self, prompt: str, system_prompt: Optional[str] = None, temperature: float = 0.7, max_tokens: int = 2000, provider: str = "auto", enable_search: bool = False) -> Dict:
+        if not self.enabled: return self._mock_generate(prompt)
+        if not _check_rate_limit("llm", settings.LLM_RATE_LIMIT_PER_MINUTE):
+            return {"success": False, "error": "请求过于频繁，请稍后再试"}
 
-            # DashScope API 调用 - 使用 compatible-mode 端点
-            api_url = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
-            payload = {
-                "model": self.model,
-                "messages": messages,
-                "temperature": temperature,
-                "max_tokens": max_tokens
-            }
+        messages = []
+        if system_prompt: messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
 
-            # 使用curl调用API (-k 禁用SSL验证)
-            cmd = [
-                "curl", "-s", "-k", "-X", "POST", api_url,
-                "-H", f"Authorization: Bearer {self.dashscope_key}",
-                "-H", "Content-Type: application/json",
-                "-d", json.dumps(payload)
+        # Provider priority
+        if provider == "auto":
+            order = [
+                ("mimo", self.mimo_key, self.MIMO_URL, self.MIMO_MODEL),
+                ("dashscope", self.dashscope_key, self.DASHSCOPE_URL, self.model),
+                ("deepseek", self.deepseek_key, self.DEEPSEEK_URL, "deepseek-chat"),
             ]
+        elif provider == "mimo" and self.mimo_key:
+            order = [("mimo", self.mimo_key, self.MIMO_URL, self.MIMO_MODEL)]
+        elif provider == "dashscope" and self.dashscope_key:
+            order = [("dashscope", self.dashscope_key, self.DASHSCOPE_URL, self.model)]
+        elif provider == "deepseek" and self.deepseek_key:
+            order = [("deepseek", self.deepseek_key, self.DEEPSEEK_URL, "deepseek-chat")]
+        else:
+            return {"success": False, "error": f"no available provider: {provider}"}
 
-            result = subprocess.run(cmd, capture_output=True, timeout=60)
-            response_text = result.stdout.decode('utf-8', errors='ignore') if result.stdout else ""
+        last = None
+        for name, key, url, model in order:
+            if not key: continue
+            p = {"model": model, "messages": messages, "temperature": temperature, "max_tokens": max_tokens}
+            # MiMo web search
+            if name == "mimo" and enable_search:
+                p["enable_search"] = True
+            r = self._call_with_retry(url, key, p, timeout=30.0)
+            r["provider"] = name
+            if r.get("success"): return r
+            last = r.get("error", "unknown")
+        return {"success": False, "error": last or "all providers failed"}
 
-            if result.returncode == 0:
-                response_data = json.loads(response_text)
-                # 解析 chat/completions 响应格式
-                choices = response_data.get("choices", [{}])
-                content = choices[0].get("message", {}).get("content", "") if choices else ""
-                return {
-                    "success": True,
-                    "content": content,
-                    "usage": response_data.get("usage", {}),
-                    "request_id": response_data.get("id", "")
-                }
-            else:
-                return {
-                    "success": False,
-                    "error": result.stderr or "curl failed",
-                    "code": result.returncode
-                }
-        except Exception as e:
-            return {
-                "success": False,
-                "error": str(e)
-            }
+    def search_web(self, query: str, max_tokens: int = 500) -> Dict:
+        """MiMo 联网搜索 — 适用于需要实时信息的查询"""
+        return self.generate_text(query, temperature=0.3, max_tokens=max_tokens, provider="mimo", enable_search=True)
 
     def _mock_generate(self, prompt: str) -> Dict:
-        """模拟生成（无API Key时使用）"""
-        return {
-            "success": True,
-            "content": "[MOCK] 这是模拟的LLM响应。配置 DASHSCOPE_API_KEY 后将返回真实内容。",
-            "usage": {"input_tokens": len(prompt), "output_tokens": 50},
-            "request_id": "mock_request_id"
+        return {"success": True, "content": "[MOCK] configure XIAOMI_API_KEY / DASHSCOPE_API_KEY / DEEPSEEK_API_KEY to enable.", "usage": {"input_tokens": len(prompt), "output_tokens": 50}, "request_id": "mock"}
+
+    # ═══════════════════════════════════════════════════
+    # AI Generate Questions
+    # ═══════════════════════════════════════════════════
+
+    def generate_questions(self, knowledge_points: List[str], difficulty: str, quantity: int = 10, question_types: List[str] = None, rag_context: List[Dict] = None) -> Dict:
+        type_map = {'choice': '选择题', 'fill': '填空题', 'calc': '计算题', 'experiment': '实验题', 'inference': '推断题'}
+        type_names = [type_map.get(t, t) for t in (question_types or ['choice'])]
+        type_desc = '、'.join(type_names)
+        active_types = question_types or ['choice']
+
+        type_specs = {
+            'choice': {'rules': '4个选项(A/B/C/D)，标注正确选项。设置1-2个陷阱选项。', 'example': '{"content":"下列关于盐类水解的说法正确的是（ ）","type":"choice","options":["A...","B...","C...","D..."],"answer":"A","knowledge_points":["盐类水解"],"difficulty":"medium"}'},
+            'fill': {'rules': '题目用___标记填空。答案只填空缺内容。每道题可有1-3个空。不要设选项。', 'example': '{"content":"实验室制氧气的方程式为___，MnO2是___。","type":"fill","answer":"2KClO3=2KCl+3O2(MnO2催化); 催化剂","knowledge_points":["氧气制备"],"difficulty":"medium"}'},
+            'calc': {'rules': '具体数值条件。答案含分步计算: 公式→数据→结果→结论。不要设选项。', 'example': '{"content":"5.85g NaCl溶于水配成500mL溶液。求:(1)物质的量(2)浓度。M(NaCl)=58.5g/mol","type":"calc","answer":"(1)n=5.85/58.5=0.10mol (2)c=0.10/0.5=0.20mol/L","knowledge_points":["物质的量浓度"],"difficulty":"medium"}'},
+            'experiment': {'rules': '描述化学实验情境(仪器/试剂/操作)。2-3个子问题。不要设选项。', 'example': '{"content":"用右图装置进行铜与浓硫酸反应实验。(1)写方程式(2)品红褪色说明什么(3)棉花蘸NaOH的作用","type":"experiment","answer":"(1)Cu+2H2SO4(浓)=CuSO4+SO2+2H2O (2)SO2 (3)吸收SO2防污染","knowledge_points":["浓硫酸","SO2"],"difficulty":"medium"}'},
+            'inference': {'rules': '给出物质转化线索或实验现象，推断未知物质并写方程式。答案含推断过程。不要设选项。', 'example': '{"content":"A、B、C三种常见物质。A黑色粉末与稀硫酸生成蓝色溶液B。B与铁反应析出红色固体C。推断A、B、C并写方程式。","type":"inference","answer":"A:CuO B:CuSO4 C:Cu。CuO+H2SO4=CuSO4+H2O。Fe+CuSO4=FeSO4+Cu","knowledge_points":["金属活动性","置换反应"],"difficulty":"hard"}'},
         }
 
-    def generate_questions(
-        self,
-        knowledge_points: List[str],
-        difficulty: str,
-        quantity: int = 10,
-        rag_context: List[Dict] = None
-    ) -> Dict:
-        """
-        AI生成化学题目
-        基于知识点/难度/数量生成练习题
-        如果提供了RAG上下文（相似真题），则基于这些真题生成变种题
-        """
-        system_prompt = """你是一位资深高中化学教师,擅长根据知识点生成高质量的化学练习题。
+        type_sections = []
+        for qt in active_types:
+            if qt in type_specs:
+                s = type_specs[qt]
+                type_sections.append(f"【{type_map[qt]}】{s['rules']}\nJSON示例: {s['example']}")
 
-要求:
-1. 题目科学性100%正确,化学方程式必须配平
-2. 题目语言清晰,无歧义
-3. 选项设置要有区分度
-4. 注明题目考查的知识点
-5. 适当设置陷阱选项考察学生易错点
+        system_prompt = f"""你是资深高中化学教师。
 
-返回格式（JSON）:
-{
-    "questions": [
-        {
-            "content": "题目正文",
-            "options": ["A. 选项", "B. 选项", "C. 选项", "D. 选项"],
-            "answer": "正确答案字母",
-            "knowledge_points": ["知识点1", "知识点2"],
-            "difficulty": "easy/medium/hard",
-            "trap_hints": ["陷阱提示"]
-        }
-    ]
-}"""
+生成: {type_desc}
 
-        # 构建prompt：如果有RAG上下文（相似真题），基于这些真题生成变种题
+格式规范（严格遵循）:
+{chr(10).join(type_sections)}
+
+核心原则:
+1. 科学性100%正确，方程式配平
+2. 选择题带options，非选择题不带options
+3. 非选择题content必须是该题型的真实内容（不能是选择题去掉选项）
+4. 填空题必含___标记。计算题必含分步计算。实验题必含2-3个子问题。
+
+返回纯JSON（无markdown代码块）:
+{{"questions":[{{"content":"...","type":"choice","options":["A...","B..."],"answer":"...","knowledge_points":["..."],"difficulty":"medium"}}]}}"""
+
         if rag_context and len(rag_context) >= 3:
-            # 有足够的相似真题，使用RAG模式
-            context_str = "\n\n".join([
-                f"【真题{i+1}】{q.get('content', q.get('question', ''))} "
-                f"答案: {q.get('answer', '')} "
-                f"知识点: {', '.join(q.get('knowledge_points', []))}"
-                for i, q in enumerate(rag_context[:5])
-            ])
-            prompt = f"""基于以下历年真题生成变种题，保持相同的知识点和难度风格，但题目内容要有变化:
-
-【参考真题】
-{context_str}
-
-请生成{quantity}道{difficulty}难度的化学变种题，直接返回JSON:
-"""
+            ctx = "\n\n".join([f"真题{i+1}: {q.get('content','')} 答案:{q.get('answer','')}" for i, q in enumerate(rag_context[:5])])
+            prompt = f"基于以下真题生成变种题:\n{ctx}\n生成{quantity}道{difficulty}难度的{type_desc}，直接返回JSON:"
         else:
-            # 没有RAG上下文，纯LLM生成
-            prompt = f"""请为以下知识点生成{quantity}道{difficulty}难度的化学练习题:
-
-知识点: {', '.join(knowledge_points)}
-
-请直接返回JSON,不要有其他文字:"""
+            prompt = f"为以下知识点生成{quantity}道{difficulty}难度的{type_desc}:\n知识点: {', '.join(knowledge_points)}\n类型从 [{', '.join(active_types)}] 中选择。直接返回JSON:"
 
         return self.generate_text(prompt, system_prompt, temperature=0.7)
-
-    def generate_variant_questions(
-        self,
-        original_content: str,
-        original_answer: str,
-        knowledge_points: List[str],
-        difficulty: str = "medium",
-        quantity: int = 3
-    ) -> Dict:
-        """
-        生成变式练习题
-        基于原题生成同知识点但不同表述的题目
-        """
-        system_prompt = """你是一位资深高中化学教师,擅长生成变式练习题。
-
-要求:
-1. 保持相同的知识点和难度
-2. 题目内容要有变化（换数据、换问法、换情境）
-3. 选项要重新设计，避免与原题相同
-4. 保持陷阱设置的风格
-5. 化学方程式必须配平正确
-
-返回格式（JSON）:
-{
-    "questions": [
-        {
-            "content": "变式题正文",
-            "options": ["A. 选项", "B. 选项", "C. 选项", "D. 选项"],
-            "answer": "正确答案字母",
-            "knowledge_points": ["知识点1", "知识点2"],
-            "difficulty": "easy/medium/hard"
-        }
-    ]
-}"""
-
-        prompt = f"""请为以下原题生成{quantity}道变式练习题:
-
-【原题】
-{original_content}
-答案: {original_answer}
-知识点: {', '.join(knowledge_points)}
-难度: {difficulty}
-
-请生成内容不同但考查相同知识点的变式题，直接返回JSON:"""
-
-        return self.generate_text(prompt, system_prompt, temperature=0.8)
 
     def audit_question_with_llm(self, question_content: str) -> Dict:
-        """
-        使用LLM进行题目安全审核
-        作为规则引擎的二次校验
-        """
-        system_prompt = """你是一位高中化学教研专家,负责审核AI生成的化学题目是否合格。
+        return self.generate_text(f"审核以下高中化学题目:\n{question_content}\n返回JSON: {{'is_qualified':bool,'issues':['...']}}",
+            "你是高中化学教研专家，审核题目的科学性/准确性/适当性。严格审核，发现任何科学性错误必须指出。", temperature=0.3)
 
-审核维度:
-1. 科学性: 题目内容/化学方程式/概念是否正确
-2. 准确性: 知识点对应是否准确
-3. 适当性: 难度是否适中,是否符合高中生水平
-4. 陷阱设置: 陷阱选项是否合理
+    def diagnose_barrier_type(self, student_error_history: List[Dict], question_content: str, student_answer: str, correct_answer: str) -> Dict:
+        return self.generate_text(
+            f"学生答题情况:\n题目: {question_content}\n学生答案: {student_answer}\n正确答案: {correct_answer}\n历史错误: {json.dumps(student_error_history, ensure_ascii=False)}\n返回JSON: {{'barrier_type':'concept/reading/expression','confidence':0.8,'reasoning':'...','suggestion':'...'}}",
+            "你是教育心理学专家。分析学生障碍类型: concept(概念理解偏差)/reading(审题信息不全)/expression(无法规范表述)。", temperature=0.3)
 
-请严格审核,发现任何科学性错误必须指出。"""
+    def generate_learning_plan(self, student_name: str, barrier_type: str, weak_knowledge_points: List[str], recent_performance: Optional[Dict] = None) -> Dict:
+        bd = {"concept": "概念理解型-概念理解偏差", "reading": "审题障碍型-读取信息不全", "expression": "表述障碍型-无法规范表述"}.get(barrier_type, barrier_type)
+        return self.generate_text(f"为学生{student_name}生成学习计划:\n障碍类型: {bd}\n薄弱知识点: {', '.join(weak_knowledge_points) if weak_knowledge_points else '暂无'}\n返回JSON: {{'plan_title':'标题','plan_period':'2周','daily_tasks':[...],'weekly_goals':[...],'barrier_interventions':[...],'motivation_tips':[...]}}",
+            "你是资深高中化学教师，根据学生障碍和薄弱点制定个性化学习计划。计划需具体可执行。", temperature=0.7)
 
-        prompt = f"""请审核以下高中化学题目:
+    def analyze_paper_with_vision(self, image_data: str, paper_type: str = "mixed") -> Dict:
+        prompt = self._get_vision_prompt(paper_type)
+        mime = self._detect_image_mime(image_data)
+        messages = [{"role": "user", "content": [{"type": "image_url", "image_url": {"url": f"data:{mime};base64,{image_data}"}}, {"type": "text", "text": prompt}]}]
 
-{question_content}
+        # MiMo first (native vision)
+        if self.mimo_key:
+            try:
+                r = self._call_with_retry(self.MIMO_URL, self.mimo_key, {"model": self.MIMO_MODEL, "messages": messages, "temperature": 0.1, "max_tokens": 2000}, timeout=120.0, max_retries=2)
+                if r.get("success"): return self._parse_vision_response(r.get("content", ""))
+            except Exception: pass
 
-请返回JSON:
-{{
-  "is_qualified": true/false,
-  "issues": ["问题1", "问题2"],
-  "suggestions": ["修改建议1", ...]
-}}"""
+        # ZhiPu fallback
+        zk = os.getenv("ZHIPU_API_KEY", "") or settings.ZHIPU_API_KEY
+        if zk:
+            try:
+                r = self._call_with_retry(self.ZHIPU_VISION_URL, zk, {"model": "glm-4v", "messages": messages, "temperature": 0.1, "max_tokens": 2000}, timeout=120.0, max_retries=2)
+                if r.get("success"): return self._parse_vision_response(r.get("content", ""))
+                return {"success": False, "error": r.get("error", "Vision API failed"), "message": "多模态分析失败"}
+            except Exception as e: return {"success": False, "error": str(e), "message": "多模态分析异常"}
 
-        return self.generate_text(prompt, system_prompt, temperature=0.3)
+        return {"success": False, "error": "无可用视觉模型", "message": "请配置 MiMo 或 智谱 API Key"}
 
-    def diagnose_barrier_type(
-        self,
-        student_error_history: List[Dict],
-        question_content: str,
-        student_answer: str,
-        correct_answer: str
-    ) -> Dict:
-        """
-        诊断学生障碍类型
-        - 概念理解型(concept): 学生对化学概念的理解存在偏差
-        - 审题障碍型(reading): 学生读取题目信息不全/审题错误
-        - 表述障碍型(expression): 学生理解正确答案但无法规范表述
-        """
-        system_prompt = """你是一位教育心理学专家,擅长分析学生的学习障碍类型。
+    def _get_vision_prompt(self, pt: str) -> str:
+        return {"answer_sheet": "分析答题卡图片，识别学号、姓名、每题答案(A/B/C/D)。返回JSON: {\"student_id\":\"\",\"student_name\":\"\",\"questions\":[{\"number\":\"1\",\"student_answer\":\"A\"}],\"message\":\"\"}",
+                "printed": "分析印刷试卷图片，识别标题、所有题目内容和选项、标准答案。返回JSON: {\"title\":\"\",\"questions\":[{\"number\":\"1\",\"content\":\"\",\"options\":[\"A\",\"B\"],\"correct_answer\":\"A\"}]}",
+                "handwritten": "分析手写试卷图片，识别姓名、手写题目内容、作答内容。返回JSON: {\"student_name\":\"\",\"questions\":[{\"number\":\"1\",\"content\":\"\",\"student_answer\":\"\"}]}",
+                "mixed": "分析混合试卷图片(印刷题目+手写作答)，识别学号、姓名、印刷题目、手写作答。返回JSON: {\"student_id\":\"\",\"student_name\":\"\",\"questions\":[{\"number\":\"1\",\"content\":\"\",\"options\":[],\"student_answer\":\"\"}]}"}.get(pt, "分析试卷图片，提取所有题目信息和作答内容。")
 
-障碍类型定义:
-1. 概念理解型(concept): 学生对化学概念的理解存在偏差,导致解题错误
-2. 审题障碍型(reading): 学生读取题目信息不全,或对题目条件的理解有误
-3. 表述障碍型(expression): 学生理解正确答案,但无法规范表述
-
-请根据学生的答题情况判断其障碍类型。"""
-
-        prompt = f"""学生答题情况分析:
-
-题目: {question_content}
-学生答案: {student_answer}
-正确答案: {correct_answer}
-
-学生历史错误(供参考): {json.dumps(student_error_history, ensure_ascii=False)}
-
-请返回JSON:
-{{
-  "barrier_type": "concept/reading/expression",
-  "confidence": 0.0-1.0,
-  "reasoning": "判断理由",
-  "suggestion": "教学干预建议"
-}}"""
-
-        return self.generate_text(prompt, system_prompt, temperature=0.3)
-
-    def check_answer_consistency(
-        self,
-        question_content: str,
-        correct_answer: str,
-        ocr_answer: str
-    ) -> Dict:
-        """
-        检查OCR识别答案与标准答案的一致性
-        用于OCR预览阶段的LLM辅助分析
-
-        返回:
-        {
-            "is_consistent": bool,  # OCR答案与标准答案是否一致
-            "llm_answer": str,  # LLM认为的答案
-            "confidence": float,  # LLM判断置信度
-            "suggestion": str  # 建议
-        }
-        """
-        system_prompt = """你是一位高中化学老师,擅长从学生答案中判断其答题情况。
-
-请仔细分析以下信息，判断OCR识别的学生答案是否正确。
-
-注意:
-- OCR可能存在识别误差，特别是手写字体
-- 如果学生答案与标准答案不一致，需要判断是学生真的答错了，还是OCR识别错误
-- 考虑化学选择题的常见干扰项设置"""
-
-        prompt = f"""题目内容: {question_content}
-标准答案: {correct_answer}
-OCR识别的学生答案: {ocr_answer}
-
-请仔细分析:
-1. OCR识别的答案格式是否清晰可辨
-2. 学生实际想表达的是否是正确答案
-3. 如果是化学方程式或复杂表达式，OCR识别是否可能有误差
-
-返回JSON:
-{{
-  "is_consistent": true/false,  // OCR答案是否与标准答案一致
-  "llm_answer": "LLM认为学生实际想要的答案",  // 可能是识别错误
-  "confidence": 0.0-1.0,  // 判断置信度
-  "suggestion": "如果不一致，说明原因和修改建议"
-}}"""
-
-        return self.generate_text(prompt, system_prompt, temperature=0.3)
-
-    def find_similar_historical_questions(
-        self,
-        question_content: str,
-        knowledge_point: str,
-        limit: int = 5
-    ) -> Dict:
-        """
-        查找历年同类真题
-        用于F6历年真题关联
-        """
-        system_prompt = """你是一位高考化学命题专家,负责分析题目的相似性和命题风格。
-
-请分析给定题目与历年高考题的相似度,帮助判断AI出题与真实考试的贴近程度。"""
-
-        prompt = f"""分析以下题目的特征,并与历年高考化学题进行关联:
-
-目标题目: {question_content}
-知识点: {knowledge_point}
-
-请返回JSON:
-{{
-  "question_features": ["特征1", "特征2"],
-  "similar_questions": [
-    {{
-      "source": "2024年全国卷T15",
-      "year": 2024,
-      "region": "全国卷",
-      "similarity": 0.85,
-      "common_features": ["都考查了...", "都设置了..."]
-    }}
-  ]
-}}"""
-
-        return self.generate_text(prompt, system_prompt, temperature=0.5)
-
-    def generate_learning_plan(
-        self,
-        student_name: str,
-        barrier_type: str,
-        weak_knowledge_points: List[str],
-        recent_performance: Optional[Dict] = None
-    ) -> Dict:
-        """
-        生成个性化学习计划
-        基于学生障碍类型和薄弱知识点生成定制化学习路径
-        """
-        system_prompt = """你是一位资深高中化学教师,擅长根据学生的学习情况制定个性化学习计划。
-
-学习计划要求:
-1. 针对学生的具体障碍类型制定干预策略
-2. 结合薄弱知识点安排循序渐进的学习内容
-3. 计划要具体可执行,包括每日/每周任务
-4. 包含激励性话语,增强学生学习信心
-5. 计划周期建议2-4周
-
-返回格式（JSON）:
-{
-    "plan_title": "学生学习计划标题",
-    "plan_period": "2周/4周",
-    "daily_tasks": [
-        {
-            "day": "第1-3天",
-            "content": "具体学习任务",
-            "duration": "约30分钟",
-            "resource_type": "视频/练习/复习"
-        }
-    ],
-    "weekly_goals": [
-        {
-            "week": "第一周",
-            "goals": ["掌握xx知识点", "完成xx练习"],
-            "milestone": "达成后可进入下一阶段"
-        }
-    ],
-    "barrier针对性的干预": [
-        {
-            "barrier": "概念理解型",
-            "strategy": "使用思维导图理解概念内涵",
-            "practise_tips": "通过对比练习区分易混淆概念"
-        }
-    ],
-    "motivation_tips": ["鼓励话语1", "鼓励话语2"],
-    "parent_communication_suggestion": "给家长的建议"
-}"""
-
-        barrier_desc = {
-            "concept": "概念理解型 - 学生对化学概念的理解存在偏差",
-            "reading": "审题障碍型 - 学生读取题目信息不全/审题错误",
-            "expression": "表述障碍型 - 学生理解正确答案但无法规范表述"
-        }.get(barrier_type, barrier_type)
-
-        performance_str = ""
-        if recent_performance:
-            performance_str = f"""
-学生近期表现:
-- 最近正确率: {recent_performance.get('recent_accuracy', '暂无数据')}%
-- 最近练习日期: {recent_performance.get('recent_practice_date', '暂无数据')}
-- 进步情况: {recent_performance.get('improvement', '暂无数据')}"""
-
-        prompt = f"""请为学生 {student_name} 生成个性化学习计划:
-
-学生障碍类型: {barrier_desc}
-薄弱知识点: {', '.join(weak_knowledge_points) if weak_knowledge_points else '暂无记录'}
-{performance_str}
-
-请直接返回JSON,不要有其他文字:"""
-
-        return self.generate_text(prompt, system_prompt, temperature=0.7)
-
-    def analyze_paper_with_vision(
-        self,
-        image_data: str,  # base64编码的图片
-        paper_type: str = "mixed"  # answer_sheet/printed/handwritten/mixed
-    ) -> Dict:
-        """
-        使用智谱多模态大模型(GLM-4.6V)分析试卷图片
-        当OCR识别结果被老师否定后调用此方法
-
-        参数:
-            image_data: base64编码的试卷图片
-            paper_type: 试卷类型
-                - answer_sheet: 答题卡
-                - printed: 印刷试卷
-                - handwritten: 手写试卷
-                - mixed: 混合（印刷题目+手写作答）
-
-        返回:
-            {
-                "success": bool,
-                "student_id": str,
-                "student_name": str,
-                "questions": [{number, content, options, student_answer, correct_answer}],
-                "raw_text": str,  # 原始识别文本
-                "message": str
-            }
-        """
-        # 检查是否有智谱API Key
-        zhipu_key = os.getenv("ZHIPU_API_KEY", "") or settings.ZHIPU_API_KEY
-        if not zhipu_key:
-            return {
-                "success": False,
-                "error": "未配置智谱API Key",
-                "message": "请配置 ZHIPU_API_KEY 环境变量"
-            }
-
+    def _detect_image_mime(self, data: str) -> str:
         try:
-            import subprocess
+            raw = base64.b64decode(data[:24])
+            if raw[:4] == b'\x89PNG': return "image/png"
+            if raw[:3] == b'\xff\xd8\xff': return "image/jpeg"
+        except: pass
+        return "image/png"
 
-            # 智谱GLM-4V多模态API端点
-            api_url = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
-
-            # 根据试卷类型构建分析prompt
-            prompts = {
-                "answer_sheet": """请分析这张答题卡图片，识别出：
-1. 学生学号和姓名（如果可见）
-2. 每道题的作答答案（A/B/C/D）
-3. 返回JSON格式结果
-
-返回格式：
-{
-  "student_id": "学号",
-  "student_name": "姓名",
-  "questions": [
-    {"number": "1", "student_answer": "A"},
-    {"number": "2", "student_answer": "B"}
-  ],
-  "message": "识别说明"
-}""",
-
-                "printed": """请分析这张印刷试卷图片，识别出：
-1. 试卷标题
-2. 所有题目内容和选项
-3. 标准答案（如果可见）
-4. 返回JSON格式结果
-
-返回格式：
-{
-  "title": "试卷标题",
-  "questions": [
-    {"number": "1", "content": "题目内容", "options": ["A. 选项", "B. 选项"], "correct_answer": "A"},
-    {"number": "2", "content": "题目内容", "options": ["A. 选项", "B. 选项"], "correct_answer": "B"}
-  ],
-  "message": "识别说明"
-}""",
-
-                "handwritten": """请分析这张手写试卷图片，识别出：
-1. 学生姓名（如果可见）
-2. 所有手写题目内容
-3. 手写作答内容
-4. 返回JSON格式结果
-
-返回格式：
-{
-  "student_name": "姓名",
-  "questions": [
-    {"number": "1", "content": "手写题目内容", "student_answer": "手写作答"},
-    {"number": "2", "content": "手写题目内容", "student_answer": "手写作答"}
-  ],
-  "message": "识别说明"
-}""",
-
-                "mixed": """请分析这张混合试卷图片（印刷题目+手写作答），识别出：
-1. 学生学号和姓名（如果可见）
-2. 所有印刷题目内容和选项
-3. 学生的手写作答内容
-4. 返回JSON格式结果
-
-返回格式：
-{
-  "student_id": "学号",
-  "student_name": "姓名",
-  "questions": [
-    {"number": "1", "content": "印刷题目内容", "options": ["A. 选项", "B. 选项"], "student_answer": "A"},
-    {"number": "2", "content": "印刷题目内容", "options": ["A. 选项", "B. 选项"], "student_answer": "手写内容"}
-  ],
-  "message": "识别说明"
-}"""
-            }
-
-            prompt = prompts.get(paper_type, prompts["mixed"])
-
-            # 根据图片数据自动判断MIME类型
-            # PNG: 89 50 4E 47 ... (base64: iVBORw0K)
-            # JPEG: FF D8 FF ... (base64: /9j/4)
-            mime_type = "image/png"
-            if image_data.startswith('/9j/') or image_data.startswith('iVBOR'):
-                # 检查原始字节来判断
-                try:
-                    raw_bytes = base64.b64decode(image_data[:24] if len(image_data) >= 24 else image_data)
-                    if raw_bytes[:4] == b'\x89PNG':
-                        mime_type = "image/png"
-                    elif raw_bytes[:3] == b'\xff\xd8\xff':
-                        mime_type = "image/jpeg"
-                except:
-                    pass
-
-            # 构建messages - 使用智谱GLM-4V格式
-            messages = [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "image_url",
-                            "image_url": {"url": f"data:{mime_type};base64,{image_data}"}
-                        },
-                        {
-                            "type": "text",
-                            "text": prompt
-                        }
-                    ]
-                }
-            ]
-
-            # 智谱GLM-4V API payload
-            payload = {
-                "model": "glm-4v",
-                "messages": messages,
-                "temperature": 0.1,
-                "max_tokens": 2000
-            }
-
-            # 使用curl调用智谱API
-            cmd = [
-                "curl", "-s", "-k", "-X", "POST", api_url,
-                "-H", f"Authorization: Bearer {zhipu_key}",
-                "-H", "Content-Type: application/json",
-                "-d", json.dumps(payload)
-            ]
-
-            result = subprocess.run(cmd, capture_output=True, timeout=120)
-            response_text = result.stdout.decode('utf-8', errors='ignore') if result.stdout else ""
-
-            if result.returncode == 0 and response_text:
-                response_data = json.loads(response_text)
-
-                # 检查是否有错误
-                if response_data.get("error"):
-                    error_info = response_data.get("error", {})
-                    error_code = error_info.get("code", "unknown")
-                    error_msg = error_info.get("message", "API错误")
-                    return {
-                        "success": False,
-                        "error": f"{error_code}: {error_msg}",
-                        "message": "多模态分析失败，请检查API配置"
-                    }
-
-                # 智谱返回格式: choices[0].message.content
-                choices = response_data.get("choices", [])
-                if choices:
-                    content = choices[0].get("message", {}).get("content", "")
-                else:
-                    content = ""
-
-                # 尝试解析返回的JSON
-                try:
-                    # 提取JSON（可能在markdown代码块中）
-                    if "```json" in content:
-                        content = content.split("```json")[1].split("```")[0]
-                    elif "```" in content:
-                        content = content.split("```")[1].split("```")[0]
-
-                    result_data = json.loads(content.strip())
-
-                    return {
-                        "success": True,
-                        "student_id": result_data.get("student_id", ""),
-                        "student_name": result_data.get("student_name", ""),
-                        "questions": result_data.get("questions", []),
-                        "raw_text": content,
-                        "message": result_data.get("message", "识别完成")
-                    }
-                except json.JSONDecodeError:
-                    # JSON解析失败，返回原始文本
-                    return {
-                        "success": True,
-                        "student_id": "",
-                        "student_name": "",
-                        "questions": [],
-                        "raw_text": content,
-                        "message": "识别完成，请查看原始文本"
-                    }
-            else:
-                return {
-                    "success": False,
-                    "error": response_text or "Vision API调用失败",
-                    "message": "多模态分析失败，请检查API配置"
-                }
-
-        except Exception as e:
-            return {
-                "success": False,
-                "error": str(e),
-                "message": "多模态分析异常"
-            }
-
-    def _mock_vision_result(self) -> Dict:
-        """模拟多模态分析结果（无API Key时使用）"""
-        return {
-            "success": True,
-            "student_id": "202401001",
-            "student_name": "张三",
-            "questions": [
-                {"number": "1", "content": "题目1", "options": ["A", "B", "C", "D"], "student_answer": "A"},
-                {"number": "2", "content": "题目2", "options": ["A", "B", "C", "D"], "student_answer": "B"},
-                {"number": "3", "content": "题目3", "options": ["A", "B", "C", "D"], "student_answer": "C"},
-            ],
-            "raw_text": "[MOCK] 这是模拟的多模态分析结果。配置 DASHSCOPE_API_KEY 后将返回真实内容。",
-            "message": "Mock模式：模拟识别完成"
-        }
+    def _parse_vision_response(self, content: str) -> Dict:
+        try:
+            for d in ("```json", "```"):
+                if d in content:
+                    parts = content.split(d)
+                    content = parts[1].split("```")[0] if len(parts) > 1 else content
+                    break
+            data = json.loads(content.strip())
+            return {"success": True, "student_id": data.get("student_id", ""), "student_name": data.get("student_name", ""), "questions": data.get("questions", []), "raw_text": content, "message": data.get("message", "识别完成")}
+        except json.JSONDecodeError:
+            return {"success": True, "student_id": "", "student_name": "", "questions": [], "raw_text": content, "message": "识别完成，请查看原始文本"}
 
 
 class ChatGLMService:
-    """
-    智谱ChatGLM服务（备选）
-    用于对数据隐私要求极高的场景
-    支持本地部署
-    """
-
-    def __init__(self):
-        self.api_url = os.getenv("CHATGLM_API_URL", "http://localhost:8001")
-        self.enabled = False
-
-    def generate_text(self, prompt: str, **kwargs) -> Dict:
-        """调用ChatGLM API"""
-        if not self.enabled:
-            return {"success": False, "error": "ChatGLM not enabled"}
-
+    def __init__(self): self.api_url = os.getenv("CHATGLM_API_URL", "http://localhost:8001"); self.enabled = False
+    def generate_text(self, prompt: str, **kw) -> Dict:
+        if not self.enabled: return {"success": False, "error": "ChatGLM not enabled"}
         try:
-            import httpx
-            response = httpx.post(
-                self.api_url,
-                json={"prompt": prompt, **kwargs},
-                timeout=30.0
-            )
-            if response.status_code == 200:
-                return {"success": True, "content": response.json().get("response", "")}
-            else:
-                return {"success": False, "error": f"HTTP {response.status_code}"}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
+            import httpx as hx
+            r = hx.post(self.api_url, json={"prompt": prompt, **kw}, timeout=30.0)
+            return {"success": True, "content": r.json().get("response", "")} if r.status_code == 200 else {"success": False, "error": f"HTTP {r.status_code}"}
+        except Exception as e: return {"success": False, "error": str(e)}
 
 
-# 全局LLM服务实例
 llm_service = LLMService()
 chatglm_service = ChatGLMService()

@@ -73,6 +73,20 @@ class BarrierConfigResponse(BaseModel):
     auto_sync_to_student: bool
 
 
+class OverrideDiagnosisRequest(BaseModel):
+    """老师推翻诊断请求"""
+    barrier_type: str  # concept/reading/expression
+    reason: Optional[str] = None
+
+
+class RunLLMDiagnosisResponse(BaseModel):
+    """LLM 诊断执行结果"""
+    exam_id: str
+    analyzed_count: int
+    failed_count: int
+    barrier_distribution: Dict[str, int]
+
+
 # 干预建议
 _INTERVENTIONS = {
     BarrierType.CONCEPT.value: "建议加强基础概念复习，使用思维导图梳理知识体系，重点理解\"为什么\"而非死记硬背",
@@ -194,6 +208,183 @@ async def diagnose_barrier_types(
         class_barrier_distribution=total_barriers,
         avg_mastery=round(avg_mastery, 2)
     )
+
+
+@router.post("/run-llm/{exam_record_id}", response_model=RunLLMDiagnosisResponse)
+async def run_llm_barrier_diagnosis(
+    exam_record_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    F4: 对一场考试的错误答案运行 LLM 障碍诊断
+    对错误率>30%的题目，调用 LLM 分析学生障碍类型，
+    结果写入 StudentAnswer.barrier_type 并聚合到 Student.barrier_type
+    """
+    exam_record = db.query(ExamRecord).filter(
+        ExamRecord.record_id == exam_record_id
+    ).first()
+    if not exam_record:
+        raise HTTPException(status_code=404, detail="考试记录不存在")
+
+    # 查找所有错误答案（无 barrier_type 的优先）
+    wrong_answers = db.query(StudentAnswer).filter(
+        StudentAnswer.exam_record_id == exam_record_id,
+        StudentAnswer.is_correct == False,
+    ).order_by(
+        StudentAnswer.barrier_type.is_(None).desc()  # 未诊断的优先
+    ).limit(10).all()  # 最多分析10个
+
+    if not wrong_answers:
+        return RunLLMDiagnosisResponse(
+            exam_id=exam_record_id,
+            analyzed_count=0, failed_count=0,
+            barrier_distribution={"concept": 0, "reading": 0, "expression": 0}
+        )
+
+    from app.services.llm_service import llm_service
+    import concurrent.futures
+
+    analyzed, failed = 0, 0
+    barrier_dist = {"concept": 0, "reading": 0, "expression": 0}
+
+    # 收集所有需要更新的 student_id
+    updated_students = set()
+
+    def diagnose_single(ans):
+        nonlocal analyzed, failed
+        question = db.query(Question).filter(
+            Question.question_id == ans.question_id
+        ).first()
+        if not question:
+            return
+
+        q_content = question.content or ""
+        correct = question.answer or ""
+        student_ans = ans.student_answer or ""
+
+        result = llm_service.diagnose_barrier_type(
+            student_error_history=[{
+                "question": q_content[:300],
+                "wrong_answer": student_ans,
+                "correct_answer": correct,
+            }],
+            question_content=q_content[:500],
+            student_answer=student_ans,
+            correct_answer=correct,
+        )
+
+        if result.get("success"):
+            content = result.get("content", "{}")
+            import re as _re
+            import json as _json
+            _json_match = _re.search(r'\{[\s\S]*\}', content)
+            if _json_match:
+                try:
+                    data = _json.loads(_json_match.group())
+                    bt = data.get("barrier_type", "concept")
+                    if bt in ("concept", "reading", "expression"):
+                        ans.barrier_type = getattr(BarrierType, bt.upper(), BarrierType.CONCEPT)
+                        analyzed += 1
+                except _json.JSONDecodeError:
+                    failed += 1
+            else:
+                failed += 1
+        else:
+            failed += 1
+
+    # 并发最多5个
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+        list(executor.map(lambda a: diagnose_single(a), wrong_answers))
+
+    db.commit()
+
+    # 聚合更新 Student.barrier_type
+    for ans in wrong_answers:
+        if ans.barrier_type and ans.student_id:
+            updated_students.add(ans.student_id)
+            bt = ans.barrier_type.value
+            barrier_dist[bt] = barrier_dist.get(bt, 0) + 1
+
+    for sid in updated_students:
+        student = db.query(Student).filter(Student.student_id == sid).first()
+        if student:
+            all_answers = db.query(StudentAnswer).filter(
+                StudentAnswer.student_id == sid,
+                StudentAnswer.is_correct == False,
+                StudentAnswer.barrier_type.isnot(None),
+            ).all()
+            counts = {"concept": 0, "reading": 0, "expression": 0}
+            for a in all_answers:
+                if a.barrier_type:
+                    counts[a.barrier_type.value] = counts.get(a.barrier_type.value, 0) + 1
+            total = sum(counts.values()) or 1
+            student.barrier_type = {k: round(v / total, 2) for k, v in counts.items()}
+            # 补充缺失的类型
+            for bt in ("concept", "reading", "expression"):
+                if bt not in student.barrier_type:
+                    student.barrier_type[bt] = 0.0
+            student.barrier_last_updated = datetime.utcnow()
+
+    db.commit()
+
+    return RunLLMDiagnosisResponse(
+        exam_id=exam_record_id,
+        analyzed_count=analyzed,
+        failed_count=failed,
+        barrier_distribution=barrier_dist,
+    )
+
+
+@router.put("/override/{student_id}")
+async def override_barrier_diagnosis(
+    student_id: str,
+    request: OverrideDiagnosisRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    F4: 老师推翻 AI 诊断结论
+    手动指定学生的障碍类型，系统记录操作日志
+    """
+    student = db.query(Student).filter(Student.student_id == student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail=f"学生 {student_id} 不存在")
+
+    bt = request.barrier_type
+    if bt not in ("concept", "reading", "expression"):
+        raise HTTPException(status_code=400, detail="障碍类型必须是 concept/reading/expression")
+
+    # 保存旧值
+    old_barrier = dict(student.barrier_type or {})
+
+    # 更新为手动指定的类型（权重90%给指定类型）
+    new_barrier = {"concept": 0.05, "reading": 0.05, "expression": 0.05}
+    new_barrier[bt] = 0.90
+    student.barrier_type = new_barrier
+    student.barrier_last_updated = datetime.utcnow()
+
+    # 记录操作日志
+    log = OperationLog(
+        user_id=student_id,
+        action="override_diagnosis",
+        target_type="student",
+        target_id=student_id,
+        detail={
+            "old_barrier": old_barrier,
+            "new_barrier": new_barrier,
+            "reason": request.reason,
+            "changed_by": "teacher",
+        },
+    )
+    db.add(log)
+    db.commit()
+
+    return {
+        "success": True,
+        "message": f"诊断已更新为 {bt}",
+        "student_id": student_id,
+        "old_barrier": old_barrier,
+        "new_barrier": new_barrier,
+    }
 
 
 @router.get("/barrier/{student_id}")

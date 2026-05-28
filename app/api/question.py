@@ -3,6 +3,7 @@ F2: AI出题与三维安全审核 API
 基于PRD v1.0完整版功能规格
 """
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
+from fastapi.responses import Response, HTMLResponse
 from pydantic import BaseModel
 from typing import List, Optional, Literal
 import json
@@ -100,7 +101,7 @@ class HistoricalExam(BaseModel):
 
 
 @router.post("/generate", response_model=QuestionGenerateResponse)
-async def generate_questions(request: QuestionGenerateRequest):
+async def generate_questions(request: QuestionGenerateRequest, db: Session = Depends(get_db)):
     """
     F2: AI生成题目 + 三维安全审核 (Hybrid RAG模式)
     输入: 知识点/难度/数量
@@ -222,6 +223,7 @@ async def generate_questions(request: QuestionGenerateRequest):
         knowledge_points=request.knowledge_points,
         difficulty=request.difficulty,
         quantity=request.quantity,
+        question_types=request.question_types,
         rag_context=rag_context if len(rag_context) >= 3 else None
     )
 
@@ -366,6 +368,34 @@ async def generate_questions(request: QuestionGenerateRequest):
 
         # 估算成本 (qwen-turbo约0.004元/1K token)
         total_cost += len(q.get("content", "")) * 0.004 / 1000
+
+    # 持久化生成的题目到数据库
+    from app.models.database import Question as QuestionModel, Difficulty as DifficultyEnum, QuestionSource, AuditStatus
+    for aq in questions:
+        try:
+            diff_val = DifficultyEnum(aq.difficulty) if aq.difficulty in ['easy','medium','hard','competition'] else DifficultyEnum.MEDIUM
+            db_q = QuestionModel(
+                question_id=aq.question_id,
+                content=aq.content,
+                options=aq.options,
+                answer=aq.answer,
+                analysis=getattr(aq, 'analysis', None) or "",
+                knowledge_points=aq.knowledge_points,
+                difficulty=diff_val,
+                source=QuestionSource.AI_GENERATED,
+                audit_status=AuditStatus.PASSED if aq.overall_status == "passed" else AuditStatus.WARNING,
+                audit_report={
+                    "coefficient": aq.coefficient_audit.status if aq.coefficient_audit else "passed",
+                    "condition": aq.condition_audit.status if aq.condition_audit else "passed",
+                    "product": aq.product_audit.status if aq.product_audit else "passed",
+                    "structure": aq.structure_audit.status if aq.structure_audit else "passed"
+                },
+                historical_matches=aq.historical_matches
+            )
+            db.add(db_q)
+        except Exception as e:
+            print(f"[WARN] Failed to persist question {aq.question_id}: {e}")
+    db.commit()
 
     elapsed_ms = int((time.time() - start_time) * 1000)
 
@@ -1524,3 +1554,128 @@ async def reject_question(
         "question_id": question_id,
         "reason": request.reason if request else None
     }
+
+
+@router.get("/available/list")
+async def list_available_questions(
+    keyword: str = "",
+    difficulty: str = "",
+    limit: int = 50,
+    offset: int = 0,
+    db: Session = Depends(get_db)
+):
+    """获取可用题目（未被考试关联的题目，用于选题弹窗-题库tab）"""
+    from app.models.database import Question, Difficulty
+    query = db.query(Question).filter(
+        (Question.record_id == None) | (Question.record_id == "")
+    )
+
+    if keyword:
+        query = query.filter(Question.content.contains(keyword))
+    if difficulty:
+        try:
+            diff_enum = Difficulty(difficulty)
+            query = query.filter(Question.difficulty == diff_enum)
+        except ValueError:
+            pass
+
+    total = query.count()
+    questions = query.order_by(Question.created_at.desc()).offset(offset).limit(limit).all()
+
+    return {
+        "total": total,
+        "questions": [
+            {
+                "question_id": q.question_id,
+                "content": q.content,
+                "options": q.options,
+                "answer": q.answer,
+                "analysis": q.analysis,
+                "knowledge_points": q.knowledge_points,
+                "difficulty": q.difficulty.value if q.difficulty else "medium",
+                "source": q.source.value if q.source else "ai_generated"
+            }
+            for q in questions
+        ]
+    }
+
+
+@router.post("/import-from-historical/{historical_id}")
+async def import_from_historical(historical_id: str, db: Session = Depends(get_db)):
+    """从历史真题复制一道题到题库"""
+    from app.models.database import HistoricalExam
+
+    hq = db.query(HistoricalExam).filter(HistoricalExam.exam_id == historical_id).first()
+    if not hq:
+        raise HTTPException(status_code=404, detail=f"真题 {historical_id} 不存在")
+
+    # 创建新题目
+    import uuid
+    new_id = f"q_{uuid.uuid4().hex[:12]}"
+    new_q = Question(
+        question_id=new_id,
+        content=hq.content,
+        options=None,  # historical exam doesn't have options as JSON
+        answer=hq.answer,
+        analysis=hq.analysis,
+        knowledge_points=hq.knowledge_points,
+        difficulty=Difficulty(hq.difficulty.value) if hq.difficulty else Difficulty.MEDIUM,
+        source=QuestionSource.MANUAL_SELECTED,
+        source_exam=f"{hq.source} T{hq.question_number}" if hq.source else None
+    )
+    db.add(new_q)
+    db.commit()
+
+    return {"success": True, "question_id": new_id, "message": "已添加到题库"}
+
+
+@router.get("/export/{record_id}")
+async def export_exam_paper(
+    record_id: str,
+    format: str = "docx",
+    with_answers: bool = False,
+    db: Session = Depends(get_db)
+):
+    """
+    F2: 导出试卷为 Word 文档
+
+    Args:
+        record_id: 考试记录ID
+        format: docx (目前仅支持 docx)
+        with_answers: 是否包含答案
+    """
+    from app.models.database import ExamRecord, Question as QuestionModel
+    from app.services.export_service import export_exam_to_docx
+
+    exam = db.query(ExamRecord).filter(ExamRecord.record_id == record_id).first()
+    if not exam:
+        raise HTTPException(status_code=404, detail="考试记录不存在")
+
+    questions_db = db.query(QuestionModel).filter(
+        QuestionModel.record_id == record_id
+    ).all()
+
+    if not questions_db:
+        raise HTTPException(status_code=404, detail="该考试没有题目")
+
+    questions = [{
+        "content": q.content,
+        "options": q.options,
+        "answer": q.answer or "",
+        "analysis": q.analysis or "",
+        "type": "choice" if q.options else "fill",
+        "knowledge_points": q.knowledge_points or [],
+    } for q in questions_db]
+
+    buffer = export_exam_to_docx(
+        questions=questions,
+        exam_name=exam.name or "化学试卷",
+        with_answers=with_answers,
+    )
+
+    filename = f"{exam.name}_{'含答案' if with_answers else '学生版'}.docx"
+    return Response(
+        content=buffer.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"}
+    )

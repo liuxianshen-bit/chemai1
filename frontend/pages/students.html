@@ -1,22 +1,67 @@
-<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>学生管理 - 智辅化学</title>
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>学生管理 · 智辅化学</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,400&family=IBM+Plex+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
-<script src="https://cdn.tailwindcss.com?plugins=forms"></script><script>tailwind.config={darkMode:"class",theme:{extend:{colors:{primary:"#002045","on-primary":"#ffffff","primary-container":"#1a365d","secondary":"#13696a","secondary-container":"#a2eded",surface:"#fbf9f5","surface-warm":"#F5EFE6",background:"#fbf9f5","on-surface":"#1b1c1a","on-surface-variant":"#43474e","wood-accent":"#D7C4B1","outline-variant":"#c4c6cf","formula-green":"#2F855A","academic-red":"#C53030",tertiary:"#290068","tertiary-container":"#420e95"},borderRadius:{DEFAULT:"0.25rem",lg:"0.5rem",xl:"0.75rem",full:"9999px"},fontFamily:{sans:["IBM Plex Sans"],mono:["JetBrains Mono"],display:["Manrope"]}}}}</script>
-<link rel="stylesheet" href="/design-system.css"></head>
-<body class="bg-background text-on-surface flex h-screen overflow-hidden" style="font-family:'IBM Plex Sans'">
-<aside class="fixed left-0 top-0 h-screen flex flex-col z-50" style="width:240px;background:#002045"><div class="h-16 flex items-center px-4 mb-4 mt-2"><span class="material-symbols-outlined text-[28px] mr-2" style="color:#86a0cd">science</span><div><h1 class="text-white font-bold tracking-tight" style="font-family:Manrope;font-size:20px">智辅化学</h1><p class="text-xs" style="color:#86a0cd;font-family:'JetBrains Mono'">智慧教育辅助系统</p></div></div><div class="px-4 mb-6"><a href="/" class="w-full py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-all text-sm no-underline" style="background:rgba(255,255,255,.1);color:#86a0cd;font-family:'JetBrains Mono';display:flex" onmouseover="this.style.background='rgba(255,255,255,.15)';this.style.color='#fff'" onmouseout="this.style.background='rgba(255,255,255,.1)';this.style.color='#86a0cd'"><span class="material-symbols-outlined text-[18px]">psychology</span> AI 教研助手</a></div><nav class="flex-1 overflow-y-auto px-2 flex flex-col gap-1" id="sidebar-nav"></nav><div class="p-2 border-t mt-auto" style="border-color:rgba(255,255,255,.1)"><a class="sidebar-link" href="#" onclick="ChemAI.logout()"><span class="material-symbols-outlined">logout</span> 退出登录</a></div></aside>
-<main class="flex-1 flex flex-col relative h-screen bg-background overflow-y-auto" style="margin-left:240px;padding:32px">
-<h1 class="text-3xl font-bold mb-6" style="font-family:Manrope;color:#002045">学生管理</h1>
-<div class="flex gap-3 mb-6"><input id="student-search" class="input-field flex-1" placeholder="搜索姓名或学号..." oninput="loadStudents(this.value)"><select id="student-class-filter" class="input-field" style="width:160px" onchange="loadStudents()"><option value="">全部班级</option></select></div>
+<link rel="stylesheet" href="/common.css">
+<script src="https://cdn.tailwindcss.com?plugins=forms"></script><script>tailwind.config={darkMode:"class",theme:{extend:{colors:{ink:"#1a1a1a",paper:"#faf7f0",paperWarm:"#f5efe0",inkLight:"#555",congoRed:"#b43c28",methylGreen:"#2c6e49"},fontFamily:{sans:["IBM Plex Sans"],mono:["JetBrains Mono"],serif:["Cormorant Garamond","Georgia","serif"]}}}}</script>
+<style>
+body{font-family:'IBM Plex Sans',sans-serif;background:#f7f4ed;color:#1a1a1a;margin:0}
+.sidebar{width:240px;position:fixed;left:0;top:0;height:100vh;z-index:50;background:#f5efe0;border-right:1px solid rgba(0,0,0,.05);display:flex;flex-direction:column}
+.sidebar .brand-area{padding:20px 16px 4px}
+.sidebar .brand-area h1{font-family:'Cormorant Garamond',Georgia,serif;font-size:28px;font-weight:600;line-height:1.1;margin:0}
+.sidebar .brand-area .sub{font-family:'JetBrains Mono',monospace;font-size:10px;color:#999;margin-top:3px;letter-spacing:.5px}
+.sidebar .home-link{margin:14px 12px 10px;padding:9px 0;text-align:center;font-size:14px;font-family:'IBM Plex Sans',sans-serif;border:1px solid rgba(0,0,0,.1);background:transparent;color:#555;border-radius:4px;cursor:pointer;transition:.15s;text-decoration:none;display:block}
+.sidebar .home-link:hover{border-color:#b43c28;color:#b43c28}
+.elem-nav{display:flex;align-items:center;gap:10px;padding:10px 14px;margin:2px 8px;border-radius:4px;text-decoration:none;color:#555;font-size:15px;transition:.12s}
+.elem-nav .sym{font-family:'Cormorant Garamond',Georgia,serif;font-weight:600;font-size:17px;min-width:32px;text-align:center;padding:4px 6px;border-radius:3px;background:rgba(0,0,0,.03);color:#1a1a1a}
+.elem-nav:hover{background:rgba(0,0,0,.02)}.elem-nav:hover .sym{background:#1a1a1a;color:#faf7f0}
+.elem-nav.active{background:rgba(0,0,0,.03);font-weight:500}.elem-nav.active .sym{background:#b43c28;color:#fff}
+.main{margin-left:240px;padding:32px;min-height:100vh;background-image:linear-gradient(rgba(0,0,0,.012) 1px,transparent 1px),linear-gradient(90deg,rgba(0,0,0,.012) 1px,transparent 1px);background-size:28px 28px;background-position:-1px -1px}
+.page-title{font-family:'Cormorant Garamond',Georgia,serif;font-size:34px;font-weight:600;color:#1a1a1a;margin:0 0 8px}
+.card{background:#fff;border:1px solid rgba(0,0,0,.06);border-radius:4px;padding:20px;margin-bottom:16px}
+.btn{padding:8px 18px;border:1.5px solid #1a1a1a;background:transparent;color:#1a1a1a;font-size:14px;font-family:'IBM Plex Sans',sans-serif;cursor:pointer;border-radius:4px;transition:.15s}
+.btn:hover{background:#1a1a1a;color:#faf7f0}
+.btn-sm{padding:5px 12px;font-size:13px}
+.input{width:100%;border:none;border-bottom:1.5px solid rgba(0,0,0,.08);background:transparent;padding:9px 4px;font-size:15px;font-family:'IBM Plex Sans',sans-serif;outline:none;transition:border-color .3s}
+.input:focus{border-bottom-color:#b43c28}
+select.input{-webkit-appearance:none;border-radius:0}
+.tag{display:inline-block;padding:2px 10px;border-radius:9999px;font-size:12px;font-weight:500;font-family:'JetBrains Mono',monospace}
+.tag-medium{background:rgba(0,0,0,.05);color:#555}
+.tag-concept{background:#eaddff;color:#5429a6}.tag-reading{background:#d6e3ff;color:#2d476f}.tag-expression{background:#a5eff0;color:#004f50}
+.student-row{display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:4px;cursor:pointer;transition:.15s;border:1px solid rgba(0,0,0,.04);margin-bottom:4px;background:#fff}
+.student-row:hover{background:rgba(0,0,0,.01);border-color:rgba(0,0,0,.08)}
+.student-row.selected{background:rgba(0,0,0,.02);border-color:#1a1a1a}
+.severity-dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex-shrink:0}
+.severity-dot.high{background:#b43c28}.severity-dot.medium{background:#e6a817}.severity-dot.low{background:#2c6e49}
+.accordion-body{display:none;border-top:1px solid rgba(0,0,0,.04);padding:16px;background:rgba(0,0,0,.01)}
+.accordion-body.open{display:block}
+.data-table{width:100%;border-collapse:collapse}.data-table th{text-align:left;padding:10px 14px;font-family:'JetBrains Mono',monospace;font-size:10px;color:#999;border-bottom:2px solid rgba(0,0,0,.06);text-transform:uppercase;letter-spacing:.5px}.data-table td{padding:10px 14px;font-size:14px;border-bottom:1px solid rgba(0,0,0,.04)}
+.modal-overlay{position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.2);display:flex;align-items:center;justify-content:center}
+.modal-box{background:#faf7f0;border:1px solid rgba(0,0,0,.06);border-radius:4px;padding:24px;max-width:700px;width:90%;max-height:80vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.1)}
+.empty-state{text-align:center;padding:48px;color:#999}
+</style></head><body>
+<aside class="sidebar">
+<div class="brand-area"><h1>智辅化学</h1><p class="sub">CHEMAI · 教师工作台</p></div>
+<a href="/" class="home-link">AI 教研助手</a>
+<nav class="flex-1 overflow-y-auto flex flex-col" id="sidebar-nav" style="padding:4px 0"></nav>
+<div style="padding:8px 12px;border-top:1px solid rgba(0,0,0,.04)"><a class="elem-nav" href="#" onclick="ChemAI.logout()" style="font-size:12px;color:#999">退出登录</a></div>
+</aside>
+<main class="main">
+<h1 class="page-title">学生管理</h1>
+<div class="card"><div style="display:flex;gap:12px;flex-wrap:wrap"><input id="student-search" class="input" placeholder="搜索姓名或学号..." style="flex:1;min-width:180px" oninput="filterAndRender()"><select id="student-class-filter" class="input" style="width:160px" onchange="filterAndRender()"><option value="">全部班级</option></select></div></div>
 <div id="students-list"></div>
+<div id="pagination" style="display:flex;justify-content:center;gap:10px;margin-top:16px"></div>
 </main>
-<div class="modal-overlay" id="student-modal" style="display:none" onclick="if(event.target===this)closeStudentModal()">
-<div class="modal-card" style="max-width:720px"><div class="flex justify-between items-center mb-6"><h2 class="text-2xl font-bold" style="font-family:Manrope;color:#002045" id="modal-name"></h2><button onclick="closeStudentModal()" style="background:none;border:none;cursor:pointer;font-size:24px;color:#74777f">&times;</button></div>
-<div class="grid grid-cols-3 gap-4 mb-6" id="modal-stats"></div>
-<div class="card mb-4"><h3 class="text-lg font-bold mb-2" style="font-family:Manrope">障碍诊断</h3><div id="modal-barrier"></div></div>
-<div class="card mb-4"><h3 class="text-lg font-bold mb-2" style="font-family:Manrope">学情概览</h3><div id="modal-report" class="text-sm" style="color:#43474e"></div></div>
-<div class="flex gap-3"><button class="btn-teal" onclick="genPlanForModal()">生成学习计划</button><button class="btn-secondary" onclick="closeStudentModal()">关闭</button></div>
-</div></div>
+<div id="modal-detail" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeDetail()"><div class="modal-box" style="max-width:800px">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><h2 style="font-family:'Cormorant Garamond',Georgia,serif;font-size:22px;margin:0" id="md-name">学生详情</h2><button onclick="closeDetail()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#999">&times;</button></div>
+<div id="md-stats" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px"></div>
+<div class="card" style="margin-bottom:12px"><span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#999;text-transform:uppercase;letter-spacing:.5px">障碍诊断</span><div id="md-barrier" style="margin-top:8px"></div></div>
+<div class="card" style="margin-bottom:12px"><span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#999;text-transform:uppercase;letter-spacing:.5px">进步趋势</span><div id="md-trend" style="margin-top:8px"></div></div>
+<div style="display:flex;gap:10px;flex-wrap:wrap" id="md-actions"></div></div></div>
+<div id="modal-transfer" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeTransfer()"><div class="modal-box" style="max-width:400px">
+<h2 style="font-family:'Cormorant Garamond',Georgia,serif;font-size:22px;margin:0 0 8px">转班</h2>
+<p style="color:#555;margin:0 0 12px" id="tf-student-name"></p>
+<select id="tf-class" class="input" style="margin-bottom:16px"><option value="">选择目标班级...</option></select>
+<div style="display:flex;gap:10px;justify-content:flex-end"><button class="btn" onclick="closeTransfer()">取消</button><button class="btn" onclick="confirmTransfer()">确认转班</button></div></div></div>
 <script src="/app.js"></script><script src="/js/students.js"></script>
 </body></html>

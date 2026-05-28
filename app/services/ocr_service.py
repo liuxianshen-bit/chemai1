@@ -42,38 +42,83 @@ class OCRService:
     def recognize_answer_sheet(self, image_data: bytes) -> Dict:
         """
         答题卡识别（整合）
+        Triage 策略: 智谱OCR → GLM-4V Vision → 提示手动输入
         识别学生作答结果，返回结构化数据
         """
+        ocr_provider = os.getenv("OCR_PROVIDER", "auto")
+
         if not self.enabled:
             return self._ocr_not_configured()
 
-        # 调用智谱OCR
-        result = self._call_zhipu_ocr(image_data, "answer_sheet")
+        # Step 1: 智谱 OCR
+        if ocr_provider in ("auto", "zhipu"):
+            ocr_result = self._call_zhipu_ocr(image_data, "answer_sheet")
+            if ocr_result.get("success"):
+                parsed = self._parse_answer_sheet_from_zhipu(ocr_result)
+                if parsed.get("success") and not parsed.get("is_partial"):
+                    parsed["provider"] = "zhipu"
+                    return parsed
+                # OCR 部分成功，记录后尝试 Vision 增强
+                print(f"[OCR] ZhiPu OCR partial success, trying Vision enhancement...")
 
-        # 检查调用是否成功（HTTP层面）
-        if not result.get("success"):
-            return {
-                "success": False,
-                "error": result.get("error", "OCR服务调用失败"),
-                "student_id": "unknown",
-                "student_name": "待识别",
-                "answers": {},
-                "scores": {},
-                "total_score": 0,
-                "confidence": 0,
-                "raw_text": "",
-                "provider": "zhipu",
-                "mock": False
-            }
+        # Step 2: GLM-4V Vision 降级
+        if ocr_provider in ("auto", "vision"):
+            print(f"[OCR] Falling back to GLM-4V Vision...")
+            vision_result = self._try_vision_fallback(image_data)
+            if vision_result.get("success"):
+                vision_result["provider"] = "zhipu-vision"
+                return vision_result
 
-        # 解析智谱OCR结果，尝试提取答题卡信息
-        parsed_result = self._parse_answer_sheet_from_zhipu(result)
+        # Step 3: 全部失败，返回手动输入提示
+        print(f"[OCR] All providers failed, returning manual input hint")
+        return {
+            "success": True,
+            "error": "自动识别效果不佳，请老师手动输入答案",
+            "student_id": "unknown",
+            "student_name": "待手动录入",
+            "answers": parsed.get("answers", {}) if ocr_result.get("success") else {},
+            "scores": {},
+            "total_score": 0,
+            "confidence": 0,
+            "raw_text": ocr_result.get("raw_text", ""),
+            "provider": "manual",
+            "mock": False,
+            "is_partial": True,
+            "triage_exhausted": True,
+        }
 
-        # 如果解析也失败，返回失败状态
-        if not parsed_result.get("success"):
-            return parsed_result
+    def _try_vision_fallback(self, image_data: bytes) -> Dict:
+        """使用 Vision 模型作为 OCR 的降级方案"""
+        try:
+            import base64 as b64
+            from app.services.llm_service import llm_service
 
-        return parsed_result
+            b64_image = b64.b64encode(image_data).decode("utf-8")
+            result = llm_service.analyze_paper_with_vision(
+                image_data=b64_image, paper_type="mixed"
+            )
+            if result.get("success") and result.get("questions"):
+                questions = result["questions"]
+                answers = {}
+                for q in questions:
+                    num = str(q.get("number", ""))
+                    ans = q.get("student_answer", q.get("correct_answer", ""))
+                    if num and ans:
+                        answers[num] = str(ans).strip().upper()
+                return {
+                    "success": True,
+                    "student_id": result.get("student_id", "unknown"),
+                    "student_name": result.get("student_name", "待识别"),
+                    "answers": answers,
+                    "scores": {k: 6 for k in answers},
+                    "total_score": len(answers) * 6,
+                    "confidence": 0.8,
+                    "raw_text": result.get("raw_text", ""),
+                    "mock": False,
+                }
+            return {"success": False, "error": result.get("error", "Vision fallback failed")}
+        except Exception as e:
+            return {"success": False, "error": f"Vision fallback error: {str(e)}"}
 
     def _call_zhipu_ocr(self, image_data: bytes, ocr_type: str = "general") -> Dict:
         """

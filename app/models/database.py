@@ -450,7 +450,20 @@ def get_engine(database_url: str = "sqlite:///./chemai.db"):
     """获取数据库引擎（单例）"""
     global _default_engine
     if _default_engine is None:
-        _default_engine = create_engine(database_url, echo=False)
+        _default_engine = create_engine(
+            database_url,
+            echo=False,
+            connect_args={"check_same_thread": False} if "sqlite" in database_url else {},
+        )
+        # Enable WAL mode for better concurrency
+        if "sqlite" in database_url:
+            from sqlalchemy import event
+            @event.listens_for(_default_engine, "connect")
+            def set_sqlite_pragma(dbapi_connection, connection_record):
+                cursor = dbapi_connection.cursor()
+                cursor.execute("PRAGMA journal_mode=WAL")
+                cursor.execute("PRAGMA synchronous=NORMAL")
+                cursor.close()
     return _default_engine
 
 def get_session_factory(database_url: str = "sqlite:///./chemai.db"):

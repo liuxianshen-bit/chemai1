@@ -463,3 +463,28 @@ async def transfer_student(
         "success": True,
         "message": f"学生已从{old_class_id}调至{request.new_class_id}"
     }
+
+
+@router.post("/student/{student_id}/reset-password")
+async def reset_student_password(
+    student_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    重置学生密码为默认密码 123456
+    """
+    from app.models.database import Account
+    import hashlib
+
+    student = db.query(Student).filter(Student.student_id == student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="学生不存在")
+
+    account = db.query(Account).filter(Account.student_id == student_id).first()
+    if not account:
+        raise HTTPException(status_code=404, detail="学生账户不存在")
+
+    account.password_hash = hashlib.sha256("123456".encode()).hexdigest()
+    db.commit()
+
+    return {"success": True, "message": f"学生 {student.name} 的密码已重置为 123456"}

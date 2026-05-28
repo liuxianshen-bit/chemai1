@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>班级学情面板 - ChemAI</title>
+<link rel="stylesheet" href="/common.css">
+<script src="https://unpkg.com/chart.js@4/dist/chart.umd.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: "Microsoft YaHei", sans-serif; background: #f0f2f5; color: #333; }
+.header { background: #1a73e8; color: white; padding: 12px 24px; display: flex; justify-content: space-between; align-items: center; }
+.header h1 { font-size: 20px; }
+.header .user { font-size: 13px; opacity: .9; }
+.container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+
+/* Summary Cards */
+.cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 20px; }
+.card { background: white; border-radius: 10px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,.08); text-align: center; }
+.card .value { font-size: 32px; font-weight: 700; color: #1a73e8; }
+.card .label { font-size: 13px; color: #888; margin-top: 4px; }
+.card.warn .value { color: #e74c3c; }
+.card.ok .value { color: #27ae60; }
+
+/* Charts Row */
+.charts { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+.chart-box { background: white; border-radius: 10px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.chart-box h3 { font-size: 15px; margin-bottom: 12px; color: #555; }
+.chart-box canvas { max-height: 300px; }
+.chart-box.full { grid-column: 1 / -1; }
+
+/* Table */
+.table-box { background: white; border-radius: 10px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.table-box h3 { font-size: 15px; margin-bottom: 12px; color: #555; }
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #eee; font-size: 13px; }
+th { background: #f8f9fa; font-weight: 600; }
+.loading { text-align: center; padding: 40px; color: #999; }
+.empty { text-align: center; padding: 40px; color: #bbb; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; color: white; }
+.badge.concept { background: #e74c3c; }
+.badge.reading { background: #f39c12; }
+.badge.expression { background: #3498db; }
+</style>
+</head>
+<body>
+<div class="header">
+    <h1>智辅化学 - 班级学情面板</h1>
+    <div class="user">
+        <select id="classSelect" onchange="loadDashboard()" style="padding:4px 8px;border-radius:4px;margin-right:8px;">
+            <option>加载中...</option>
+        </select>
+        <span id="userName">教师</span>
+        <a href="/login.html" style="color:white;margin-left:12px;font-size:12px;">退出</a>
+    </div>
+</div>
+<div class="container">
+    <div class="cards" id="cards"></div>
+    <div class="charts">
+        <div class="chart-box"><h3>知识点错误率</h3><canvas id="kpChart"></canvas></div>
+        <div class="chart-box"><h3>障碍类型分布</h3><canvas id="barrierChart"></canvas></div>
+        <div class="chart-box full"><h3>成绩趋势</h3><canvas id="trendChart"></canvas></div>
+    </div>
+    <div class="table-box">
+        <h3>学生列表</h3>
+        <table id="studentTable"><thead><tr><th>姓名</th><th>主要障碍</th><th>薄弱知识点</th><th>练习完成</th><th>最近练习</th></tr></thead><tbody id="studentTbody"><tr><td colspan="5" class="loading">加载中...</td></tr></tbody></table>
+    </div>
+</div>
+
+<script>
+function getToken() {
+    var u = sessionStorage.getItem('chemai_user');
+    if (u) { try { return JSON.parse(u).token || ''; } catch(e) {} }
+    return localStorage.getItem('token') || '';
+}
+const TOKEN = getToken();
+
+async function api(url) {
+    const r = await fetch(url, { headers: { 'Authorization': 'Bearer ' + TOKEN } });
+    return r.json();
+}
+
+async function loadDashboard() {
+    const sel = document.getElementById('classSelect');
+
+    // Load class list first
+    const classes = await api('/api/classes');
+    if (classes.success) {
+        const list = (classes.data && classes.data.classes) || classes.classes || [];
+        if (list.length > 0) {
+            sel.innerHTML = list.map(c => `<option value="${c.class_id}">${c.name || c.class_name || ''}</option>`).join('');
+            sel.value = list[0].class_id;
+        }
+    }
+
+    const cid = sel.value;
+    if (!cid || cid.includes('加载')) return;
+
+    // Load panel data
+    const [panel, barrier, students] = await Promise.all([
+        api(`/api/panel/class/${cid}`),
+        api(`/api/diagnosis/class/${cid}/stats`),
+        api(`/api/classes/${cid}/students`),
+    ]);
+
+    // Cards
+    const overview = panel.overview || {};
+    const warnCount = barrier.distribution ? (barrier.distribution.concept?.count || 0) : 0;
+    const c = document.getElementById('cards');
+    c.innerHTML = `
+        <div class="card"><div class="value">${overview.avg_score || '--'}</div><div class="label">平均分</div></div>
+        <div class="card"><div class="value">${overview.exam_count || 0}</div><div class="label">考试次数</div></div>
+        <div class="card warn"><div class="value">${warnCount}</div><div class="label">需关注学生</div></div>
+        <div class="card ok"><div class="value">${overview.student_count || students?.data?.length || 0}</div><div class="label">班级人数</div></div>`;
+
+    // KP chart
+    const kpData = overview.knowledge_point_stats || [];
+    renderBar(kpData.slice(0, 8));
+
+    // Barrier pie
+    const dist = barrier.distribution || {};
+    renderPie(dist);
+
+    // Trend
+    const trend = await api(`/api/panel/class/${cid}/trend`);
+    const trendData = trend.trend || [];
+    renderLine(trendData);
+
+    // Student table
+    const slist = students.students || students.data || [];
+    const tbody = document.getElementById('studentTbody');
+    if (slist.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty">暂无学生数据</td></tr>';
+    } else {
+        tbody.innerHTML = slist.map(s => {
+            const bt = s.barrier_type || {};
+            const maxKey = Object.keys(bt).reduce((a,b) => (bt[a]||0) > (bt[b]||0) ? a : b, 'concept');
+            const label = {concept:'概念', reading:'审题', expression:'表述'}[maxKey] || maxKey;
+            const wkp = s.weak_knowledge_points || s.weak_kps || [];
+            return `<tr>
+                <td>${s.name}</td>
+                <td><span class="badge ${maxKey}">${label} ${Math.round((bt[maxKey]||0)*100)}%</span></td>
+                <td>${wkp.slice(0,2).join(', ') || '--'}</td>
+                <td>${s.exercises_completed || 0} 次</td>
+                <td>${s.last_exercise_at ? s.last_exercise_at.slice(0,10) : (s.created_at||'').slice(0,10)}</td>
+            </tr>`;
+        }).join('');
+    }
+}
+
+let charts = {};
+function renderBar(data) {
+    if (charts.kp) charts.kp.destroy();
+    const ctx = document.getElementById('kpChart').getContext('2d');
+    charts.kp = new Chart(ctx, {
+        type: 'bar',
+        data: { labels: data.map(d => d.knowledge_point || ''), datasets: [{ label: '错误率 %', data: data.map(d => (d.error_rate||0)*100), backgroundColor: '#1a73e8' }] },
+        options: { responsive: true, scales: { y: { beginAtZero: true, max: 100 } } }
+    });
+}
+
+function renderPie(dist) {
+    if (charts.barrier) charts.barrier.destroy();
+    const ctx = document.getElementById('barrierChart').getContext('2d');
+    charts.barrier = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['概念理解型', '审题障碍型', '表述障碍型'],
+            datasets: [{
+                data: [dist.concept?.count||0, dist.reading?.count||0, dist.expression?.count||0],
+                backgroundColor: ['#e74c3c', '#f39c12', '#3498db']
+            }]
+        }
+    });
+}
+
+function renderLine(data) {
+    if (charts.trend) charts.trend.destroy();
+    const ctx = document.getElementById('trendChart').getContext('2d');
+    charts.trend = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: data.map(d => d.date || d.exam_date || ''),
+            datasets: [{ label: '平均分', data: data.map(d => d.avg_score || d.score || 0), borderColor: '#27ae60', tension: 0.3 }]
+        },
+        options: { responsive: true }
+    });
+}
+
+document.addEventListener('DOMContentLoaded', loadDashboard);
+</script>
+</body>
+</html>

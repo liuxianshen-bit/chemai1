@@ -6,8 +6,9 @@
 from datetime import datetime
 from app.models.database import (
     Student, StudentParentBinding, ParentNotification,
-    ExamRecord, ReviewTask, get_db, RecordType
+    ExamRecord, get_db, RecordType
 )
+from app.models.review_task import ReviewTask
 from app.services.notification_service import send_practice_notification
 
 
