@@ -21,30 +21,53 @@ class ExamBankService:
         self._load_exam_bank()
 
     def _load_exam_bank(self):
-        """从文件加载真题数据"""
+        """从 {region}/{year}/{paper_name}.json 目录结构加载真题"""
         exam_dir = settings.EXAM_QUESTIONS_PATH
 
-        # 加载所有可用年份 (2008-2025)
-        for year in [2025, 2024, 2023, 2022, 2021, 2020, 2019, 2018, 2017, 2016, 2015, 2014, 2013, 2012, 2011, 2010, 2009, 2008]:
-            # 全国卷 - 优先full版本
-            full_path = os.path.join(exam_dir, f"national_{year}_full.json")
-            normal_path = os.path.join(exam_dir, f"national_{year}.json")
-            if os.path.exists(full_path):
-                self._load_from_file(full_path, "全国卷", year)
-            elif os.path.exists(normal_path):
-                self._load_from_file(normal_path, "全国卷", year)
+        loaded = 0
+        for entry in os.listdir(exam_dir):
+            region_path = os.path.join(exam_dir, entry)
+            if not os.path.isdir(region_path):
+                continue
+            # entry is the region name in Chinese: "全国卷", "湖南卷"
+            region = entry
+            for year_str in os.listdir(region_path):
+                year_path = os.path.join(region_path, year_str)
+                if not os.path.isdir(year_path):
+                    continue
+                try:
+                    year = int(year_str)
+                except ValueError:
+                    continue
+                for f in os.listdir(year_path):
+                    if not f.endswith(".json"):
+                        continue
+                    file_path = os.path.join(year_path, f)
+                    self._load_from_file(file_path, region, year)
+                    loaded += 1
 
-            # 湖南卷 - 优先full版本
-            full_path = os.path.join(exam_dir, f"hunan_{year}_full.json")
-            normal_path = os.path.join(exam_dir, f"hunan_{year}.json")
-            if os.path.exists(full_path):
-                self._load_from_file(full_path, "湖南卷", year)
-            elif os.path.exists(normal_path):
-                self._load_from_file(normal_path, "湖南卷", year)
+        # 兼容旧 national/hunan 目录结构
+        if loaded == 0:
+            for d in ["national", "hunan"]:
+                dp = os.path.join(exam_dir, d)
+                if not os.path.isdir(dp):
+                    continue
+                region = "全国卷" if d == "national" else "湖南卷"
+                for f in os.listdir(dp):
+                    if not f.endswith(".json"):
+                        continue
+                    try:
+                        year = int(f.replace(".json", ""))
+                    except ValueError:
+                        continue
+                    self._load_from_file(os.path.join(dp, f), region, year)
+                    loaded += 1
 
         # 如果没有数据,加载样例
         if not self.questions:
             self._load_sample_data()
+
+        print(f"[ExamBank] 从 {loaded} 个文件加载了 {len(self.questions)} 道真题")
 
     def _load_from_file(self, file_path: str, region: str, year: int):
         """从JSON文件加载"""
@@ -109,7 +132,7 @@ class ExamBankService:
         knowledge_point: Optional[str] = None,
         difficulty: Optional[str] = None,
         keyword: Optional[str] = None,
-        limit: int = 50
+        limit: int = 1000
     ) -> List[HistoricalQuestion]:
         """
         查询真题
@@ -177,6 +200,30 @@ class ExamBankService:
         """获取完整试卷"""
         key = f"{source}{year}"
         return self.papers.get(key)
+
+    def get_papers_grouped(self) -> List[Dict]:
+        """获取所有试卷，按地区→年份分组，用于前端树形展示"""
+        groups = []  # [{region, years: [{year, papers: [{name, count, year, region}]}]}]
+        region_map = {}  # region -> year -> [paper_info]
+        for q in self.questions:
+            r = q.region or "未知"
+            y = q.year or 0
+            src = q.source or ""
+            if r not in region_map:
+                region_map[r] = {}
+            if y not in region_map[r]:
+                region_map[r][y] = {}
+            if src not in region_map[r][y]:
+                region_map[r][y][src] = 0
+            region_map[r][y][src] += 1
+        for region in sorted(region_map.keys()):
+            year_list = []
+            for year in sorted(region_map[region].keys(), reverse=True):
+                papers = [{"name": src, "question_count": cnt, "year": year, "region": region, "source_key": src}
+                         for src, cnt in sorted(region_map[region][year].items())]
+                year_list.append({"year": year, "papers": papers})
+            groups.append({"region": region, "years": year_list})
+        return groups
 
     def get_knowledge_point_stats(self) -> Dict[str, Dict]:
         """统计各知识点出现的频次和难度分布"""

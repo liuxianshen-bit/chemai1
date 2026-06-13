@@ -158,6 +158,14 @@ async def serve_css():
     return RedirectResponse(url="/")
 
 
+@app.get("/common.css")
+async def serve_common_css():
+    css_file = os.path.join(FRONTEND_DIR, "common.css")
+    if os.path.exists(css_file):
+        return FileResponse(css_file, media_type="text/css")
+    return RedirectResponse(url="/")
+
+
 @app.get("/login.html")
 async def serve_login_html():
     html_file = os.path.join(FRONTEND_DIR, "login.html")

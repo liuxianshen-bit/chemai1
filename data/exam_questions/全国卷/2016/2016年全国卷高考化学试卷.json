@@ -1,0 +1,317 @@
+{
+  "paper_name": "2016年全国卷高考化学试卷",
+  "region": "全国卷",
+  "year": 2016,
+  "total_score": 100,
+  "exam_date": "2016-06-08",
+  "questions": [
+    {
+      "exam_id": "全国卷_2016_t1",
+      "source": "全国卷2016",
+      "year": 2016,
+      "region": "全国卷",
+      "paper_name": "2016年全国卷高考化学试卷",
+      "question_number": "T1",
+      "original_number": "1",
+      "question_type": "single_choice",
+      "content": "化学与生活密切相关，下列有关说法错误的是（ ）",
+      "options": [
+        "A. 用灼烧的方法可以区分蚕丝和人造纤维",
+        "B. 食用油反复加热会产生稠环芳香烃等有害物质",
+        "C. 加热能杀死流感病毒是因为蛋白质受热变性",
+        "D. 医用消毒酒精中乙醇的浓度为 95%"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "综合"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "综合"
+    },
+    {
+      "exam_id": "全国卷_2016_t2",
+      "source": "全国卷2016",
+      "year": 2016,
+      "region": "全国卷",
+      "paper_name": "2016年全国卷高考化学试卷",
+      "question_number": "T2",
+      "original_number": "2",
+      "question_type": "single_choice",
+      "content": "设 NA 为阿伏加德罗常数值．下列有关叙述正确的是（ ）",
+      "options": [
+        "A. 14g 乙烯和丙烯混合气体中的氢原子数为 2NA",
+        "B. 1mol N2 与 4mol H2 反应生成的 NH3 分子数为 2NA",
+        "C. 1mol Fe 溶于过量硝酸，电子转移数为 2NA",
+        "D. 标准状况下，2.24L CCl4 含有的共价键数为 0.4NA"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "物质的量"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "物质的量"
+    },
+    {
+      "exam_id": "全国卷_2016_t3",
+      "source": "全国卷2016",
+      "year": 2016,
+      "region": "全国卷",
+      "paper_name": "2016年全国卷高考化学试卷",
+      "question_number": "T3",
+      "original_number": "3",
+      "question_type": "single_choice",
+      "content": "下列关于有机化合物的说法正确的是（ ）",
+      "options": [
+        "A. 2﹣甲基丁烷也称异丁烷",
+        "B. 由乙烯生成乙醇属于加成反应",
+        "C. C4H9Cl 有 3 种同分异构体",
+        "D. 油脂和蛋白质都属于高分子化合物"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "综合"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "综合"
+    },
+    {
+      "exam_id": "全国卷_2016_t4",
+      "source": "全国卷2016",
+      "year": 2016,
+      "region": "全国卷",
+      "paper_name": "2016年全国卷高考化学试卷",
+      "question_number": "T4",
+      "original_number": "4",
+      "question_type": "single_choice",
+      "content": "下列实验操作能达到实验目的是（ ）",
+      "options": [
+        "A. 用长颈漏斗分离出乙酸与乙醇反应的产物",
+        "B. 用向上排空气法收集铜粉与稀硝酸反应产生的 NO",
+        "C. 配制氯化铁溶液时，将氯化铁溶解在较浓的盐酸中再加水稀释",
+        "D. 将 Cl2 与 HCl 混合气体通过饱和食盐水可得到纯净的 Cl2"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "实验"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "实验"
+    },
+    {
+      "exam_id": "全国卷_2016_t5",
+      "source": "全国卷2016",
+      "year": 2016,
+      "region": "全国卷",
+      "paper_name": "2016年全国卷高考化学试卷",
+      "question_number": "T5",
+      "original_number": "5",
+      "question_type": "single_choice",
+      "content": "三室式电渗析法处理含 Na2SO4 废水的原理如图所示，采用惰性电极，",
+      "options": [
+        "A. 通电后中间隔室的 SO42﹣离子向正极迁移，正极区溶液 pH 增大",
+        "B. 该法在处理含 Na2SO4 废水时可以得到 NaOH 和 H2SO4 产品",
+        "C. 负极反应为 2H2O﹣4e﹣=O2+4H+，负极区溶液 pH 降低",
+        "D. 当电路中通过 1mol 电子的电量时，会有 0.5mol 的 O2 生成"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "综合"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "综合"
+    },
+    {
+      "exam_id": "全国卷_2016_t6",
+      "source": "全国卷2016",
+      "year": 2016,
+      "region": "全国卷",
+      "paper_name": "2016年全国卷高考化学试卷",
+      "question_number": "T6",
+      "original_number": "6",
+      "question_type": "single_choice",
+      "content": "298K 时，在 20.0mL 0.10mol•L﹣1 氨水中滴入 0.10mol•L﹣1 的盐酸，溶",
+      "options": [
+        "A. 该滴定过程应该选择酚酞作为指示剂",
+        "B. M 点对应的盐酸体积为 20.0mL",
+        "C. M 点处的溶液中 c（NH4+）=c（Cl﹣）=c（H+）=c（OH﹣）",
+        "D. N 点处的溶液中 pH＜12"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "综合"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "综合"
+    },
+    {
+      "exam_id": "全国卷_2016_t7",
+      "source": "全国卷2016",
+      "year": 2016,
+      "region": "全国卷",
+      "paper_name": "2016年全国卷高考化学试卷",
+      "question_number": "T7",
+      "original_number": "7",
+      "question_type": "single_choice",
+      "content": "短周期元素 W、X、Y、Z 的原子序数依次增加．m、p、r 是由这些元",
+      "options": [
+        "A. 原子半径的大小 W＜X＜Y",
+        "B. 元素的非金属性 Z＞X＞Y",
+        "C. Y 的氢化物常温常压下为液态",
+        "D. X 的最高价氧化物的水化物为强酸"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "综合"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "综合"
+    },
+    {
+      "exam_id": "全国卷_2016_t8",
+      "source": "全国卷2016",
+      "year": 2016,
+      "region": "全国卷",
+      "paper_name": "2016年全国卷高考化学试卷",
+      "question_number": "T8",
+      "original_number": "8",
+      "question_type": "short_answer",
+      "content": "氮的氧化物（NOx）是大气污染物之一，工业上在一定温度和催化剂",
+      "options": null,
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "非金属"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "非金属"
+    },
+    {
+      "exam_id": "全国卷_2016_t9",
+      "source": "全国卷2016",
+      "year": 2016,
+      "region": "全国卷",
+      "paper_name": "2016年全国卷高考化学试卷",
+      "question_number": "T9",
+      "original_number": "9",
+      "question_type": "short_answer",
+      "content": "元素铬（Cr）在溶液中主要以 Cr3+（蓝紫色）、Cr（OH）4﹣（绿色）、",
+      "options": null,
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "胶体"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "胶体"
+    },
+    {
+      "exam_id": "全国卷_2016_t10",
+      "source": "全国卷2016",
+      "year": 2016,
+      "region": "全国卷",
+      "paper_name": "2016年全国卷高考化学试卷",
+      "question_number": "T10",
+      "original_number": "10",
+      "question_type": "short_answer",
+      "content": "NaClO2 是一种重要的杀菌消毒剂，也常用来漂白织物等，其一种生",
+      "options": null,
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "综合"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "综合"
+    },
+    {
+      "exam_id": "全国卷_2016_t11",
+      "source": "全国卷2016",
+      "year": 2016,
+      "region": "全国卷",
+      "paper_name": "2016年全国卷高考化学试卷",
+      "question_number": "T11",
+      "original_number": "11",
+      "question_type": "short_answer",
+      "content": "高锰酸钾（KMnO4）是一种常用氧化剂，主要用于化工、防腐及制",
+      "options": null,
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "氧化还原"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "氧化还原"
+    },
+    {
+      "exam_id": "全国卷_2016_t12",
+      "source": "全国卷2016",
+      "year": 2016,
+      "region": "全国卷",
+      "paper_name": "2016年全国卷高考化学试卷",
+      "question_number": "T12",
+      "original_number": "12",
+      "question_type": "short_answer",
+      "content": "锗（Ge）是典型的半导体元素，在电子、材料等领域应用广泛．回",
+      "options": null,
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "综合"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "综合"
+    },
+    {
+      "exam_id": "全国卷_2016_t13",
+      "source": "全国卷2016",
+      "year": 2016,
+      "region": "全国卷",
+      "paper_name": "2016年全国卷高考化学试卷",
+      "question_number": "T13",
+      "original_number": "13",
+      "question_type": "short_answer",
+      "content": "秸秆（含多糖类物质）的综合利用具有重要的意义．下面是以秸秆",
+      "options": null,
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "综合"
+      ],
+      "difficulty": "hard",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "综合"
+    }
+  ]
+}

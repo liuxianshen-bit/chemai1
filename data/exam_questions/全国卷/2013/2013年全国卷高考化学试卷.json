@@ -1,0 +1,291 @@
+{
+  "paper_name": "2013年全国卷高考化学试卷",
+  "region": "全国卷",
+  "year": 2013,
+  "total_score": 100,
+  "exam_date": "2013-06-08",
+  "questions": [
+    {
+      "exam_id": "全国卷_2013_t1",
+      "source": "全国卷2013",
+      "year": 2013,
+      "region": "全国卷",
+      "paper_name": "2013年全国卷高考化学试卷",
+      "question_number": "T1",
+      "original_number": "1",
+      "question_type": "single_choice",
+      "content": "化学无处不在，与化学有关的说法不正确的是（ ）",
+      "options": [
+        "A. 侯氏制碱法的工艺过程中应用了物质溶解度的差异",
+        "B. 可用蘸浓盐酸的棉棒检验输送氨气的管道是否漏气",
+        "C. 碘是人体必需微量元素，所以要多吃富含高碘酸的食物",
+        "D. 黑火药由硫磺、硝石、木炭三种物质按一定比例混合制成"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "综合"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "综合"
+    },
+    {
+      "exam_id": "全国卷_2013_t2",
+      "source": "全国卷2013",
+      "year": 2013,
+      "region": "全国卷",
+      "paper_name": "2013年全国卷高考化学试卷",
+      "question_number": "T2",
+      "original_number": "2",
+      "question_type": "single_choice",
+      "content": "香叶醇是合成玫瑰香油的主要原料，其结构简式如图所示：下列有关",
+      "options": [
+        "A. 香叶醇的分子式为 C10H18O",
+        "B. 不能使溴的四氯化碳溶液褪色",
+        "C. 不能使酸性高锰酸钾溶液褪色",
+        "D. 能发生加成反应不能发生取代反应"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "醇"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "醇"
+    },
+    {
+      "exam_id": "全国卷_2013_t3",
+      "source": "全国卷2013",
+      "year": 2013,
+      "region": "全国卷",
+      "paper_name": "2013年全国卷高考化学试卷",
+      "question_number": "T3",
+      "original_number": "3",
+      "question_type": "short_answer",
+      "content": "短周期元素 W、X、Y、Z 的原子序数依次增大，其简单离子都能破",
+      "options": [
+        "A. W2﹣、X+  B．X+、Y3+  C．Y3+、Z2﹣  D．X+、Z2﹣"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "综合"
+      ],
+      "difficulty": "easy",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "综合"
+    },
+    {
+      "exam_id": "全国卷_2013_t4",
+      "source": "全国卷2013",
+      "year": 2013,
+      "region": "全国卷",
+      "paper_name": "2013年全国卷高考化学试卷",
+      "question_number": "T4",
+      "original_number": "4",
+      "question_type": "single_choice",
+      "content": "银制器皿日久表面会逐渐变黑，这是生成了 Ag2S 的缘故．根据电化",
+      "options": [
+        "A. 处理过程中银器一直保持恒重",
+        "B. 银器为正极，Ag2S 被还原生成单质银",
+        "C. 该过程中总反应为 2Al+3Ag2S═6Ag+Al2S3",
+        "D. 黑色褪去的原因是黑色 Ag2S 转化为白色 AgCl",
+        "A. Cl﹣、Br﹣、CrO42﹣   B．CrO42﹣、Br﹣、Cl﹣",
+        "C. Br﹣、Cl﹣、CrO42﹣   D．Br﹣、CrO42﹣、Cl﹣"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "综合"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "综合"
+    },
+    {
+      "exam_id": "全国卷_2013_t6",
+      "source": "全国卷2013",
+      "year": 2013,
+      "region": "全国卷",
+      "paper_name": "2013年全国卷高考化学试卷",
+      "question_number": "T6",
+      "original_number": "6",
+      "question_type": "short_answer",
+      "content": "分子式为 C5H10O2 的有机物在酸性条件下可水解为酸和醇，若不考虑",
+      "options": [
+        "A. 28 种  B．32 种     C．40 种           D．48 种"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "盐类水解",
+        "有机物",
+        "醇"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "盐类水解"
+    },
+    {
+      "exam_id": "全国卷_2013_t7",
+      "source": "全国卷2013",
+      "year": 2013,
+      "region": "全国卷",
+      "paper_name": "2013年全国卷高考化学试卷",
+      "question_number": "T7",
+      "original_number": "7",
+      "question_type": "short_answer",
+      "content": "下列实验中，所采取的分离方法与对应原理都正确的是（ ）",
+      "options": [
+        "A. A     B．B        C．C              D．D"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "实验"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "实验"
+    },
+    {
+      "exam_id": "全国卷_2013_t8",
+      "source": "全国卷2013",
+      "year": 2013,
+      "region": "全国卷",
+      "paper_name": "2013年全国卷高考化学试卷",
+      "question_number": "T8",
+      "original_number": "8",
+      "question_type": "short_answer",
+      "content": "醇脱水是合成烯烃的常用方法，实验室合成环己烯的反应和实验装",
+      "options": [
+        "A. 立即补加 B．冷却后补加 C．不需补加 D．重新配料",
+        "A. 蒸馏烧瓶 B．温度计 C．吸滤瓶 D．球形冷凝管 E．接收器",
+        "A. 41% B.50% C.61% D.70%"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "醇",
+        "实验"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "醇"
+    },
+    {
+      "exam_id": "全国卷_2013_t9",
+      "source": "全国卷2013",
+      "year": 2013,
+      "region": "全国卷",
+      "paper_name": "2013年全国卷高考化学试卷",
+      "question_number": "T9",
+      "original_number": "9",
+      "question_type": "short_answer",
+      "content": "锂离子电池的应用很广，其正极材料可再生利用．某锂离子电池正",
+      "options": null,
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "综合"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "综合"
+    },
+    {
+      "exam_id": "全国卷_2013_t10",
+      "source": "全国卷2013",
+      "year": 2013,
+      "region": "全国卷",
+      "paper_name": "2013年全国卷高考化学试卷",
+      "question_number": "T10",
+      "original_number": "10",
+      "question_type": "short_answer",
+      "content": "二甲醚（CH3OCH3）是无色气体，可作为一种新型能源．由合成气",
+      "options": null,
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "综合"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "综合"
+    },
+    {
+      "exam_id": "全国卷_2013_t11",
+      "source": "全国卷2013",
+      "year": 2013,
+      "region": "全国卷",
+      "paper_name": "2013年全国卷高考化学试卷",
+      "question_number": "T11",
+      "original_number": "11",
+      "question_type": "short_answer",
+      "content": "[化学﹣选修 2：化学与技术]",
+      "options": null,
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "综合"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "综合"
+    },
+    {
+      "exam_id": "全国卷_2013_t12",
+      "source": "全国卷2013",
+      "year": 2013,
+      "region": "全国卷",
+      "paper_name": "2013年全国卷高考化学试卷",
+      "question_number": "T12",
+      "original_number": "12",
+      "question_type": "short_answer",
+      "content": "[化学﹣选修 3：物质结构与性质]",
+      "options": null,
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "综合"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "综合"
+    },
+    {
+      "exam_id": "全国卷_2013_t13",
+      "source": "全国卷2013",
+      "year": 2013,
+      "region": "全国卷",
+      "paper_name": "2013年全国卷高考化学试卷",
+      "question_number": "T13",
+      "original_number": "13",
+      "question_type": "short_answer",
+      "content": "[化学﹣选修 5：有机化学基础]",
+      "options": null,
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "综合"
+      ],
+      "difficulty": "easy",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "综合"
+    }
+  ]
+}

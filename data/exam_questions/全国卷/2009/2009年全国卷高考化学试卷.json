@@ -1,0 +1,291 @@
+{
+  "paper_name": "2009年全国卷高考化学试卷",
+  "region": "全国卷",
+  "year": 2009,
+  "total_score": 100,
+  "exam_date": "2009-06-08",
+  "questions": [
+    {
+      "exam_id": "全国卷_2009_t1",
+      "source": "全国卷2009",
+      "year": 2009,
+      "region": "全国卷",
+      "paper_name": "2009年全国卷高考化学试卷",
+      "question_number": "T1",
+      "original_number": "1",
+      "question_type": "short_answer",
+      "content": "下列各组离子，在溶液中能大量共存、加入 NaOH 溶液后加热既有",
+      "options": [
+        "A. Ba2+、NO3﹣、NH4+、Cl﹣  B．Ca2+、HCO3﹣、NH4+、AlO2﹣",
+        "C. K+、Ba2+、Cl﹣、HSO3﹣   D．Mg2+、NH4+、SO42﹣、K+"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "胶体"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "胶体"
+    },
+    {
+      "exam_id": "全国卷_2009_t2",
+      "source": "全国卷2009",
+      "year": 2009,
+      "region": "全国卷",
+      "paper_name": "2009年全国卷高考化学试卷",
+      "question_number": "T2",
+      "original_number": "2",
+      "question_type": "short_answer",
+      "content": "将 15mL 2mol•L﹣1 Na2CO3 溶液逐滴加入到 40mL 0.5mol•L﹣1 MCln 盐",
+      "options": [
+        "A. 4  B．3              C．2              D．1"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "胶体"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "胶体"
+    },
+    {
+      "exam_id": "全国卷_2009_t3",
+      "source": "全国卷2009",
+      "year": 2009,
+      "region": "全国卷",
+      "paper_name": "2009年全国卷高考化学试卷",
+      "question_number": "T3",
+      "original_number": "3",
+      "question_type": "single_choice",
+      "content": "下列表示溶液中发生反应的化学方程式错误的是（ ）",
+      "options": [
+        "A. 2Al+2NaOH+2H2O=2NaAlO2+3H2↑",
+        "B. KMnO4+HCOOH+KOH=2K2MnO4+CO2↑+H2O",
+        "C. MnO2+4HCl（浓）        MnCl2+Cl2↑+2H2O",
+        "D. K2Cr2O7+6FeSO4+7H2SO4=Cr2（SO4）3+3Fe2（SO4）3+K2SO4+7H2O"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "胶体"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "胶体"
+    },
+    {
+      "exam_id": "全国卷_2009_t4",
+      "source": "全国卷2009",
+      "year": 2009,
+      "region": "全国卷",
+      "paper_name": "2009年全国卷高考化学试卷",
+      "question_number": "T4",
+      "original_number": "4",
+      "question_type": "short_answer",
+      "content": "现有乙酸和两种链状单烯烃的混合物，若其中氧的质量分数为 a，则",
+      "options": [
+        "A. B．               C．               D．"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "综合"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "综合"
+    },
+    {
+      "exam_id": "全国卷_2009_t5",
+      "source": "全国卷2009",
+      "year": 2009,
+      "region": "全国卷",
+      "paper_name": "2009年全国卷高考化学试卷",
+      "question_number": "T5",
+      "original_number": "5",
+      "question_type": "single_choice",
+      "content": "用 0.10mol•L﹣1 的盐酸滴定 0.10mol•L﹣1 的氨水，滴定过程中不可能",
+      "options": [
+        "A. c（NH4+）＞c（Cl﹣），c（OH﹣）＞c（H+）",
+        "B. c（NH4+）=c（Cl﹣），c（OH﹣）=c（H+）",
+        "C. c（Cl﹣）＞c（NH4+），c（OH﹣）＞c（H+）",
+        "D. c（Cl﹣）＞c（NH4+），c（H+）＞c（OH﹣）"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "综合"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "综合"
+    },
+    {
+      "exam_id": "全国卷_2009_t6",
+      "source": "全国卷2009",
+      "year": 2009,
+      "region": "全国卷",
+      "paper_name": "2009年全国卷高考化学试卷",
+      "question_number": "T6",
+      "original_number": "6",
+      "question_type": "short_answer",
+      "content": "为了检验某含有 NaHCO3 杂质的 Na2CO3 样品的纯度，现将 w1 g 样",
+      "options": [
+        "A. B．",
+        "C. D．"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "实验"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "实验"
+    },
+    {
+      "exam_id": "全国卷_2009_t7",
+      "source": "全国卷2009",
+      "year": 2009,
+      "region": "全国卷",
+      "paper_name": "2009年全国卷高考化学试卷",
+      "question_number": "T7",
+      "original_number": "7",
+      "question_type": "single_choice",
+      "content": "有关下图所示化合物的说法不正确的是 （ ）",
+      "options": [
+        "A. 既可以与 Br2 的 CCl4 溶液发生加成反应，又可以在光照下与 Br2 发生取代",
+        "B. 1mol 该化合物最多可以与 3molNaOH 反应",
+        "C. 既可以催化加氢，又可以使酸性 KMnO4 溶液褪色",
+        "D. 既可以与 FeCl3 溶液发生显色反应，又可以与 NaHCO3 溶液反应放出 CO2"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "综合"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "综合"
+    },
+    {
+      "exam_id": "全国卷_2009_t8",
+      "source": "全国卷2009",
+      "year": 2009,
+      "region": "全国卷",
+      "paper_name": "2009年全国卷高考化学试卷",
+      "question_number": "T8",
+      "original_number": "8",
+      "question_type": "single_choice",
+      "content": "右图表示反应 X（g） 4Y（g）+Z（g），△H＜0，在某温度时 X",
+      "options": [
+        "A. 第 6min 后，反应就终止了",
+        "B. X 的平衡转化率为 85%",
+        "C. 若升高温度，X 的平衡转化率将大于 85%",
+        "D. 若降低温度，v 正和 v 逆将以同样倍数减小"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "综合"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "综合"
+    },
+    {
+      "exam_id": "全国卷_2009_t9",
+      "source": "全国卷2009",
+      "year": 2009,
+      "region": "全国卷",
+      "paper_name": "2009年全国卷高考化学试卷",
+      "question_number": "T9",
+      "original_number": "9",
+      "question_type": "short_answer",
+      "content": "浓 H2SO4 和木炭在加热时发生反应的化学方程式是",
+      "options": null,
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "综合"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "综合"
+    },
+    {
+      "exam_id": "全国卷_2009_t10",
+      "source": "全国卷2009",
+      "year": 2009,
+      "region": "全国卷",
+      "paper_name": "2009年全国卷高考化学试卷",
+      "question_number": "T10",
+      "original_number": "10",
+      "question_type": "short_answer",
+      "content": "右图所示装置中，甲、乙、丙三个烧杯依次分别盛放 100g 5.00%",
+      "options": null,
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "综合"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "综合"
+    },
+    {
+      "exam_id": "全国卷_2009_t11",
+      "source": "全国卷2009",
+      "year": 2009,
+      "region": "全国卷",
+      "paper_name": "2009年全国卷高考化学试卷",
+      "question_number": "T11",
+      "original_number": "11",
+      "question_type": "short_answer",
+      "content": "已知周期表中，元素 R、Q、W、Y 与元素 X 相邻．R 与 Y 同",
+      "options": null,
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "综合"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "综合"
+    },
+    {
+      "exam_id": "全国卷_2009_t12",
+      "source": "全国卷2009",
+      "year": 2009,
+      "region": "全国卷",
+      "paper_name": "2009年全国卷高考化学试卷",
+      "question_number": "T12",
+      "original_number": "12",
+      "question_type": "short_answer",
+      "content": "化合物 H 是一种香料，存在于金橘中，可用如下路线合成：",
+      "options": null,
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "综合"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "综合"
+    }
+  ]
+}

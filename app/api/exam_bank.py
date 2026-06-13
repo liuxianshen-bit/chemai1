@@ -200,6 +200,30 @@ async def get_exam_set_detail(set_id: str, db: Session = Depends(get_db)):
     }
 
 
+@router.delete("/exam-sets/{set_id}/questions/{question_id}", response_model=Dict)
+async def remove_question_from_set(set_id: str, question_id: str, db: Session = Depends(get_db)):
+    """从题库中移除单道题目"""
+    question_set = db.query(QuestionSet).filter(QuestionSet.set_id == set_id).first()
+    if not question_set:
+        raise HTTPException(status_code=404, detail=f"题库 {set_id} 不存在")
+
+    # 删除关联
+    deleted = db.query(QuestionSetItem).filter(
+        QuestionSetItem.set_id == set_id,
+        QuestionSetItem.question_id == question_id
+    ).delete()
+
+    if deleted:
+        # 更新题目计数
+        question_set.question_count = db.query(QuestionSetItem).filter(
+            QuestionSetItem.set_id == set_id
+        ).count()
+        db.commit()
+        return {"success": True, "message": "题目已从题库移除"}
+    else:
+        return {"success": False, "message": "题库中未找到该题目"}
+
+
 @router.delete("/exam-sets/{set_id}", response_model=Dict)
 async def delete_exam_set(set_id: str, db: Session = Depends(get_db)):
     """
@@ -383,6 +407,25 @@ async def import_questions_to_set(request: ImportQuestionsRequest, db: Session =
     except Exception as e:
         db.rollback()
         return {"success": False, "message": f"导入失败: {str(e)}"}
+
+
+# ==================== 试卷分组查询 API ====================
+
+@router.get("/papers", response_model=Dict)
+async def get_papers_grouped():
+    """获取所有真题试卷，按地区→年份分组"""
+    from app.services.exam_bank import exam_bank_service
+    groups = exam_bank_service.get_papers_grouped()
+    total_papers = sum(len(y["papers"]) for g in groups for y in g["years"])
+    total_questions = len(exam_bank_service.questions)
+    return {
+        "success": True,
+        "data": {
+            "total_papers": total_papers,
+            "total_questions": total_questions,
+            "groups": groups
+        }
+    }
 
 
 # ==================== 历史真题查询 API ====================

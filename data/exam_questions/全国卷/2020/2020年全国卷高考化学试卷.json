@@ -1,0 +1,279 @@
+{
+  "paper_name": "2020年全国卷高考化学试卷",
+  "region": "全国卷",
+  "year": 2020,
+  "total_score": 100,
+  "exam_date": "2020-06-08",
+  "questions": [
+    {
+      "exam_id": "全国卷_2020_t1",
+      "source": "全国卷2020",
+      "year": 2020,
+      "region": "全国卷",
+      "paper_name": "2020年全国卷高考化学试卷",
+      "question_number": "T1",
+      "original_number": "1",
+      "question_type": "single_choice",
+      "content": "国家卫健委公布的新型冠状病毒肺炎诊疗方案指出，乙醚、75%乙醇、含氯消毒",
+      "options": [
+        "A. CH3CH2OH 能与水互溶",
+        "B. NaClO 通过氧化灭活病毒",
+        "C. 过氧乙酸相对分子质量为 76",
+        "D. 氯仿的化学名称是四氯化碳"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "醇",
+        "非金属"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "醇"
+    },
+    {
+      "exam_id": "全国卷_2020_t2",
+      "source": "全国卷2020",
+      "year": 2020,
+      "region": "全国卷",
+      "paper_name": "2020年全国卷高考化学试卷",
+      "question_number": "T2",
+      "original_number": "2",
+      "question_type": "single_choice",
+      "content": "紫花前胡醇（ ）可从中药材当归和白芷中提取得到，能",
+      "options": [
+        "A. 分子式为 C14H14O4",
+        "B. 不能使酸性重铬酸钾溶液变色",
+        "C. 能够发生水解反应",
+        "D. 能够发生消去反应生成双键"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "醇"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "醇"
+    },
+    {
+      "exam_id": "全国卷_2020_t3",
+      "source": "全国卷2020",
+      "year": 2020,
+      "region": "全国卷",
+      "paper_name": "2020年全国卷高考化学试卷",
+      "question_number": "T3",
+      "original_number": "3",
+      "question_type": "single_choice",
+      "content": "下列气体去除杂质的方法中，不能实现目的的是（ ）",
+      "options": [
+        "A. SO2（H2S）       通过酸性高锰酸钾溶液",
+        "B. Cl2（HCl）       通过饱和的食盐水",
+        "C. N2（O2）         通过灼热的铜丝网",
+        "D. NO（NO2）          通过氢氧化钠溶液",
+        "A. A            B．B  C．C              D．D"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "综合"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "综合"
+    },
+    {
+      "exam_id": "全国卷_2020_t4",
+      "source": "全国卷2020",
+      "year": 2020,
+      "region": "全国卷",
+      "paper_name": "2020年全国卷高考化学试卷",
+      "question_number": "T4",
+      "original_number": "4",
+      "question_type": "single_choice",
+      "content": "铑的配合物离子（Rh（CO）2I2]﹣可催化甲醇羰基化，反应过程如图所示。下列",
+      "options": [
+        "A. CH3COI 是反应中间体",
+        "B. 甲醇羰基化反应为 CH3OH+CO═CH3CO2H",
+        "C. 反应过程中 Rh 的成键数目保持不变",
+        "D. 存在反应 CH3OH+HI═CH3I+H2O"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "醇"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "醇"
+    },
+    {
+      "exam_id": "全国卷_2020_t5",
+      "source": "全国卷2020",
+      "year": 2020,
+      "region": "全国卷",
+      "paper_name": "2020年全国卷高考化学试卷",
+      "question_number": "T5",
+      "original_number": "5",
+      "question_type": "single_choice",
+      "content": "1934 年约里奥﹣居里夫妇在核反应中用 α 粒子（即氦核 He）轰击金属原子 X，",
+      "options": [
+        "A. X 的相对原子质量为 26",
+        "B. X、Y 均可形成三氯化物",
+        "C. X 的原子半径小于 Y 的",
+        "D. Y 仅有一种含氧酸"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "金属"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "金属"
+    },
+    {
+      "exam_id": "全国卷_2020_t6",
+      "source": "全国卷2020",
+      "year": 2020,
+      "region": "全国卷",
+      "paper_name": "2020年全国卷高考化学试卷",
+      "question_number": "T6",
+      "original_number": "6",
+      "question_type": "single_choice",
+      "content": "科学家近年发明了一种新型 Zn﹣CO2 水介质电池。电池示意图如图，电极为金",
+      "options": [
+        "A. 放电时，负极反应为 Zn﹣2e﹣+4OH﹣═Zn（OH）42﹣",
+        "B. 放电时，1mol CO2 转化为 HCOOH，转移的电子数为 2mol",
+        "C. 充电时，电池总反应为 2Zn（OH）42﹣═2Zn+O2↑+4OH﹣+2H2O",
+        "D. 充电时，正极溶液中 OH﹣浓度升高"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "综合"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "综合"
+    },
+    {
+      "exam_id": "全国卷_2020_t7",
+      "source": "全国卷2020",
+      "year": 2020,
+      "region": "全国卷",
+      "paper_name": "2020年全国卷高考化学试卷",
+      "question_number": "T7",
+      "original_number": "7",
+      "question_type": "single_choice",
+      "content": "以酚酞为指示剂，用 0.1000mol•L﹣1 的 NaOH 溶液滴定 20.00mL 未知浓度的二元",
+      "options": [
+        "A. 曲线①代表δ（H2A），曲线②代表δ（HA﹣）",
+        "B. H2A 溶液的浓度为 0.2000mol•L﹣1",
+        "C. HA﹣的电离常数 Ka＝1.0×10﹣2",
+        "D. 滴定终点时，溶液中 c（Na+）＜2c（A2﹣）+c（HA﹣）"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "胶体",
+        "物质的量"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "胶体"
+    },
+    {
+      "exam_id": "全国卷_2020_t8",
+      "source": "全国卷2020",
+      "year": 2020,
+      "region": "全国卷",
+      "paper_name": "2020年全国卷高考化学试卷",
+      "question_number": "T8",
+      "original_number": "8",
+      "question_type": "short_answer",
+      "content": "钒具有广泛用途。黏土钒矿中，钒以+3、+4、+5 价的化合物存在，还包括钾、",
+      "options": null,
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "综合"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "综合"
+    },
+    {
+      "exam_id": "全国卷_2020_t9",
+      "source": "全国卷2020",
+      "year": 2020,
+      "region": "全国卷",
+      "paper_name": "2020年全国卷高考化学试卷",
+      "question_number": "T9",
+      "original_number": "9",
+      "question_type": "short_answer",
+      "content": "为验证不同化合价铁的氧化还原能力，利用下列电池装置进行实验。",
+      "options": null,
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "金属",
+        "实验"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "金属"
+    },
+    {
+      "exam_id": "全国卷_2020_t10",
+      "source": "全国卷2020",
+      "year": 2020,
+      "region": "全国卷",
+      "paper_name": "2020年全国卷高考化学试卷",
+      "question_number": "T10",
+      "original_number": "10",
+      "question_type": "short_answer",
+      "content": "硫酸是一种重要的基本化工产品。接触法制硫酸生产中的关键工序是 SO2 的催",
+      "options": null,
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "非金属"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "非金属"
+    },
+    {
+      "exam_id": "全国卷_2020_t11",
+      "source": "全国卷2020",
+      "year": 2020,
+      "region": "全国卷",
+      "paper_name": "2020年全国卷高考化学试卷",
+      "question_number": "T11",
+      "original_number": "11",
+      "question_type": "short_answer",
+      "content": "Goodenough 等人因在锂离子电池及钴酸锂、磷酸铁锂等正极材料研究方面的",
+      "options": null,
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "金属"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "金属"
+    }
+  ]
+}

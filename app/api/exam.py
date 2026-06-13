@@ -8,7 +8,7 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 import uuid
 
-from app.models.database import ExamRecord, Class, Student, StudentAnswer, Question, get_db, RecordType
+from app.models.database import ExamRecord, Class, Student, StudentAnswer, Question, get_db, RecordType, Difficulty, QuestionSource, AuditStatus
 
 router = APIRouter()
 
@@ -32,7 +32,7 @@ class ExamResponse(BaseModel):
     exam_date: Optional[datetime] = None
 
 
-@router.post("/create", response_model=ExamResponse)
+@router.post("/create")
 async def create_exam(request: ExamCreateRequest, db: Session = Depends(get_db)):
     """创建新考试记录"""
     # 验证班级存在
@@ -59,16 +59,17 @@ async def create_exam(request: ExamCreateRequest, db: Session = Depends(get_db))
     db.commit()
     db.refresh(exam_record)
 
-    return ExamResponse(
-        record_id=exam_record.record_id,
-        class_id=exam_record.class_id,
-        name=exam_record.name,
-        type=exam_record.type.value,
-        total_students=exam_record.total_students or 0,
-        present_students=exam_record.present_students or 0,
-        avg_score=exam_record.avg_score,
-        exam_date=exam_record.exam_date
-    )
+    return {
+        "success": True,
+        "record_id": exam_record.record_id,
+        "class_id": exam_record.class_id,
+        "name": exam_record.name,
+        "type": exam_record.type.value if exam_record.type else "exam",
+        "total_students": exam_record.total_students or 0,
+        "present_students": exam_record.present_students or 0,
+        "avg_score": exam_record.avg_score,
+        "exam_date": exam_record.exam_date.isoformat() if exam_record.exam_date else None
+    }
 
 
 @router.get("/list/{class_id}")
@@ -85,6 +86,7 @@ async def list_exams(class_id: str, db: Session = Depends(get_db)):
     ).order_by(ExamRecord.exam_date.desc()).all()
 
     return {
+        "success": True,
         "class_id": class_id,
         "class_name": class_obj.name,
         "total_exams": len(exams),
@@ -275,17 +277,37 @@ class AddQuestionsRequest(BaseModel):
 
 @router.post("/{exam_id}/questions")
 async def add_questions_to_exam(exam_id: str, request: AddQuestionsRequest, db: Session = Depends(get_db)):
-    """批量将已有题目关联到考试"""
+    """批量将已有题目关联到考试（同时支持题库题目和历史真题）"""
     exam = db.query(ExamRecord).filter(ExamRecord.record_id == exam_id).first()
     if not exam:
         raise HTTPException(status_code=404, detail=f"考试记录 {exam_id} 不存在")
 
+    from app.services.exam_bank import exam_bank_service
     updated = 0
     for qid in request.question_ids:
         q = db.query(Question).filter(Question.question_id == qid).first()
         if q:
             q.record_id = exam_id
             updated += 1
+        else:
+            # 尝试从历史真题库查找
+            hq = exam_bank_service.get_by_exam_id(qid)
+            if hq:
+                q = Question(
+                    question_id=qid,
+                    record_id=exam_id,
+                    content=hq.content,
+                    options=hq.options,
+                    answer=hq.answer,
+                    analysis=hq.analysis or "",
+                    knowledge_points=hq.knowledge_points,
+                    difficulty=Difficulty.MEDIUM if hq.difficulty == "medium" else (Difficulty.EASY if hq.difficulty == "easy" else Difficulty.HARD),
+                    source=QuestionSource.MANUAL_SELECTED,
+                    source_exam=hq.source,
+                    audit_status=AuditStatus.PASSED
+                )
+                db.add(q)
+                updated += 1
 
     db.commit()
     return {"success": True, "updated": updated, "total": len(request.question_ids)}

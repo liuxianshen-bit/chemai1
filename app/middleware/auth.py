@@ -15,7 +15,7 @@ import os
 # JWT配置
 SECRET_KEY = os.getenv("CHEMAI_JWT_SECRET", "chemai-secret-key-change-in-production")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_HOURS = 1
+ACCESS_TOKEN_EXPIRE_HOURS = 24  # 开发阶段延长至24小时
 REFRESH_TOKEN_EXPIRE_DAYS = 7
 
 # 权限配置

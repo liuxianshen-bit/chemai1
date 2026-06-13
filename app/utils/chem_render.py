@@ -101,6 +101,9 @@ _SKIP_KEYS = {
     'school_id', 'exam_id', 'record_id', 'question_id', 'answer_id',
     'config_id', 'set_id', 'item_id', 'kp_id', 'task_id', 'grade_id',
     'notification_id', 'binding_id', 'log_id', 'user_id', 'preview_id',
+    # 日期时间字段（避免化学渲染器转换ISO时间戳中的数字）
+    'exam_date', 'created_at', 'updated_at', 'generated_at', 'answered_at',
+    'published_at', 'added_at',
 }
 
 def render_chem_deep(obj, _key: str = ""):

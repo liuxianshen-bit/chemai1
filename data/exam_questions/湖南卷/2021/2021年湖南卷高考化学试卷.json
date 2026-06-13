@@ -1,0 +1,438 @@
+{
+  "paper_name": "2021年湖南卷高考化学试卷",
+  "region": "湖南卷",
+  "year": 2021,
+  "total_score": 100,
+  "exam_date": "2021-06-08",
+  "questions": [
+    {
+      "exam_id": "湖南卷_2021_t1",
+      "source": "湖南卷2021",
+      "year": 2021,
+      "region": "湖南卷",
+      "paper_name": "2021年湖南卷高考化学试卷",
+      "question_number": "T1",
+      "original_number": "1",
+      "question_type": "single_choice",
+      "content": "下列有关湘江流域的治理和生态修复的措施中，没有涉及到化学变化的是",
+      "options": [
+        "A. 定期清淤，疏通河道",
+        "B. 化工企业“三废”处理后，达标排放",
+        "C. 利用微生物降解水域中的有毒有害物质",
+        "D. 河道中的垃圾回收分类后，进行无害化处理"
+      ],
+      "answer": "A",
+      "analysis": "",
+      "knowledge_points": [
+        "综合"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "综合"
+    },
+    {
+      "exam_id": "湖南卷_2021_t2",
+      "source": "湖南卷2021",
+      "year": 2021,
+      "region": "湖南卷",
+      "paper_name": "2021年湖南卷高考化学试卷",
+      "question_number": "T2",
+      "original_number": "2",
+      "question_type": "single_choice",
+      "content": "下列说法正确的是",
+      "options": [
+        "A. 糖类、蛋白质均属于天然有机高分子化合物",
+        "B. FeO 粉末在空气中受热，迅速被氧化成 Fe3O4",
+        "C. SO2 可漂白纸浆，不可用于杀菌、消毒",
+        "D. 镀锌铁皮的镀层破损后，铁皮会加速腐蚀"
+      ],
+      "answer": "B",
+      "analysis": "",
+      "knowledge_points": [
+        "综合"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "综合"
+    },
+    {
+      "exam_id": "湖南卷_2021_t3",
+      "source": "湖南卷2021",
+      "year": 2021,
+      "region": "湖南卷",
+      "paper_name": "2021年湖南卷高考化学试卷",
+      "question_number": "T3",
+      "original_number": "3",
+      "question_type": "short_answer",
+      "content": "下列实验设计不能达到实验目的的是",
+      "options": [
+        "A. A            B. B  C. C          D. D"
+      ],
+      "answer": "C",
+      "analysis": "",
+      "knowledge_points": [
+        "实验"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "实验"
+    },
+    {
+      "exam_id": "湖南卷_2021_t4",
+      "source": "湖南卷2021",
+      "year": 2021,
+      "region": "湖南卷",
+      "paper_name": "2021年湖南卷高考化学试卷",
+      "question_number": "T4",
+      "original_number": "4",
+      "question_type": "single_choice",
+      "content": "已二酸是一种重要的化工原料，科学家在现有工业路线基础上，提出了一条“绿色”合成路线：",
+      "options": [
+        "A. 苯与溴水混合，充分振荡后静置，下层溶液呈橙红色",
+        "B. 环己醇与乙醇互 为 同系物",
+        "C. 已二酸与 NaHCO3 溶液反应有 CO2 生成",
+        "D. 环己烷分子中所有碳原子共平面"
+      ],
+      "answer": "C",
+      "analysis": "",
+      "knowledge_points": [
+        "综合"
+      ],
+      "difficulty": "easy",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "综合"
+    },
+    {
+      "exam_id": "湖南卷_2021_t5",
+      "source": "湖南卷2021",
+      "year": 2021,
+      "region": "湖南卷",
+      "paper_name": "2021年湖南卷高考化学试卷",
+      "question_number": "T5",
+      "original_number": "5",
+      "question_type": "single_choice",
+      "content": "NA 为阿伏加德罗常数的值。下列说法正确的是",
+      "options": [
+        "A. 18gH218O 含有的中子数为10NA",
+        "B. 0.1mol × L-1HClO4 溶液中含有的 H+ 数为 0.1NA",
+        "C. 2molNO 与1molO2 在密闭容器中充分反应后的分子数为 2NA",
+        "D. 11.2LCH4 和 22.4LCl2 (均为标准状况)在光照下充分反应后的分子数为1.5NA"
+      ],
+      "answer": "D",
+      "analysis": "",
+      "knowledge_points": [
+        "物质的量"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "物质的量"
+    },
+    {
+      "exam_id": "湖南卷_2021_t6",
+      "source": "湖南卷2021",
+      "year": 2021,
+      "region": "湖南卷",
+      "paper_name": "2021年湖南卷高考化学试卷",
+      "question_number": "T6",
+      "original_number": "6",
+      "question_type": "single_choice",
+      "content": "一种工业制备无水氯化镁的工艺流程如下：",
+      "options": [
+        "A. 物质 X 常选用生石灰",
+        "B. 工业上常用电解熔融 MgCl2 制备金属镁",
+        "C. “氯化”过程中发生的反应为 MgO+C+Cl2                     MgCl2 +CO",
+        "D. “煅烧”后的产物中加稀盐酸，将所得溶液加热蒸发也可得到无水 MgCl2"
+      ],
+      "answer": "D",
+      "analysis": "",
+      "knowledge_points": [
+        "化工流程",
+        "非金属",
+        "实验"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "化工流程"
+    },
+    {
+      "exam_id": "湖南卷_2021_t7",
+      "source": "湖南卷2021",
+      "year": 2021,
+      "region": "湖南卷",
+      "paper_name": "2021年湖南卷高考化学试卷",
+      "question_number": "T7",
+      "original_number": "7",
+      "question_type": "single_choice",
+      "content": "W、X、Y、Z 为原子序数依次增大的短周期主族元素，Y 的原子序数等于 W 与 X 的原子序数之和，Z 的",
+      "options": [
+        "A. 简单离子半径： Z > X > Y",
+        "B. W 与 Y 能形成含有非极性键的化合物",
+        "C. X 和 Y 的最简单氢化物的沸点： X > Y",
+        "D. 由 W、X、Y 三种元素所组成化合物的水溶液均显酸性"
+      ],
+      "answer": "B",
+      "analysis": "",
+      "knowledge_points": [
+        "综合"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "综合"
+    },
+    {
+      "exam_id": "湖南卷_2021_t8",
+      "source": "湖南卷2021",
+      "year": 2021,
+      "region": "湖南卷",
+      "paper_name": "2021年湖南卷高考化学试卷",
+      "question_number": "T8",
+      "original_number": "8",
+      "question_type": "single_choice",
+      "content": "KIO3 常用作食盐中的补碘剂，可用“氯酸钾氧化法”制备，该方法的第一步反应为",
+      "options": [
+        "A. 产生 22.4L(标准状况) Cl2 时，反应中转移10mole-",
+        "B. 反应中氧化剂和还原剂的物质的量之比为 11：6",
+        "C. 可用石灰乳吸收反应产生的 Cl2 制备漂白粉",
+        "D. 可用酸化的淀粉碘化钾溶液检验食盐中 IO3- 的存在"
+      ],
+      "answer": "A",
+      "analysis": "",
+      "knowledge_points": [
+        "非金属",
+        "实验"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "非金属"
+    },
+    {
+      "exam_id": "湖南卷_2021_t9",
+      "source": "湖南卷2021",
+      "year": 2021,
+      "region": "湖南卷",
+      "paper_name": "2021年湖南卷高考化学试卷",
+      "question_number": "T9",
+      "original_number": "9",
+      "question_type": "short_answer",
+      "content": "常温下，用 0.1000mol × L-1 的盐酸分别滴定 20.00mL 浓度均为 0.1000mol × L-1 三种一元弱酸的钠盐",
+      "options": [
+        "A.   该 NaX 溶液中： c Na+ > c X-  > c OH-  > c H+ ",
+        "B. 三种一元弱酸的电离常数： Ka (HX) > Ka (HY) > Ka (HZ)"
+      ],
+      "answer": "C",
+      "analysis": "",
+      "knowledge_points": [
+        "物质的量"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "物质的量"
+    },
+    {
+      "exam_id": "湖南卷_2021_t10",
+      "source": "湖南卷2021",
+      "year": 2021,
+      "region": "湖南卷",
+      "paper_name": "2021年湖南卷高考化学试卷",
+      "question_number": "T10",
+      "original_number": "10",
+      "question_type": "single_choice",
+      "content": "锌溴液流电池是一种先进的水溶液电解质电池，广泛应用于再生能源储能和智能电网的备用电源等。三",
+      "options": [
+        "A. 放电时，N 极为正极",
+        "B. 放电时，左侧贮液器中 ZnBr2 的浓度不断减小",
+        "C. 充电时，M 极的电极反应式为 Zn2+ + 2e- = Zn",
+        "D. 隔膜允许阳离子通过，也允许阴离子通过"
+      ],
+      "answer": "B",
+      "analysis": "",
+      "knowledge_points": [
+        "电离",
+        "电解",
+        "胶体"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "电离"
+    },
+    {
+      "exam_id": "湖南卷_2021_t11",
+      "source": "湖南卷2021",
+      "year": 2021,
+      "region": "湖南卷",
+      "paper_name": "2021年湖南卷高考化学试卷",
+      "question_number": "T11",
+      "original_number": "11",
+      "question_type": "single_choice",
+      "content": "已知： A g + 2Bg ƒ 3C g DH < 0 ，向一恒温恒容的密闭容器中充入1molA 和 3molB 发生反应，",
+      "options": [
+        "A. 容器内压强不变，表明反应达到平衡",
+        "B. t2 时改变的条件：向容器中加入 C",
+        "C. 平衡时 A 的体积分数j ：j(II) > j(I)",
+        "D. 平衡常数 K： K (II) < K (I)"
+      ],
+      "answer": "BC",
+      "analysis": "",
+      "knowledge_points": [
+        "综合"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "综合"
+    },
+    {
+      "exam_id": "湖南卷_2021_t12",
+      "source": "湖南卷2021",
+      "year": 2021,
+      "region": "湖南卷",
+      "paper_name": "2021年湖南卷高考化学试卷",
+      "question_number": "T12",
+      "original_number": "12",
+      "question_type": "short_answer",
+      "content": "对下列粒子组在溶液中能否大量共存的判断和分析均正确的是",
+      "options": [
+        "A. A                  B. B               C. C                      D. D"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "胶体"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "胶体"
+    },
+    {
+      "exam_id": "湖南卷_2021_t13",
+      "source": "湖南卷2021",
+      "year": 2021,
+      "region": "湖南卷",
+      "paper_name": "2021年湖南卷高考化学试卷",
+      "question_number": "T13",
+      "original_number": "13",
+      "question_type": "single_choice",
+      "content": "1-丁醇、溴化钠和 70%的硫酸共热反应，经过回流、蒸馏、萃取分液制得 1-溴丁烷粗产品，装置如图所",
+      "options": [
+        "A. 装置 I 中回流的目的是为了减少物质的挥发，提高产率",
+        "B. 装置Ⅱ中 a 为进水口，b 为出水口",
+        "C. 用装置Ⅲ萃取分液时，将分层的液体依次从下放出",
+        "D. 经装置Ⅲ得到的粗产品干燥后，使用装置Ⅱ再次蒸馏，可得到更纯的产品",
+        "A. 该过程的总反应为 HCOOH  催化剂  CO2↑+H2↑",
+        "B. H+ 浓度过大或者过小，均导致反应速率降低",
+        "C. 该催化循环中 Fe 元素的化合价发生了变化",
+        "D. 该过程的总反应速率由Ⅱ→Ⅲ步骤决定"
+      ],
+      "answer": "AD",
+      "analysis": "",
+      "knowledge_points": [
+        "醇",
+        "非金属"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "醇"
+    },
+    {
+      "exam_id": "湖南卷_2021_t15",
+      "source": "湖南卷2021",
+      "year": 2021,
+      "region": "湖南卷",
+      "paper_name": "2021年湖南卷高考化学试卷",
+      "question_number": "T15",
+      "original_number": "15",
+      "question_type": "short_answer",
+      "content": "碳酸钠俗称纯碱，是一种重要的化工原料。以碳酸氢铵和氯化钠为原料制备碳酸钠，并测定产品中少量",
+      "options": [
+        "A. B.  C.    D."
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "非金属",
+        "实验"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "非金属"
+    },
+    {
+      "exam_id": "湖南卷_2021_t16",
+      "source": "湖南卷2021",
+      "year": 2021,
+      "region": "湖南卷",
+      "paper_name": "2021年湖南卷高考化学试卷",
+      "question_number": "T16",
+      "original_number": "16",
+      "question_type": "short_answer",
+      "content": "氨气中氢含量高，是一种优良的小分子储氢载体，且安全、易储运，可通过下面两种方法由氨气得到氢",
+      "options": [
+        "A. 25℃ B.125℃ C.225℃ D.325℃"
+      ],
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "综合"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "综合"
+    },
+    {
+      "exam_id": "湖南卷_2021_t18",
+      "source": "湖南卷2021",
+      "year": 2021,
+      "region": "湖南卷",
+      "paper_name": "2021年湖南卷高考化学试卷",
+      "question_number": "T18",
+      "original_number": "18",
+      "question_type": "short_answer",
+      "content": "硅、锗(Ge)及其化合物广泛应用于光电材料领域。回答下列问题：",
+      "options": null,
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "非金属"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "非金属"
+    },
+    {
+      "exam_id": "湖南卷_2021_t19",
+      "source": "湖南卷2021",
+      "year": 2021,
+      "region": "湖南卷",
+      "paper_name": "2021年湖南卷高考化学试卷",
+      "question_number": "T19",
+      "original_number": "19",
+      "question_type": "short_answer",
+      "content": "叶酸拮抗剂 Alimta(M) 是一种多靶向性抗癌药物。以苯和丁二酸酐为原料合成该化合物的路线如下：",
+      "options": null,
+      "answer": "",
+      "analysis": "",
+      "knowledge_points": [
+        "综合"
+      ],
+      "difficulty": "medium",
+      "discrimination": 0.5,
+      "score": 3,
+      "chapter": "综合"
+    }
+  ]
+}
