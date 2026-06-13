@@ -40,6 +40,7 @@ class ChemAgent:
         self.memory = MemoryStack()
         self._persona = self._load_persona(config.persona)
         self._provider = self._init_provider()
+        registry.set_provider(self._provider)
 
     def _load_persona(self, name: str) -> dict:
         """加载 Persona 配置"""
@@ -271,6 +272,7 @@ class ChemAgent:
                 self._provider = MiMoProvider()
 
         # Phase 1: Thinking
+        self.memory.add_turn("user", user_input)
         yield self._sse_event("phase", {"phase": "thinking"})
 
         think_result = await self._provider.chat(
@@ -324,7 +326,6 @@ class ChemAgent:
                     observation = f"search_exam_bank 无结果，web_search 也失败: {e}"
             else:
                 observation = f"工具 {skill_name} 返回结果:\n{json.dumps(skill_result, ensure_ascii=False)}"
-            self.memory.add_turn("user", user_input)
             self.memory.add_turn("assistant", observation)
 
             # Reply phase: clean prompt, no JSON format
@@ -354,7 +355,6 @@ class ChemAgent:
                 return
 
             # 空回复时再调用流式
-            self.memory.add_turn("user", user_input)
             reply_prompt = "你是高中化学教研助手。请用自然有帮助的方式直接回答。"
             reply_messages = [{"role": "system", "content": reply_prompt}]
             reply_messages.extend(self.memory.build_context(""))

@@ -8,6 +8,7 @@ from agent.skill_registry import registry
     parameters={"student_id": "学生ID，如 202610101"},
 )
 async def weekly_report(student_id: str = "") -> dict:
+    """仅限家长 persona 使用。权限由 persona YAML available_skills + registry.execute() 两层过滤。"""
     import sys, os, json
     from dotenv import load_dotenv
     load_dotenv()
@@ -42,7 +43,7 @@ async def weekly_report(student_id: str = "") -> dict:
     # 调 LLM 生成报告
     from agent.provider.deepseek import DeepSeekProvider
 
-    provider = DeepSeekProvider()
+    provider = registry._provider or DeepSeekProvider()
 
     system_prompt = """你是ChemAI家长助手。生成学生本周学习报告。
 

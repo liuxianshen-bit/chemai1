@@ -91,3 +91,21 @@ class MemoryStack:
             },
             ensure_ascii=False,
         )
+
+    def to_dict(self) -> dict:
+        """序列化为可持久化字典"""
+        return {
+            "working": list(self.working),
+            "episodic": self.episodic,
+            "student_profile": self.student_profile,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict, max_working: int = 20) -> "MemoryStack":
+        """从字典恢复记忆"""
+        stack = cls(max_working=max_working)
+        for turn in data.get("working", []):
+            stack.working.append(turn)
+        stack.episodic = data.get("episodic", {})
+        stack.student_profile = data.get("student_profile", {})
+        return stack

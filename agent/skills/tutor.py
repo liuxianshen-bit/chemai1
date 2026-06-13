@@ -17,7 +17,7 @@ async def chemistry_tutor(question: str = "", student_level: str = "中等") -> 
 
     from agent.provider.deepseek import DeepSeekProvider
 
-    provider = DeepSeekProvider()
+    provider = registry._provider or DeepSeekProvider()
 
     system_prompt = f"""你是高中化学AI助教。学生水平: {student_level}。
 

@@ -14,7 +14,7 @@ async def simulate_experiment(experiment_name: str = "") -> dict:
 
     from agent.provider.deepseek import DeepSeekProvider
 
-    provider = DeepSeekProvider()
+    provider = registry._provider or DeepSeekProvider()
 
     system_prompt = """你是高中化学实验教学专家。为指定实验生成完整报告。
 

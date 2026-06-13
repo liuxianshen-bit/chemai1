@@ -28,7 +28,7 @@ async def generate_questions(
     kps = [k.strip() for k in knowledge_points.split(",") if k.strip()]
     qty = int(quantity)
 
-    provider = DeepSeekProvider()
+    provider = registry._provider or DeepSeekProvider()
 
     system_prompt = """你是资深高中化学教师。根据知识点生成高质量的化学选择题。
 

@@ -1,12 +1,14 @@
 """
 Skill Registry — 装饰器注册 + OpenAI function calling 生成
 """
+import asyncio
 from typing import Any, Callable
 
 
 class SkillRegistry:
     def __init__(self):
         self._skills: dict[str, dict] = {}
+        self._provider = None  # 由 agent 注入，供需要 LLM 的 skill 复用
 
     def register(
         self,
@@ -28,14 +30,20 @@ class SkillRegistry:
         return decorator
 
     async def execute(self, name: str, args: dict) -> dict:
-        """执行指定 Skill"""
+        """执行指定 Skill（30s 超时保护）"""
         if name not in self._skills:
             return {"error": f"Skill '{name}' not found"}
         try:
             func = self._skills[name]["func"]
-            return await func(**args)
+            return await asyncio.wait_for(func(**args), timeout=30)
+        except asyncio.TimeoutError:
+            return {"error": f"Skill '{name}' timed out after 30s"}
         except Exception as e:
             return {"error": f"Skill '{name}' failed: {str(e)}"}
+
+    def set_provider(self, provider):
+        """注入 LLM provider，供 skill 通过 registry._provider 获取"""
+        self._provider = provider
 
     def to_openai_tools(self, strict: bool = True) -> list[dict]:
         """生成 OpenAI function calling 格式的 tool definitions。strict=True 时启用 DeepSeek Strict Mode。"""
