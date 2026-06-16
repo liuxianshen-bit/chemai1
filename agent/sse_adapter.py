@@ -63,7 +63,7 @@ class SSEAdapter:
                     success = False
             except (json.JSONDecodeError, TypeError):
                 pass
-            tool_name = self._tool_name or "unknown"
+            tool_name = getattr(raw, 'tool_name', None) or self._tool_name or 'unknown'
             return [json.dumps({
                 "type": "tool_result",
                 "name": tool_name,

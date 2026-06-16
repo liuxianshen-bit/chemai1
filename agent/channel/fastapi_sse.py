@@ -62,6 +62,7 @@ async def agent_chat(request: ChatRequest):
         persona=request.persona,
         provider=request.provider,
         deps=deps,
+        user_message=request.message,
     )
 
     try:
@@ -116,6 +117,7 @@ async def agent_chat_stream(request: ChatRequest):
         persona=request.persona,
         provider=request.provider,
         deps=deps,
+        user_message=request.message,
     )
 
     adapter = SSEAdapter()
