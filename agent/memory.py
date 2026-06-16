@@ -109,3 +109,35 @@ class MemoryStack:
         stack.episodic = data.get("episodic", {})
         stack.student_profile = data.get("student_profile", {})
         return stack
+
+    def to_pydantic_messages(self) -> list:
+        """将 working memory 转换为 pydantic-ai message_history 格式"""
+        from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart
+
+        messages = []
+        for turn in self.working:
+            if turn["role"] == "user":
+                messages.append(ModelRequest(parts=[TextPart(content=turn["content"])]))
+            elif turn["role"] == "assistant":
+                messages.append(ModelResponse(parts=[TextPart(content=turn["content"])]))
+        return messages
+
+    @classmethod
+    def from_pydantic_messages(cls, messages: list, data: dict = None) -> "MemoryStack":
+        """从 pydantic-ai all_messages() 恢复 MemoryStack"""
+        stack = cls()
+        for msg in messages:
+            role = None
+            from pydantic_ai.messages import ModelRequest, ModelResponse
+            if isinstance(msg, ModelRequest):
+                role = "user"
+            elif isinstance(msg, ModelResponse):
+                role = "assistant"
+            if role:
+                for part in msg.parts:
+                    if hasattr(part, "content"):
+                        stack.working.append({"role": role, "content": part.content})
+        if data:
+            stack.episodic = data.get("episodic", {})
+            stack.student_profile = data.get("student_profile", {})
+        return stack

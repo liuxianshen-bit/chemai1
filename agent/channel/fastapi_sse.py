@@ -138,3 +138,122 @@ async def reset_conversation(conversation_id: str):
         del _conversations[conversation_id]
         return {"success": True, "message": "对话已重置"}
     return {"success": False, "message": "对话不存在"}
+
+
+@router.post("/chat/pydantic")
+async def agent_chat_pydantic(request: ChatRequest):
+    """流式对话 — PydanticAI 版本（PoC）"""
+    from agent.pydantic_agent import stream_to_sse
+
+    async def generate():
+        try:
+            async for sse in stream_to_sse(request.message, request.history):
+                yield sse
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.post("/chat/v2/stream")
+async def agent_chat_v2_stream(request: ChatRequest):
+    """流式对话 — pydantic-ai 1.107.0 版本（v2，会话持久化）"""
+    import os, sys
+    from dotenv import load_dotenv
+
+    load_dotenv()
+
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
+    from agent.agents import factory
+    from agent.deps import ChemAIDeps
+    from agent.sse_adapter import SSEAdapter
+    from agent.memory import MemoryStack
+    from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart
+
+    cid = request.conversation_id
+
+    # Load or create session
+    session = None
+    message_history = None
+    student_id = request.student_id
+
+    if cid and cid in _conversations:
+        session = _conversations[cid]
+        message_history = session.get("message_history")
+        if not student_id:
+            student_id = session.get("student_id")
+    elif cid:
+        session = {"message_history": [], "student_id": student_id}
+        _conversations[cid] = session
+
+    # Build deps
+    deps = ChemAIDeps(
+        student_id=student_id,
+        persona=request.persona,
+        provider_name=request.provider,
+    )
+
+    if student_id:
+        mem = MemoryStack()
+        mem.load_student(student_id)
+        deps.student_profile = mem.student_profile
+
+    agent = factory.create_agent(
+        persona=request.persona,
+        provider=request.provider,
+        deps=deps,
+    )
+
+    adapter = SSEAdapter()
+    full_reply = []
+
+    async def generate():
+        nonlocal full_reply
+        try:
+            yield f"data: {json.dumps({'type': 'phase', 'phase': 'thinking'}, ensure_ascii=False)}\n\n"
+
+            async with agent.run_stream_events(
+                request.message,
+                deps=deps,
+                message_history=message_history,
+            ) as stream:
+                async for event in stream:
+                    for result in adapter.feed(event):
+                        try:
+                            evt = json.loads(result)
+                            if evt.get("type") == "text":
+                                full_reply.append(evt.get("content", ""))
+                        except (json.JSONDecodeError, TypeError):
+                            pass
+                        yield f"data: {result}\n\n"
+
+            yield f"data: {json.dumps({'type': 'done'}, ensure_ascii=False)}\n\n"
+            yield "data: [DONE]\n\n"
+
+            # Persist conversation
+            if session is not None:
+                if not message_history:
+                    message_history = []
+                message_history.append(ModelRequest(parts=[TextPart(content=request.message)]))
+                message_history.append(ModelResponse(parts=[TextPart(content="".join(full_reply))]))
+                session["message_history"] = message_history
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
