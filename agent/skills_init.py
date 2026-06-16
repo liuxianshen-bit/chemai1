@@ -1,29 +1,11 @@
 """
-Skills 注册入口 — 启动时导入所有 Skill 模块（通过装饰器自动注册到 registry）
+Skills 注册入口 — pydantic-ai 版本。
+启动时导入 tools.py 的 10 个 tool_plain 函数。
 """
-from .skill_registry import registry
+from agent.tools import TOOLS
 
 
 def register_all_skills():
-    # Agent skills (auto-register via @registry.register decorator)
-    modules = [
-        "agent.skills.balance",
-        "agent.skills.search",
-        "agent.skills.diagnose",
-        "agent.skills.generate",
-        "agent.skills.tutor",
-        "agent.skills.experiment",
-        "agent.skills.weekly_report",
-        "agent.skills.import_exam",
-        "agent.skills.practice",
-        "agent.skills.web_search",
-    ]
-    for mod in modules:
-        try:
-            __import__(mod)
-        except Exception as e:
-            print(f"[Skills] {mod} failed: {e}")
-
-    names = registry.list_skills()
+    names = [t.__name__ for t in TOOLS]
     print(f"[Agent] {len(names)} skills registered: {', '.join(names)}")
     return len(names)
