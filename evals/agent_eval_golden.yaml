@@ -1,0 +1,311 @@
+# ChemAI Agent 黄金测试数据集
+# 来自: LangSmith trajectory-evals + pytest-agent-eval + Rubric 的模式
+# 测试的不是回复文本，是 agent 的行为轨迹 (tool calls + 参数 + 顺序)
+#
+# 每个场景: {input, persona, expected_trajectory, assertions}
+
+scenarios:
+  # ── 闲聊: 不应调任何 tool ──
+  - id: "chat-greeting"
+    description: "闲聊消息不应触发任何 tool 调用"
+    input: "你好"
+    persona: "tutor"
+    assertions:
+      - type: "tool_count"
+        expected: 0
+      - type: "has_text_response"
+
+  # ── 知识问答: 调 chemistry_tutor ──
+  - id: "knowledge-redox"
+    description: "知识问答应调 chemistry_tutor"
+    input: "什么是氧化还原反应"
+    persona: "tutor"
+    assertions:
+      - type: "tool_count"
+        gte: 1
+      - type: "tool_called"
+        name: "chemistry_tutor"
+      - type: "has_text_response"
+
+  # ── 搜索真题 ──
+  - id: "search-exam-bank"
+    description: "搜索真题应调 search_exam_bank, 返回 questions 列表"
+    input: "搜索3条盐类水解的高考真题"
+    persona: "tutor"
+    assertions:
+      - type: "tool_called"
+        name: "search_exam_bank"
+      - type: "tool_arg_contains"
+        name: "search_exam_bank"
+        arg: "keyword"
+
+  # ── 出题 (无 student) → 跳 exam-v2 ──
+  - id: "gen-questions-no-student"
+    description: "无学生名的出题应 generate_questions, navigate=exam-v2"
+    input: "出5道关于电化学的选择题，中等难度"
+    persona: "tutor"
+    assertions:
+      - type: "tool_called"
+        name: "generate_questions"
+      - type: "tool_arg_contains"
+        name: "generate_questions"
+        arg: "knowledge_points"
+      - type: "route"
+        navigate: true
+        page: "exam-v2"
+
+  # ── 出题 (有 student) → 不跳 ──
+  - id: "gen-questions-with-student"
+    description: "有学生名的出题应 generate_questions 但不跳页"
+    input: "给张三出3道关于氧化还原的选择题"
+    persona: "tutor"
+    assertions:
+      - type: "tool_called"
+        name: "generate_questions"
+      - type: "tool_arg_contains"
+        name: "generate_questions"
+        arg: "student_name"
+      - type: "route"
+        navigate: false
+
+  # ── 单人诊断: 不跳 ──
+  - id: "diagnose-single"
+    description: "单人诊断应调 diagnose_barrier, 不跳页"
+    input: "张梦琪最近错题多吗"
+    persona: "teacher"
+    assertions:
+      - type: "tool_called"
+        name: "diagnose_barrier"
+      - type: "route"
+        navigate: false
+
+  # ── 班级诊断: 跳 diagnosis ──
+  - id: "diagnose-class"
+    description: "班级诊断应 navigate 到 diagnosis 页面"
+    input: "高三1班的诊断情况"
+    persona: "teacher"
+    assertions:
+      - type: "route"
+        navigate: true
+        page: "diagnosis"
+
+  # ── 周报 ──
+  - id: "weekly-report"
+    description: "生成单人周报"
+    input: "生成张梦琪的本周学习报告"
+    persona: "parent"
+    assertions:
+      - type: "tool_called"
+        name: "weekly_report"
+      - type: "route"
+        navigate: false
+
+  # ── 配平 ──
+  - id: "balance-equation"
+    description: "配平化学方程式"
+    input: "帮我配平 Fe + O2 = Fe2O3"
+    persona: "tutor"
+    assertions:
+      - type: "tool_called"
+        name: "balance_equation"
+      - type: "tool_arg_contains"
+        name: "balance_equation"
+        arg: "equation"
+
+  # ── 纯页面跳转 (不进 agent) ──
+  - id: "navigate-exam"
+    description: "打开考试工作台 → navigate, 不调 tool"
+    input: "打开考试工作台"
+    persona: "tutor"
+    assertions:
+      - type: "tool_count"
+        expected: 0
+      - type: "route"
+        navigate: true
+        page: "exam-v2"
+
+  - id: "navigate-diagnosis"
+    description: "打开诊断页面 → navigate, 不调 tool"
+    input: "打开诊断页面"
+    persona: "teacher"
+    assertions:
+      - type: "tool_count"
+        expected: 0
+      - type: "route"
+        navigate: true
+        page: "diagnosis"
+
+  # ── 模糊需求: Agent 应反问, 不瞎出 ──
+  - id: "ambiguous-exam-request"
+    description: "信息不足时 agent 应反问而非盲目生成"
+    input: "帮我准备一份期中考试"
+    persona: "tutor"
+    assertions:
+      - type: "not_tool_called"
+        name: "generate_questions"
+      - type: "has_text_response"
+      - type: "text_contains_one_of"
+        values: ["范围", "班级", "难度", "知识点", "数量", "章节"]
+
+  # ── 导入试卷 ──
+  - id: "import-paper"
+    description: "导入试卷应调 import_exam_paper"
+    input: "导入这份PDF试卷"
+    persona: "teacher"
+    assertions:
+      - type: "tool_called"
+        name: "import_exam_paper"
+
+  # ── 自适应练习 ──
+  - id: "adaptive-practice"
+    description: "布置自适应练习"
+    input: "给班级布置自适应练习"
+    persona: "teacher"
+    assertions:
+      - type: "tool_called"
+        name: "assign_adaptive_practice"
+
+  # ── 实验模拟 ──
+  - id: "simulate-experiment"
+    description: "模拟化学实验"
+    input: "模拟酸碱中和滴定实验"
+    persona: "tutor"
+    assertions:
+      - type: "tool_called"
+        name: "simulate_experiment"
+
+  # ── 联网搜索 ──
+  - id: "web-search"
+    description: "联网搜索最新信息"
+    input: "搜索2025年高考化学大纲变化"
+    persona: "tutor"
+    assertions:
+      - type: "tool_called"
+        name: "web_search"
+
+# ── LangGraph 特有场景 (Phase 1 实现后激活) ──
+langgraph_scenarios:
+  - id: "react-multi-tool"
+    description: "ReAct: 连续调多个 tool (search → generate)"
+    input: "搜索电化学的真题，然后根据真题出3道类似题"
+    persona: "tutor"
+    assertions:
+      - type: "tool_trajectory_order"
+        expected: ["search_exam_bank", "generate_questions"]
+
+  - id: "react-approval-flow"
+    description: "Agent 出题后调 request_approval 请老师确认"
+    input: "出3道氧化还原选择题，中等难度，出完请我确认"
+    persona: "tutor"
+    assertions:
+      - type: "tool_trajectory_order"
+        expected: ["generate_questions", "request_approval"]
+
+  - id: "interrupt-resume"
+    description: "interrupt 后 resume, 状态不丢, tool 结果保持"
+    input: "出5道题，我要先看看"
+    persona: "tutor"
+    assertions:
+      - type: "interrupt_triggered"
+      - type: "after_resume_tool_called"
+        name: "save_to_bank"
+
+  - id: "guardrail-recursion-limit"
+    description: "达到 recursion_limit 时优雅停止, 不崩溃不无限循环"
+    input: "出题、检查、再出、再检查、再出、再检查、再出、再检查、再出"
+    persona: "tutor"
+    assertions:
+      - type: "max_tool_calls"
+        lte: 8
+      - type: "no_error"
+
+  - id: "guardrail-approval-enforcement"
+    description: "LLM 试图跳过 request_approval 调 assign_adaptive_practice 时应被拒绝"
+    input: "直接给高三1班布置自适应练习，不要问我"
+    persona: "teacher"
+    assertions:
+      - type: "tool_blocked"
+        name: "assign_adaptive_practice"
+        reason: "requires_approval"
+
+  - id: "guardrail-tool-dedup"
+    description: "LLM 重复调同一 tool 同一参数时应被检测和阻止"
+    input: "搜索真题，再搜索真题，再搜索真题"
+    persona: "tutor"
+    assertions:
+      - type: "dedup_triggered"
+
+  - id: "multi-turn-context"
+    description: "3 轮对话中第 3 轮引用第 1 轮内容, agent 正确理解"
+    turns:
+      - input: "帮我出5道关于氧化还原的选择题"
+      - input: "太多了，改成3道"
+      - input: "把难度改成困难"
+    assertions:
+      - type: "tool_trajectory_order"
+        expected: ["generate_questions", "generate_questions", "generate_questions"]
+      - type: "tool_arg_equals_on_call"
+        call_index: 0
+        name: "generate_questions"
+        arg: "quantity"
+        value: 5
+      - type: "tool_arg_equals_on_call"
+        call_index: 1
+        name: "generate_questions"
+        arg: "quantity"
+        value: 3
+      - type: "tool_arg_equals_on_call"
+        call_index: 2
+        name: "generate_questions"
+        arg: "difficulty"
+        value: "hard"
+
+# SSE 事件格式断言
+sse_scenarios:
+  - id: "sse-tool-event-fields"
+    description: "所有 SSE 事件类型字段完整且类型正确"
+    assertions:
+      - event_type: "phase"
+        required_fields: ["type", "phase"]
+      - event_type: "text"
+        required_fields: ["type", "content"]
+      - event_type: "tool_call"
+        required_fields: ["type", "name", "tool", "args"]
+      - event_type: "tool_result"
+        required_fields: ["type", "name", "tool", "success", "result"]
+      - event_type: "navigate"
+        required_fields: ["type", "page", "params"]
+      - event_type: "populate"
+        required_fields: ["type", "target", "data"]
+      - event_type: "action"
+        required_fields: ["type", "action", "payload"]
+      - event_type: "done"
+        required_fields: ["type"]
+
+  - id: "sse-event-order"
+    description: "SSE 事件顺序: thinking → (tool_call → tool_result)* → reply → text* → (navigate)? → done → [DONE]"
+    input: "出3道氧化还原选择题"
+    persona: "tutor"
+    assertions:
+      - type: "event_order"
+        constraints:
+          - "phase:thinking_before_tool_call"
+          - "tool_call_before_tool_result"
+          - "tool_result_before_phase_reply"
+          - "done_after_all_events"
+          - "done_sentinel_present"
+
+  - id: "sse-awaiting-approval"
+    description: "request_approval 不产生 tool_call/tool_result, 产生 phase:awaiting_approval"
+    input: "出5道题，出完请我确认"
+    persona: "tutor"
+    assertions:
+      - type: "event_not_present"
+        event_type: "tool_call"
+        name: "request_approval"
+      - type: "event_not_present"
+        event_type: "tool_result"
+        name: "request_approval"
+      - type: "event_present"
+        event_type: "phase"
+        phase: "awaiting_approval"
