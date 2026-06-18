@@ -214,10 +214,10 @@ class LangGraphSSEAdapter:
 
         return []
 
-    def finalize(self, final_state: dict) -> list[str]:
+    def finalize(self) -> list[str]:
         """在 astream_events() 结束后调用，发送 route 事件 + done。"""
         events = []
-        # 从 tool_results 读取 _route
+        # 从 feed() 中收集的 tool_results 读取 _route
         for tr in self._tool_results:
             route = tr.get("result", {}).get("_route")
             if route and route.get("navigate"):
@@ -246,31 +246,33 @@ class LangGraphSSEAdapter:
 
 ### Gateway 分类器的新角色
 
-分类器不再是图的入口节点。改为作为 ReAct agent 的一个 tool：
+**架构约束: tool 集合必须在 agent 构造时固定，不能每轮请求重新筛选。** 否则 interrupt/resume 时 graph 结构变化会导致 resume 失败（graph checkpoint 与新 graph 不匹配）。
+
+因此:
+- `create_agent(model, persona_tools, prompt)` — tool 集合固定 per persona YAML
+- 分类器推荐结果注入 system prompt 作为**建议**，不改变 graph 结构
+- 分类器判断 `navigate` 类型（纯页面跳转，不调 tool）时走快捷路径——不进入 agent graph，直接返回 navigate 事件
 
 ```python
-async def classify_intent(user_message: str) -> str:
-    """分析用户意图，返回推荐的工具列表。Agent 可以用这个结果
-    来缩小自己要选的 tool 范围，但不是必须——它可以自行决定。"""
-    from agent.gateway import IntentClassifier
-    from agent.provider.deepseek import get_classifier_provider
+def create_chemai_agent(persona: str, provider: str, intent_hints: str = ""):
+    tools = get_tools_for_persona(persona)  # 固定 per persona YAML
+    model = get_langchain_model(provider)
 
-    classifier = IntentClassifier(get_classifier_provider())
-    result = await classifier.classify(user_message)
-    return json.dumps({
-        "type": result.type,
-        "recommended_tools": result.tools,
-        "page": result.page,
-    })
-```
+    system_prompt = build_persona_prompt(persona)
+    if intent_hints:
+        system_prompt += f"\n\n## 工具推荐\n{intent_hints}\n以上是推荐工具，你可以使用它们，也可以根据需要使用其他工具。"
 
-或者保持当前方案——在 agent 创建前跑分类器，把推荐的工具列表注入 system prompt:
+    return create_agent(model=model, tools=tools, prompt=system_prompt)
 
-```
-system_prompt: 你是化学教研助手。
-  用户说"{user_message}"。
-  系统推荐工具: {recommended_tools}。
-  你可以使用推荐的工具，也可以用其他工具。自己判断最合适的。
+# 端点层:
+tool_names, intent = await _classify_and_narrow(msg, persona, history)
+if intent and intent.type == "navigate":
+    # 快捷路径: 纯页面跳转，不进 agent graph
+    yield navigate_event(intent.page)
+    return
+# 否则进入 ReAct agent loop
+hints = f"推荐工具: {', '.join(tool_names)}" if tool_names else ""
+agent = create_chemai_agent(persona, provider, hints)
 ```
 
 ## Decisions
@@ -289,9 +291,21 @@ system_prompt: 你是化学教研助手。
 
 ### D3: Gateway 分类器的位置
 
-**选择**: 保留为前置筛选——在 agent 创建前跑分类器，结果注入 system prompt 的 tool 推荐列表。
+**选择**: tool 集合固定 per persona YAML（不随请求变化）。分类器推荐注入 system prompt 作为 hint。`navigate` 类型走快捷路径不发 agent。
 
-**理由**: 分类器是优化（缩小候选 tool 集），不是控制（不允许 LLM 用其他 tool）。前置筛选减少 LLM 的选择负担，但 system prompt 明确说"你可以用推荐的工具，也可以用其他工具"。
+**理由**: `create_agent(model, tools, prompt)` 构造时绑定了 tool 集合。如果每轮分类器返回不同 tool 列表，每次构造不同 graph，interrupt/resume 时 checkpoint 与新 graph 不匹配会崩溃。固定 tool 集 + prompt hint 消除了这个 bug。
+
+### D8: 工具权限标记
+
+**选择**: 每个 tool 声明 `requires_approval: bool`。破坏性操作（assign_adaptive_practice, import_exam_paper）标记 True。LLM 调这些 tool 时，执行层检查是否已在同轮调过 `request_approval`。
+
+**理由**: CEO/Eng 审查一致发现: request_approval 作为可选 tool 不够——LLM 可以跳过它直接调破坏性操作。服务端必须强制执行。
+
+### D9: ReAct 循环护栏
+
+**选择**: `recursion_limit=8`, `timeout_seconds=30`, 同 tool+同参数去重检测。
+
+**理由**: 防止 LLM 陷入无限循环消耗 token。8 轮足够完成"出题→预览→确认→入库"流程，30 秒覆盖所有 tool 的典型执行时间（含内部 LLM 调用）。
 
 ### D4: 模型适配
 
@@ -321,8 +335,14 @@ system_prompt: 你是化学教研助手。
 
 | 风险 | 缓解 |
 |------|------|
-| ReAct agent 可能不调 tool 直接回答（闲聊场景） | system prompt 明确"教学任务优先调 tool"；GateWay 分类器推荐 tool 列表注入 prompt |
+| ReAct agent 可能不调 tool 直接回答（闲聊场景） | system prompt 明确"教学任务优先调 tool"；分类器推荐注入 prompt 作为 hint |
 | LLM 可能过度调 `request_approval`→每步都问 | system prompt 写明"只在真正需要人为判断时调，不要每步都问" |
-| interrupt 后 graph 等待，前端需要知道"在等人" | SSE 发送 `{"type": "phase", "phase": "awaiting_approval"}` 事件 |
-| DeepSeek 的 tool calling 在 ChatOpenAI 下行为差异 | Phase 0 先验证 DeepSeek + ChatOpenAI bind_tools |
-| `astream_events()` 的事件结构在 LangGraph 版本间可能变化 | 固定 langgraph==1.2.5 |
+| LLM 可能跳过 `request_approval` 直接调破坏性操作 | D8: `requires_approval` 标记 + 执行层强制检查 |
+| interrupt 后 graph 等待，前端需要知道"在等人" | SSE `phase:awaiting_approval` 事件 |
+| ReAct loop 无限循环 | D9: `recursion_limit=8`, `timeout_seconds=30`, 去重检测 |
+| ReAct 多轮 LLM 调用增加延迟和成本 | p95 延迟 < 15s 目标；单轮最多 8 次 LLM 调用 |
+| tool 返回值中的 `_route` 字段进入 LLM 上下文会干扰决策 | SSE 适配器收集 `_route` 后剥离，不传回 LLM |
+| DeepSeek `tool_choice="required"` 控制丧失 | system prompt 强化 + ReAct 自带 tool calling bias |
+| `astream_events()` 事件结构版本变化 | 锁定 langgraph==1.2.5；LangGraphSSEAdapter 单元测试覆盖 |
+| 旧端点并行维护负担 | 旧端点标注 deprecated，3 个月内下掉 |
+| Interrupt 后 graph 不 resume → MemorySaver 内存泄漏 | resume 或 reset 超时清理策略（Phase 2） |

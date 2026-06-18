@@ -4,31 +4,39 @@
 
 - [ ] 0.1 `pip install langgraph langgraph-checkpoint langchain-core` ✅ (已完成)
 - [ ] 0.2 LangGraph 基础验证 ✅ (已完成, 8/8)
-- [x] 0.3 DeepSeek + ChatOpenAI bind_tools 验证 ✅ (4/4 PASS, test_langgraph_deepseek_tools.py)
-  - 注意: `create_react_agent` → `langchain.agents.create_agent` (LangGraph 1.0+ deprecated 旧路径)
+- [x] 0.3 DeepSeek + ChatOpenAI bind_tools 验证 ✅ (4/4 PASS)
+- [ ] 0.4 **新增** — 当前系统评估基线 (30 min)
+  - [ ] 定义 10 个关键场景（出题/诊断/周报/闲聊/navigate）
+  - [ ] 用当前 pydantic-ai 端点跑每个场景，记录: 成功/失败、延迟、token 用量、tool 选择正确性
+  - [ ] 识别当前系统确实无法处理的场景（作为 LangGraph 必须解决的问题列表）
+  - 测试脚本: `evals/test_baseline.py`
 
 ## Phase 1: 核心 Agent (3 个新文件)
 
 ### 1.1 `agent/langgraph_agent.py` — ReAct Agent 工厂 (60 min)
 
-- [ ] `create_chemai_agent(persona, provider)` — 返回编译好的 ReAct agent
+- [ ] `create_chemai_agent(persona, provider, intent_hints="")` — 返回编译好的 ReAct agent
   - [ ] 加载 persona YAML → 获取 available_skills + system_prompt
+  - [ ] **Tool 集合固定 per persona YAML** — 不随分类器结果变化（保证 interrupt/resume 兼容）
   - [ ] `get_langchain_model(provider)` → ChatOpenAI 实例
-  - [ ] `get_tools_for_persona(persona, tool_filter)` → LangChain @tool 列表
-  - [ ] `create_agent(model, tools, prompt, checkpointer=MemorySaver())` (from `langchain.agents`)
-  - [ ] system_prompt 中注入 tool 推荐列表（来自 Gateway 分类器）
+  - [ ] `get_tools_for_persona(persona)` → 返回 persona YAML 的 available_skills 对应的 LangChain @tool 列表
+  - [ ] `create_agent(model, tools, prompt)` (from `langchain.agents`)
+  - [ ] 分类器推荐注入 `intent_hints` 到 system prompt 尾部作为建议
 - [ ] 新增 `request_approval` tool
   - [ ] 接受 `message: str, context: str = ""` 参数
   - [ ] 内部调 `interrupt({"type": "approval", "message": message, "context": context})`
   - [ ] 返回值: `"approved"` 或用户输入文本
 - [ ] 验证: `_temp/test_react_agent.py` — 用"帮我准备一份期中考试"跑 agent.invoke()
 
-### 1.2 `agent/langgraph_sse.py` — SSE 适配器 (75 min)
+### 1.2 `agent/langgraph_sse.py` — SSE 适配器 (120 min)
 
 - [ ] `LangGraphSSEAdapter` 类
   - [ ] `feed(astream_event) -> list[str]` — 事件 → SSE JSON 字符串列表
-  - [ ] `finalize(final_state) -> list[str]` — 流结束后发送 route 事件 + done
+  - [ ] `finalize() -> list[str]` — 流结束后发送 route 事件 + done
   - [ ] 状态管理: `_phase` (thinking/reply), `_tool_results` (收集用于 _route)
+  - [ ] `_serialize_args(tool_input)` — raw dict pass-through (匹配 pydantic-ai 行为)
+  - [ ] `request_approval` 过滤: `on_tool_start` 时 suppress tool_call → emit `phase:awaiting_approval`; `on_tool_end` 时 suppress tool_result
+  - [ ] `_route` 剥离: tool 结果中的 `_route` 提取到 `_tool_results`，去除后传给 LLM
 - [ ] 事件映射（与现有 SSEAdapter 输出格式完全一致）:
   - [ ] `on_chat_model_start` → 无输出
   - [ ] `on_chat_model_stream` → `{"type":"text","content":chunk}` (首条前先发 `phase:reply`)
@@ -39,7 +47,7 @@
   - [ ] `on_tool_start` 为 `request_approval` → 发送 `{"type":"phase","phase":"awaiting_approval","message":...}`
 - [ ] 验证: 用已知输入对比新旧 SSE 事件输出的字段和顺序
 
-### 1.3 `agent/langgraph_channel.py` — FastAPI 端点 (90 min)
+### 1.3 `agent/langgraph_channel.py` — FastAPI 端点 (150 min)
 
 - [ ] 复用 `ChatRequest` 模型
 - [ ] `POST /api/agent/chat/langgraph/stream` — SSE 流式端点
@@ -49,6 +57,15 @@
   - [ ] Interrupt 检测: 如果 astream 遇到 `GraphInterrupt` → 返回当前状态 + `awaiting_approval` 标记
   - [ ] 流结束后: `agent.get_state(config)` → `adapter.finalize(state)` → yield 剩余事件
   - [ ] 异常处理: try/except 包裹 → yield error SSE → done
+- [ ] **1.3a** — interrupt 检测与恢复 (60 min)
+  - [ ] 双路径检测: `try/except GraphInterrupt` + post-stream `state.next` 检查
+  - [ ] 提取 interrupt 值 → `phase:awaiting_approval` SSE 事件
+  - [ ] resume 端点: `Command(resume=user_response)` + 同一 graph 实例
+  - [ ] resume 流也调用 `finalize()` 发送 route 事件
+- [ ] **1.3b** — 护栏配置 (15 min)
+  - [ ] config: `recursion_limit=8`, astream timeout 30s
+  - [ ] 同 tool+同参数去重检测: 适配器跟踪最近 N 次 tool_call
+- [ ] 验证: curl 流式端点，检查 SSE 事件序列和字段完整性
 - [ ] `POST /api/agent/chat/langgraph` — 非流式端点
   - [ ] `agent.ainvoke(msg, config)` → 提取最终文本 + route events
   - [ ] 处理 Interrupt: 如果有 interrupt → 返回 interrupt 信息
@@ -151,7 +168,7 @@
 
 ---
 
-**总计: ~6 小时**
+**总计: ~10 小时**（含 Phase 0.4 评估基线）
 
 **依赖关系:**
 ```
