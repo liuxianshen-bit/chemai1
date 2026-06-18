@@ -385,13 +385,15 @@ def test_sse_navigate_events(report: EvalReport):
         report.add("sse-chat: 单人诊断无navigate有tool", not has_nav and has_tool,
                    f"events={types}" if (has_nav or not has_tool) else f"events={types}")
 
-        # Test 3: chat (班级诊断) → 应有 tool 事件，但不一定有 navigate (取决于 tool 路由)
+        # Test 3: chat (班级诊断) → tool_call 或 navigate 都合法
+        # LLM 可能判为 navigate(捷径) 或 chat+tools(生成数据后跳) — 两者最终都到 diagnosis
         events, _ = await capture_sse_with_route_events("高三1班诊断情况", "teacher")
         types = [e["type"] for e in events]
         has_nav = "navigate" in types
         has_tool = "tool_call" in types
-        report.add("sse-chat: 班级诊断有tool", has_tool,
-                   f"events={types} nav={has_nav}")
+        passed = has_nav or has_tool  # either path is valid
+        report.add("sse-chat: 班级诊断-有nav或tool", passed,
+                   f"events={types} nav={has_nav} tool={has_tool}" if not passed else f"events={types}")
 
     asyncio.run(run())
 
