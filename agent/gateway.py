@@ -215,7 +215,7 @@ class IntentClassifier:
         tools = []
         if any(kw in text for kw in ["出题", "出", "生成", "练习", "组卷", "题目", "题", "考试", "组考"]):
             tools.append("generate_questions")
-        if any(kw in text for kw in ["诊断", "学习障碍", "学情分析"]):
+        if any(kw in text for kw in ["诊断", "学习障碍", "学情分析", "错题", "障碍"]):
             tools.append("diagnose_barrier")
         if any(kw in text for kw in ["周报", "学习报告", "本周"]):
             tools.append("weekly_report")
