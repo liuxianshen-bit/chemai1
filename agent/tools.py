@@ -36,6 +36,7 @@ async def search_exam_bank(
             }
             for q in results
         ],
+        "_route": {"navigate": False},
     }, ensure_ascii=False)
 
 
@@ -85,8 +86,10 @@ async def generate_questions(
     knowledge_points: str = "",
     difficulty: str = "medium",
     quantity: int = 5,
+    student_name: str = "",
 ) -> str:
-    """根据知识点和难度生成高中化学选择题。内部调用 LLM 出题，自动审核化学方程式配平。"""
+    """根据知识点和难度生成高中化学选择题。内部调用 LLM 出题，自动审核化学方程式配平。
+    student_name 可选：有学生名时题在 chat 里展示，不传时跳 exam-v2 页面。"""
     import re
     from agent.provider.deepseek import DeepSeekProvider
     from app.services.chemical_balance import audit_chemical_equation
@@ -156,6 +159,12 @@ async def generate_questions(
             "questions": questions,
             "total": len(questions),
             "audit_results": audit_results,
+            "_route": {
+                "navigate": not bool(student_name),
+                "page": "exam-v2" if not student_name else None,
+                "actions": [{"action": "openTab", "payload": "generate"}] if not student_name else [],
+                "populate": {"target": "questions", "data": {"questions": questions, "total": len(questions)}} if not student_name else None,
+            },
         }, ensure_ascii=False)
 
     except Exception as e:
@@ -167,15 +176,47 @@ async def generate_questions(
 
 async def diagnose_barrier(
     student_id: str = "",
+    student_name: str = "",
     class_id: str = "",
 ) -> str:
-    """诊断学生的化学学习障碍类型（概念理解/审题障碍/表述障碍）。传 student_id 做个体诊断，传 class_id 做班级诊断。"""
+    """诊断学生的化学学习障碍类型（概念理解/审题障碍/表述障碍）。
+    传 student_id 或 student_name 做个体诊断，传 class_id 做班级诊断。"""
     import sys, os
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
     from app.models.database import get_db
     from sqlalchemy import text
 
     session = next(get_db())
+
+    # If student_id looks like a name (non-digits), auto-resolve to real ID
+    if student_id and not student_id.isdigit():
+        rows = session.execute(
+            text("SELECT student_id, name FROM students WHERE name LIKE :n"),
+            {"n": f"%{student_id}%"},
+        ).fetchall()
+        if not rows:
+            session.close()
+            return json.dumps({"error": f"未找到名为 '{student_id}' 的学生", "hint": "请确认姓名是否正确，或提供学号查询", "_route": {"navigate": False}})
+        if len(rows) > 1:
+            session.close()
+            candidates = [{"student_id": r[0], "name": r[1]} for r in rows]
+            return json.dumps({"multiple_matches": candidates, "hint": "找到多个匹配学生，请提供完整学号", "_route": {"navigate": False}})
+        student_id = rows[0][0]
+
+    # Allow lookup by student name param
+    if student_name and not student_id:
+        rows = session.execute(
+            text("SELECT student_id, name FROM students WHERE name LIKE :n"),
+            {"n": f"%{student_name}%"},
+        ).fetchall()
+        if not rows:
+            session.close()
+            return json.dumps({"error": f"未找到名为 '{student_name}' 的学生", "hint": "请确认姓名是否正确，或提供学号/班级ID查询", "_route": {"navigate": False}})
+        if len(rows) > 1:
+            session.close()
+            candidates = [{"student_id": r[0], "name": r[1]} for r in rows]
+            return json.dumps({"multiple_matches": candidates, "hint": "找到多个匹配学生，请指定学号", "_route": {"navigate": False}})
+        student_id = rows[0][0]
 
     if student_id:
         row = session.execute(
@@ -185,7 +226,7 @@ async def diagnose_barrier(
         session.close()
 
         if not row:
-            return json.dumps({"error": f"学生 {student_id} 不存在"})
+            return json.dumps({"error": f"学生 {student_id} 不存在", "_route": {"navigate": False}})
 
         barrier = json.loads(row[1]) if isinstance(row[1], str) else row[1]
         dominant = max(barrier.items(), key=lambda x: x[1]) if barrier else ("unknown", 0)
@@ -196,6 +237,7 @@ async def diagnose_barrier(
             "barrier_distribution": barrier,
             "dominant_barrier": dominant[0],
             "exercises_completed": row[2] or 0,
+            "_route": {"navigate": False},
         }, ensure_ascii=False)
 
     elif class_id:
@@ -221,15 +263,27 @@ async def diagnose_barrier(
                         elif bt == "reading": reading_count += 1
                         elif bt == "expression": expression_count += 1
 
-        return json.dumps({
+        _data = {
             "class_id": class_id,
             "total_students": len(students),
             "barrier_distribution": {"concept": concept_count, "reading": reading_count, "expression": expression_count},
             "students": students[:10],
+        }
+        return json.dumps({
+            **_data,
+            "_route": {
+                "navigate": True,
+                "page": "diagnosis",
+                "actions": [
+                    {"action": "selectClass", "payload": class_id},
+                    {"action": "showPlan", "payload": ""},
+                ],
+                "populate": {"target": "diagnosis", "data": _data},
+            },
         }, ensure_ascii=False)
 
     session.close()
-    return json.dumps({"error": "请提供 student_id 或 class_id"})
+    return json.dumps({"error": "请提供 student_id 或 class_id", "_route": {"navigate": False}})
 
 
 # ── 5. chemistry_tutor ──
@@ -321,8 +375,9 @@ async def balance_equation(equation: str = "") -> str:
 
 # ── 8. weekly_report ──
 
-async def weekly_report(student_id: str = "") -> str:
-    """生成学生本周化学学习周报，包含学习内容、掌握情况、成长空间和家庭配合建议。通俗易懂，面向家长。"""
+async def weekly_report(student_id: str = "", student_name: str = "", class_name: str = "") -> str:
+    """生成学生本周化学学习周报，包含学习内容、掌握情况、成长空间和家庭配合建议。通俗易懂，面向家长。
+    传 student_id 或 student_name 查个人，传 class_name 查全班。"""
     import sys, os
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
     from agent.provider.deepseek import DeepSeekProvider
@@ -331,6 +386,36 @@ async def weekly_report(student_id: str = "") -> str:
 
     session = next(get_db())
 
+    # If student_id looks like a name (non-digits), auto-resolve to real ID
+    if student_id and not student_id.isdigit():
+        rows = session.execute(
+            text("SELECT student_id, name FROM students WHERE name LIKE :n"),
+            {"n": f"%{student_id}%"},
+        ).fetchall()
+        if not rows:
+            session.close()
+            return json.dumps({"error": f"未找到名为 '{student_id}' 的学生", "_route": {"navigate": False}})
+        if len(rows) > 1:
+            session.close()
+            candidates = [{"student_id": r[0], "name": r[1]} for r in rows]
+            return json.dumps({"multiple_matches": candidates, "hint": "找到多个匹配学生，请提供完整学号", "_route": {"navigate": False}})
+        student_id = rows[0][0]
+
+    # Allow lookup by student name param
+    if student_name and not student_id:
+        rows = session.execute(
+            text("SELECT student_id, name FROM students WHERE name LIKE :n"),
+            {"n": f"%{student_name}%"},
+        ).fetchall()
+        if not rows:
+            session.close()
+            return json.dumps({"error": f"未找到名为 '{student_name}' 的学生", "_route": {"navigate": False}})
+        if len(rows) > 1:
+            session.close()
+            candidates = [{"student_id": r[0], "name": r[1]} for r in rows]
+            return json.dumps({"multiple_matches": candidates, "hint": "找到多个匹配学生，请指定学号", "_route": {"navigate": False}})
+        student_id = rows[0][0]
+
     student_row = session.execute(
         text("SELECT name, class_id, barrier_type, exercises_completed FROM students WHERE student_id = :sid"),
         {"sid": student_id},
@@ -338,9 +423,9 @@ async def weekly_report(student_id: str = "") -> str:
 
     if not student_row:
         session.close()
-        return json.dumps({"error": f"学生 {student_id} 不存在"})
+        return json.dumps({"error": f"学生 {student_id} 不存在", "_route": {"navigate": False}})
 
-    student_name = student_row[0]
+    student_name_resolved = student_row[0]
     barrier = json.loads(student_row[2]) if isinstance(student_row[2], str) else student_row[2]
 
     exam_count = session.execute(
@@ -360,7 +445,7 @@ async def weekly_report(student_id: str = "") -> str:
 - 给出家长可操作的建议
 - 不制造焦虑"""
 
-    prompt = f"""请为 {student_name} 生成本周化学学习报告:
+    prompt = f"""请为 {student_name_resolved} 生成本周化学学习报告:
 
 学习数据:
 - 本周参加了 {exam_count} 次课堂练习
@@ -379,10 +464,17 @@ async def weekly_report(student_id: str = "") -> str:
 
     await provider.close()
 
+    _is_class = bool(class_name) and not bool(student_id) and not bool(student_name)
     return json.dumps({
-        "student_name": student_name,
+        "student_name": student_name_resolved,
         "report": result.content,
         "exam_count": exam_count,
+        "_route": {
+            "navigate": _is_class,
+            "page": "students" if _is_class else None,
+            "actions": [{"action": "searchStudent", "payload": class_name}, {"action": "openWeeklyReport", "payload": ""}] if _is_class else [],
+            "populate": {"target": "weeklyReport", "data": {"student_name": student_name_resolved, "report": result.content}} if _is_class else None,
+        },
     }, ensure_ascii=False)
 
 
@@ -489,7 +581,7 @@ async def assign_adaptive_practice(
     try:
         students = db.query(Student).filter(Student.class_id == class_id).all()
         if not students:
-            return json.dumps({"error": f"班级 {class_id} 无学生"})
+            return json.dumps({"error": f"班级 {class_id} 无学生", "_route": {"navigate": False}})
 
         assigned = []
         for student in students[:5]:
@@ -511,7 +603,7 @@ async def assign_adaptive_practice(
                     "weak_kps": weak,
                 })
 
-        return json.dumps({"assigned_count": len(assigned), "assigned": assigned}, ensure_ascii=False)
+        return json.dumps({"assigned_count": len(assigned), "assigned": assigned, "_route": {"navigate": False}}, ensure_ascii=False)
     finally:
         db.close()
 

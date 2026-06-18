@@ -1,12 +1,16 @@
 """
 Gateway — LLM-powered intent classifier replacing keyword matching.
 
-Replaces core.py:246-261 inline _classify() with semantic intent detection.
-Also extracts structured parameters from natural language.
+Two-class classification (v2):
+- chat: needs tool execution (tool decides routing via _route field)
+- navigate: pure page open, no tool needed ("打开考试工作台")
 """
 import json
+import logging
 from dataclasses import dataclass, field
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 # Page name → route mapping
 PAGE_ROUTES = {
@@ -18,61 +22,113 @@ PAGE_ROUTES = {
     "chat": None,
 }
 
-CLASSIFY_PROMPT = """你是化学教研助手的意图分类器。分析用户消息，返回 JSON（只返回 JSON，不要其他文字）：
+CLASSIFY_PROMPT = """你是化学教研助手的意图分类器。回答两个问题：
+1. 用户消息是否需要调用工具？
+2. 如果不需要工具，目标页面是什么？
 
+分类规则：
+- **chat**: 需要调用工具完成任务（生成题目、诊断学情、查周报、搜索真题、答疑辅导、模拟实验、配平方程式、导入试卷等）。**不确定时一律走 chat**。
+- **navigate**: 纯页面跳转，不需要任何工具（"打开考试工作台"、"去首页"、"查看班级列表"、"打开诊断页面"、"帮我打开学生管理"）。**只有明确说"打开/去/看看"某个页面的才走 navigate**。
+
+返回 JSON（只返回 JSON，不要其他文字）：
 {
-  "intent": "chat" | "page_action" | "hybrid",
-  "page": null | "exam-v2" | "diagnosis" | "students" | "teacher",
-  "params": {},
+  "type": "chat" | "navigate",
   "tools": [],
+  "page": null | "exam-v2" | "diagnosis" | "students" | "teacher",
   "provider": "deepseek" | "mimo"
 }
 
-意图类型：
-- chat: 纯答疑/聊天（"什么是氧化还原"、"模拟钠和水的实验"）
-- page_action: 直接操作页面（"打开考试工作台"、"看看张三的诊断"）
-- hybrid: 先执行 skill 再跳转（"给张三出5道盐类水解的题"、"准备期中考试"）
+页面映射（仅 navigate 时需要）：
+- 考试/出题/组卷 → exam-v2
+- 诊断/学习计划 → diagnosis
+- 学生/学员 → students
+- 班级/学情 → teacher
 
-页面映射：
-- 出题/考试/组卷/题目/导题 → exam-v2
-- 诊断/障碍/学习计划 → diagnosis
-- 学生/学员/班级成员 → students
-- 学情/班级概览/成绩趋势 → teacher
-
-参数提取（从用户消息中提取，不知道就空）：
-- student_name: 学生姓名
-- knowledge_points: 知识点（逗号分隔）
-- difficulty: "easy"|"medium"|"hard"
-- quantity: 出题数量（数字字符串）
-- exam_scope: 考试范围
-- class_name: 班级名称
-
-工具选择（从全部可用工具中选相关的，最多3个）：
-- search_exam_bank: 搜索历年真题
-- generate_questions: AI生成题目
-- diagnose_barrier: 诊断学习障碍
-- web_search: 联网搜索
-- balance_equation: 配平化学方程式
-- chemistry_tutor: 辅导答疑
-- simulate_experiment: 模拟化学实验
-- weekly_report: 生成周报
-- import_exam_paper: 导入试卷
-- assign_adaptive_practice: 布置自适应练习
+可用工具（仅 chat 时需要，最多3个，只从以下列表中选择）：
+{tool_list}
 
 Provider 选择：
 - 图片/拍照/OCR/识别/上传 → mimo
 - 其他 → deepseek
 
-用户消息: {user_input}
+{conversation_context}
+用户消息：{user_input}
 
-JSON:"""
+JSON："""
+
+# Full tool catalog with descriptions for prompt injection
+_ALL_TOOL_DESCRIPTIONS = {
+    "search_exam_bank": "搜索历年高考化学真题",
+    "generate_questions": "AI生成化学题目",
+    "diagnose_barrier": "诊断学生学习障碍类型",
+    "web_search": "联网搜索最新化学资讯和高考动态",
+    "balance_equation": "审核化学方程式配平",
+    "chemistry_tutor": "引导式化学辅导答疑",
+    "simulate_experiment": "模拟化学实验，生成实验报告",
+    "weekly_report": "生成学生本周化学学习周报",
+    "import_exam_paper": "从PDF导入试卷并审核入库",
+    "assign_adaptive_practice": "根据学生障碍布置自适应练习",
+}
+
+
+def _build_tool_list(available_skills: list[str] | None) -> str:
+    """Build the '可用工具' section for the classify prompt."""
+    if not available_skills:
+        skills = list(_ALL_TOOL_DESCRIPTIONS.keys())
+    else:
+        skills = available_skills
+
+    lines = []
+    for name in skills:
+        desc = _ALL_TOOL_DESCRIPTIONS.get(name, "")
+        if desc:
+            lines.append(f"- {name}: {desc}")
+        else:
+            lines.append(f"- {name}")
+    return "\n".join(lines)
+
+
+def _build_classify_prompt(
+    user_input: str,
+    available_skills: list[str] | None = None,
+    conversation_context: str = "",
+) -> str:
+    """Build the full classification prompt with injected context."""
+    tool_list = _build_tool_list(available_skills)
+    ctx_block = f"对话历史：\n{conversation_context}" if conversation_context else ""
+    return (
+        CLASSIFY_PROMPT.replace("{tool_list}", tool_list)
+        .replace("{conversation_context}", ctx_block)
+        .replace("{user_input}", user_input)
+    )
+
+
+def _validate_tools(tools) -> list | None:
+    """Validate and normalize the tools field from LLM output.
+
+    Returns a list of tool name strings, or None if invalid.
+    """
+    if tools is None:
+        return None
+    if not isinstance(tools, list):
+        logger.warning(
+            "IntentClassifier: tools is not a list (got %s), falling back to None",
+            type(tools).__name__,
+        )
+        return None
+    result = [t for t in tools if isinstance(t, str)]
+    if len(result) != len(tools):
+        logger.warning(
+            "IntentClassifier: %d non-string entries dropped from tools",
+            len(tools) - len(result),
+        )
+    return result if result else None
 
 
 @dataclass
 class IntentResult:
-    intent: str = "chat"         # chat | page_action | hybrid
-    page: Optional[str] = None   # exam-v2 | diagnosis | students | teacher | None
-    params: dict = field(default_factory=dict)
+    type: str = "chat"            # chat | navigate
+    page: Optional[str] = None    # exam-v2 | diagnosis | students | teacher | None
     tools: Optional[list] = None  # None = all tools, [] = no tools
     provider: str = "deepseek"
 
@@ -81,9 +137,24 @@ class IntentClassifier:
     def __init__(self, provider):
         self._provider = provider
 
-    async def classify(self, user_input: str) -> IntentResult:
-        """LLM 语义分类 + 参数提取"""
-        prompt = CLASSIFY_PROMPT.replace("{user_input}", user_input)
+    async def classify(
+        self,
+        user_input: str,
+        available_skills: list[str] | None = None,
+        conversation_context: str = "",
+    ) -> IntentResult:
+        """LLM 语义分类 + tool 推荐。
+
+        Args:
+            user_input: 用户当前消息
+            available_skills: 当前 persona 的可用 skill 名列表，None 表示全部
+            conversation_context: 最近几轮对话历史（文本）
+        """
+        prompt = _build_classify_prompt(
+            user_input,
+            available_skills=available_skills,
+            conversation_context=conversation_context,
+        )
 
         try:
             result = await self._provider.chat(
@@ -93,45 +164,73 @@ class IntentClassifier:
             )
             return self._parse(result.content)
         except Exception:
-            return IntentResult()  # safe fallback: chat
+            logger.warning("IntentClassifier: LLM call failed", exc_info=True)
+            return self._keyword_fallback(user_input)
 
     def _parse(self, content: str) -> IntentResult:
-        """Parse LLM JSON response with fallback to keyword matching."""
-        # Try to extract JSON
+        """Parse LLM JSON response with type validation and keyword fallback."""
         try:
-            # Find JSON object in the response
             start = content.find("{")
             end = content.rfind("}") + 1
             if start >= 0 and end > start:
                 data = json.loads(content[start:end])
+                raw_tools = data.get("tools", None)
+                tools = _validate_tools(raw_tools)
                 return IntentResult(
-                    intent=data.get("intent", "chat"),
+                    type=data.get("type", "chat"),
                     page=data.get("page"),
-                    params=data.get("params", {}),
-                    tools=data.get("tools", None),
+                    tools=tools,
                     provider=data.get("provider", "deepseek"),
                 )
         except (json.JSONDecodeError, KeyError):
-            pass
+            logger.warning("IntentClassifier: JSON parse failed", exc_info=True)
 
-        # Fallback: keyword-based classification
         return self._keyword_fallback(content)
 
     def _keyword_fallback(self, text: str) -> IntentResult:
-        """Keyword-based fallback when LLM parsing fails (kept from original _classify)."""
-        all_tools = None  # None means "let the agent decide"
+        """Keyword-based fallback when LLM parsing fails.
+
+        Enhanced v2: now recommends specific tools instead of leaving tools=None.
+        """
         provider = "deepseek"
+        tools = None
 
         if any(kw in text for kw in ["图片", "照片", "图像", "识别", "OCR", "上传"]):
             provider = "mimo"
 
-        if any(kw in text for kw in ["出题", "出", "生成", "练习", "组卷", "题目", "题", "考试", "组考"]):
-            return IntentResult(intent="hybrid", page="exam-v2", tools=all_tools, provider=provider)
-        if any(kw in text for kw in ["诊断", "学习计划"]):
-            return IntentResult(intent="hybrid", page="diagnosis", tools=all_tools, provider=provider)
-        if any(kw in text for kw in ["学生", "学员", "班级成员"]):
-            return IntentResult(intent="page_action", page="students", tools=all_tools, provider=provider)
-        if any(kw in text for kw in ["学情", "班级概览", "成绩趋势", "面板"]):
-            return IntentResult(intent="page_action", page="teacher", tools=all_tools, provider=provider)
+        # Pure page navigation (no tools)
+        if any(kw in text for kw in ["打开考试", "考试工作台", "去首页", "首页", "打开诊断", "打开学生", "班级列表"]):
+            page = None
+            if any(kw in text for kw in ["考试", "出题", "组卷"]):
+                page = "exam-v2"
+            elif any(kw in text for kw in ["诊断", "学习计划"]):
+                page = "diagnosis"
+            elif any(kw in text for kw in ["学生", "学员"]):
+                page = "students"
+            elif any(kw in text for kw in ["班级", "学情", "首页"]):
+                page = "teacher"
+            return IntentResult(type="navigate", page=page, tools=[], provider=provider)
 
-        return IntentResult(intent="chat", tools=all_tools, provider=provider)
+        # Keyword-based tool recommendation
+        tools = []
+        if any(kw in text for kw in ["出题", "出", "生成", "练习", "组卷", "题目", "题", "考试", "组考"]):
+            tools.append("generate_questions")
+        if any(kw in text for kw in ["诊断", "学习障碍", "学情分析"]):
+            tools.append("diagnose_barrier")
+        if any(kw in text for kw in ["周报", "学习报告", "本周"]):
+            tools.append("weekly_report")
+        if any(kw in text for kw in ["搜索", "真题", "高考"]):
+            tools.append("search_exam_bank")
+        if any(kw in text for kw in ["实验", "模拟"]):
+            tools.append("simulate_experiment")
+        if any(kw in text for kw in ["配平", "方程式"]):
+            tools.append("balance_equation")
+        if any(kw in text for kw in ["导入", "PDF", "试卷上传"]):
+            tools.append("import_exam_paper")
+        if any(kw in text for kw in ["自适应", "练习布置"]):
+            tools.append("assign_adaptive_practice")
+
+        if not tools:
+            tools = None  # No keyword match → let Agent use all tools
+
+        return IntentResult(type="chat", tools=tools, provider=provider)
