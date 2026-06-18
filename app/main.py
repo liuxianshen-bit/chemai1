@@ -104,9 +104,13 @@ app.include_router(wrong_topic.router, prefix="/api/practice/wrong-topic", tags=
 app.include_router(mcp_router, tags=["MCP工具"])
 app.include_router(knowledge.router, prefix="/api/knowledge", tags=["知识卡片"])
 
-# ChemAgent
+# ChemAgent (pydantic-ai, deprecated — replaced by langgraph)
 from agent.channel.fastapi_sse import router as agent_router
 app.include_router(agent_router, prefix="/api/agent", tags=["AI Agent"])
+
+# ChemAgent (LangGraph ReAct agent)
+from agent.channel.langgraph_channel import router as langgraph_router
+app.include_router(langgraph_router, prefix="/api/agent", tags=["AI Agent (LangGraph)"])
 
 
 def _nocache_file(path, **kw):
