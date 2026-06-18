@@ -1,0 +1,38 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>B · 实验室手稿</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,400&family=IBM+Plex+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'IBM Plex Sans',sans-serif;background:#f7f4ed;min-height:100vh;display:flex;align-items:center;justify-content:center;
+  background-image:linear-gradient(rgba(0,0,0,.02) 1px,transparent 1px),linear-gradient(90deg,rgba(0,0,0,.02) 1px,transparent 1px);background-size:28px 28px}
+.card{background:#faf7f0;border:1px solid rgba(0,0,0,.06);padding:48px 40px 36px;width:100%;max-width:400px;margin:24px;
+  box-shadow:0 1px 2px rgba(0,0,0,.03),0 8px 32px rgba(0,0,0,.04);position:relative}
+.card::before{content:'';position:absolute;top:0;left:56px;width:1px;height:100%;background:rgba(180,60,40,.1)}
+.card::after{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#b43c28,#d4956b,transparent 80%)}
+.stamp{position:absolute;top:-10px;right:20px;font-family:'JetBrains Mono',monospace;font-size:10px;color:#b43c28;padding:2px 8px;border:1px solid rgba(180,60,40,.2);border-radius:2px;background:#faf7f0;transform:rotate(1deg)}
+.brand h1{font-family:'Cormorant Garamond',serif;font-size:34px;font-weight:600;color:#1a1a1a;line-height:1.1;letter-spacing:-.5px}
+.brand .tagline{font-family:'JetBrains Mono',monospace;font-size:10px;color:#8a8a8a;margin-top:6px;letter-spacing:1px}
+.divider{margin:20px 0;height:1px;background:linear-gradient(90deg,rgba(180,60,40,.3),rgba(180,60,40,.05) 70%,transparent)}
+.form{display:flex;flex-direction:column;gap:24px}
+.field-group label{display:block;font-family:'JetBrains Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:#999;margin-bottom:4px}
+.field-group input,.field-group select{width:100%;border:none;border-bottom:1.5px solid rgba(0,0,0,.08);background:transparent;padding:8px 0;font-size:15px;font-family:'IBM Plex Sans',sans-serif;outline:none;transition:border-color .3s;border-radius:0;-webkit-appearance:none}
+.field-group input:focus,.field-group select:focus{border-bottom-color:#b43c28}
+.btn-submit{width:100%;padding:13px 0;border:1.5px solid #1a1a1a;background:transparent;color:#1a1a1a;font-size:14px;font-family:'IBM Plex Sans',sans-serif;cursor:pointer;letter-spacing:1px;transition:.2s}
+.btn-submit:hover{background:#1a1a1a;color:#faf7f0}
+.note{margin-top:28px;padding-top:14px;border-top:1px solid rgba(0,0,0,.04);text-align:center;font-family:'JetBrains Mono',monospace;font-size:9px;color:rgba(0,0,0,.2)}
+.formula{position:absolute;bottom:16px;right:24px;font-family:'Cormorant Garamond',serif;font-style:italic;font-size:22px;color:rgba(0,0,0,.03);transform:rotate(-3deg);pointer-events:none}
+</style></head><body>
+<div class="card">
+<div class="stamp">📋 实验记录 · No.042</div>
+<div class="brand"><h1>智辅化学</h1><p class="tagline">ChemAI · 智慧化学教学辅助系统</p></div>
+<div class="divider"></div>
+<form class="form">
+<div class="field-group"><label>用户名 / 工号</label><input type="text" placeholder="hai"></div>
+<div class="field-group"><label>密码</label><input type="password" placeholder="········"></div>
+<div class="field-group"><label>身份</label><select><option>教师</option><option>学生</option><option>家长</option></select></div>
+<button type="button" class="btn-submit">进入实验室</button>
+</form>
+<div class="note">hai / hai123456 · admin / admin123</div>
+<div class="formula">C₈H₁₀N₄O₂</div>
+</div>
+<p style="position:fixed;bottom:24px;font-family:'JetBrains Mono',monospace;font-size:10px;color:rgba(0,0,0,.15);text-align:center;width:100%">B · Lab Notebook Refined &nbsp;|&nbsp; Kenya Hara × Chemistry Journal</p>
+</body></html>

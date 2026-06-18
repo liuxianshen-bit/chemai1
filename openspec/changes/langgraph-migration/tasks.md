@@ -4,11 +4,8 @@
 
 - [ ] 0.1 `pip install langgraph langgraph-checkpoint langchain-core` ✅ (已完成)
 - [ ] 0.2 LangGraph 基础验证 ✅ (已完成, 8/8)
-- [ ] 0.3 **新增** — DeepSeek + ChatOpenAI bind_tools 验证
-  - [ ] 用 ChatOpenAI + deepseek-chat 调 bind_tools，确认 tool_call parsing 正确
-  - [ ] 验证 `tool_choice="auto"` 行为: 闲聊时 LLM 可以不调 tool
-  - [ ] 验证 ReAct loop: LLM → tool_call → tool_result → LLM 继续 → 结束
-  - 测试脚本: `_temp/test_langgraph_deepseek_tools.py`
+- [x] 0.3 DeepSeek + ChatOpenAI bind_tools 验证 ✅ (4/4 PASS, test_langgraph_deepseek_tools.py)
+  - 注意: `create_react_agent` → `langchain.agents.create_agent` (LangGraph 1.0+ deprecated 旧路径)
 
 ## Phase 1: 核心 Agent (3 个新文件)
 
@@ -18,7 +15,7 @@
   - [ ] 加载 persona YAML → 获取 available_skills + system_prompt
   - [ ] `get_langchain_model(provider)` → ChatOpenAI 实例
   - [ ] `get_tools_for_persona(persona, tool_filter)` → LangChain @tool 列表
-  - [ ] `create_react_agent(model, tools, prompt, checkpointer=MemorySaver())`
+  - [ ] `create_agent(model, tools, prompt, checkpointer=MemorySaver())` (from `langchain.agents`)
   - [ ] system_prompt 中注入 tool 推荐列表（来自 Gateway 分类器）
 - [ ] 新增 `request_approval` tool
   - [ ] 接受 `message: str, context: str = ""` 参数

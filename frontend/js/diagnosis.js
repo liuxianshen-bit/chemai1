@@ -9,6 +9,42 @@
   document.addEventListener('DOMContentLoaded', function () {
     loadPlans()
     loadClasses()
+
+    // Agent page driver bridge
+    var bridge = window.__chemai_bridge
+    if (bridge) {
+      // Actions
+      if (bridge.actions) {
+        bridge.actions.forEach(function (act) {
+          if (act.action === 'selectStudent') {
+            var sid = act.payload
+            if (sid) setTimeout(function () { window.toggleStudentDetail(sid) }, 300)
+          }
+          if (act.action === 'selectClass') {
+            var cls = act.payload
+            if (cls) {
+              var sel = document.getElementById('diag-class')
+              if (sel) { sel.value = cls; sel.dispatchEvent(new Event('change')) }
+            }
+          }
+          if (act.action === 'showPlan') {
+            setTimeout(function () { window.togglePlanPanel() }, 500)
+          }
+        })
+      }
+      // Populate data
+      if (bridge.populates) {
+        bridge.populates.forEach(function (pop) {
+          if (pop.target === 'diagnosis' && pop.data) {
+            currentDiagnosis = pop.data
+            renderOverview(pop.data)
+            if (pop.data.students) renderStudentList(pop.data)
+          }
+        })
+      }
+      window.__chemai_bridge = null
+    }
+
     document.getElementById('diag-class').addEventListener('change', function () {
       var cls = this.value; if (!cls) return
       fetch('/api/exam/list/' + cls).then(function (r) { return r.json() }).then(function (d) {

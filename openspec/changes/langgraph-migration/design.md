@@ -67,7 +67,7 @@ LangGraph 的 `create_react_agent` 提供这个能力：LLM 在一个 tool calli
 ### 核心代码形态
 
 ```python
-from langgraph.prebuilt import create_react_agent
+from langchain.agents import create_agent  # LangGraph 1.0+ 新路径
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import interrupt, Command
 
@@ -79,7 +79,7 @@ def create_chemai_agent(persona: str, provider: str):
     system_prompt = build_persona_prompt(persona)
 
     # ReAct agent: LLM 在 tool calling loop 里
-    agent = create_react_agent(
+    agent = create_agent(
         model=model,
         tools=tools,
         prompt=system_prompt,
@@ -275,9 +275,9 @@ system_prompt: 你是化学教研助手。
 
 ## Decisions
 
-### D1: create_react_agent vs StateGraph
+### D1: create_agent (ReAct) vs StateGraph (DAG)
 
-**选择**: `create_react_agent`（LangGraph 预置 ReAct agent）。
+**选择**: `langchain.agents.create_agent`（LangGraph 1.0+ ReAct agent，原 `create_react_agent` 已 deprecated）。
 
 **理由**: LLM 自主决定 tool 调用顺序、次数和策略。不需要手工设计 `classify → route → execute` 这样的固定边。开发者只负责：给什么 tool、给什么 system prompt。
 

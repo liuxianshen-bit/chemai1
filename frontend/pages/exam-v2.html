@@ -497,6 +497,46 @@ mounted:function(){
       self.histTotal=(d.data&&d.data.total_questions)||250
     }
   }).catch(function(){})
+  // Agent page driver bridge
+  var bridge = window.__chemai_bridge
+  if (bridge) {
+    // Actions
+    if (bridge.actions) {
+      bridge.actions.forEach(function(act) {
+        if (act.action === 'openTab') {
+          if (act.payload === 'generate') { self.tab = 'workbench'; self.sourceMode = 'ai' }
+          else if (act.payload === 'browse') { self.tab = 'history' }
+          else if (act.payload === 'upload') { self.tab = 'workbench'; self.sourceMode = 'upload' }
+        }
+        if (act.action === 'filterKp') {
+          self.kpSearch = act.payload || ''
+          // Activate matching kp
+          if (self.kps) { self.kps.forEach(function(k) { k.active = k.name.includes(act.payload) }) }
+        }
+      })
+    }
+    // Populate data
+    if (bridge.populates) {
+      bridge.populates.forEach(function(pop) {
+        if (pop.target === 'questions' && pop.data && pop.data.questions) {
+          self.questions = pop.data.questions
+          self.tab = 'workbench'; self.sourceMode = 'ai'
+        }
+        if (pop.target === 'searchResults' && pop.data && pop.data.questions) {
+          self.histResults = pop.data.questions
+          self.histTotal = pop.data.total || pop.data.questions.length
+          self.tab = 'history'
+        }
+      })
+    }
+    // Navigate params
+    if (bridge.navigate && bridge.navigate.params) {
+      var p = bridge.navigate.params
+      if (p.knowledge_points) self.kpSearch = p.knowledge_points
+      if (p.difficulty) self.difficulty = p.difficulty
+    }
+    window.__chemai_bridge = null
+  }
 },
 methods:{
   // ── Modal system ──

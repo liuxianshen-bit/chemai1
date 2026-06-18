@@ -97,3 +97,15 @@ class DeepSeekProvider:
     @property
     def model_name(self) -> str:
         return f"deepseek/{self.model}"
+
+
+# Module-level singleton for the intent classifier (shared connection pool)
+classifier_provider: DeepSeekProvider | None = None
+
+
+def get_classifier_provider() -> DeepSeekProvider:
+    """Return or create the shared classifier provider singleton."""
+    global classifier_provider
+    if classifier_provider is None:
+        classifier_provider = DeepSeekProvider()
+    return classifier_provider

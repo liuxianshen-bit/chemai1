@@ -31,24 +31,58 @@
 
   // ─── 侧边栏渲染 ───
   function renderSidebar(active) {
-    var nav = [
-      { id: 'chat', sym: 'Ai', icon: 'psychology', label: 'AI 教研助手', href: '/' },
-      { id: 'ocr',  sym: 'Oc', icon: 'document_scanner', label: '答题卡识别', href: '/pages/ocr.html' },
-      { id: 'exam', sym: 'Ex', icon: 'assignment', label: '考试工作台', href: '/pages/exam-v2.html' },
-      { id: 'diagnosis', sym: 'Dx', icon: 'health_and_safety', label: '障碍诊断', href: '/pages/diagnosis.html' },
-      { id: 'teacher', sym: 'Td', icon: 'bar_chart', label: '学情面板', href: '/pages/teacher.html' },
-      { id: 'students', sym: 'St', icon: 'group', label: '学生管理', href: '/pages/students.html' },
-    ]
-    var html = nav.map(function (n) {
-      var cls = n.id === active ? 'elem-nav active' : 'elem-nav'
-      return '<a class="' + cls + '" href="' + n.href + '">' +
-        '<span class="sym">' + n.sym + '</span>' +
-        n.label + '</a>'
-    }).join('')
+    var html = ''
+
+    if (active === 'chat') {
+      // Chat page: conversation history + compact manual nav
+      var convs = []
+      try { convs = JSON.parse(localStorage.getItem('chemai_convs') || '[]') } catch(e) {}
+      convs.sort(function(a, b) { return (b.updated || 0) - (a.updated || 0) })
+
+      if (convs.length) {
+        html += '<div style="padding:0 8px;margin-bottom:4px"><span style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:#999;text-transform:uppercase;letter-spacing:.5px">对话历史</span></div>'
+        html += '<div style="flex:1;overflow-y:auto;padding:0 4px" id="conv-list">'
+        convs.forEach(function(c) {
+          html += '<div class="history-item' + (c.id === window.__activeConvId ? ' active' : '') + '" onclick="loadConversation(\'' + c.id + '\')">' +
+            '<span class="title" style="font-family:\'IBM Plex Sans\',sans-serif;font-size:13px">' + escHtml(c.title || '新对话') + '</span>' +
+            '<button class="del" onclick="event.stopPropagation();deleteConversation(\'' + c.id + '\')" title="删除">×</button></div>'
+        })
+        html += '</div>'
+      } else {
+        html += '<div style="padding:20px 12px;text-align:center;color:#999;font-size:13px;font-family:\'IBM Plex Sans\',sans-serif">暂无对话记录</div>'
+      }
+
+      // Compact manual nav — 5 icon buttons
+      html += '<div style="display:flex;justify-content:center;gap:6px;padding:8px;border-top:1px solid rgba(0,0,0,.04);margin-top:auto">' +
+        '<a href="/pages/ocr.html" title="答题卡识别" style="display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:4px;color:#555;text-decoration:none;transition:.15s" onmouseover="this.style.background=\'rgba(0,0,0,.03)\'" onmouseout="this.style.background=\'transparent\'"><span class="material-symbols-outlined" style="font-size:19px">document_scanner</span></a>' +
+        '<a href="/pages/exam-v2.html" title="考试工作台" style="display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:4px;color:#555;text-decoration:none;transition:.15s" onmouseover="this.style.background=\'rgba(0,0,0,.03)\'" onmouseout="this.style.background=\'transparent\'"><span class="material-symbols-outlined" style="font-size:19px">edit_note</span></a>' +
+        '<a href="/pages/diagnosis.html" title="障碍诊断" style="display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:4px;color:#555;text-decoration:none;transition:.15s" onmouseover="this.style.background=\'rgba(0,0,0,.03)\'" onmouseout="this.style.background=\'transparent\'"><span class="material-symbols-outlined" style="font-size:19px">clinical_notes</span></a>' +
+        '<a href="/pages/teacher.html" title="学情面板" style="display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:4px;color:#555;text-decoration:none;transition:.15s" onmouseover="this.style.background=\'rgba(0,0,0,.03)\'" onmouseout="this.style.background=\'transparent\'"><span class="material-symbols-outlined" style="font-size:19px">monitoring</span></a>' +
+        '<a href="/pages/students.html" title="学生管理" style="display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:4px;color:#555;text-decoration:none;transition:.15s" onmouseover="this.style.background=\'rgba(0,0,0,.03)\'" onmouseout="this.style.background=\'transparent\'"><span class="material-symbols-outlined" style="font-size:19px">group</span></a>' +
+        '</div>'
+    } else {
+      // Other pages: keep original nav links
+      var nav = [
+        { id: 'chat', sym: 'Ai', icon: 'psychology', label: 'AI 教研助手', href: '/' },
+        { id: 'ocr',  sym: 'Oc', icon: 'document_scanner', label: '答题卡识别', href: '/pages/ocr.html' },
+        { id: 'exam', sym: 'Ex', icon: 'assignment', label: '考试工作台', href: '/pages/exam-v2.html' },
+        { id: 'diagnosis', sym: 'Dx', icon: 'health_and_safety', label: '障碍诊断', href: '/pages/diagnosis.html' },
+        { id: 'teacher', sym: 'Pa', icon: 'bar_chart', label: '学情面板', href: '/pages/teacher.html' },
+        { id: 'students', sym: 'St', icon: 'group', label: '学生管理', href: '/pages/students.html' },
+      ]
+      html = nav.map(function (n) {
+        var cls = n.id === active ? 'elem-nav active' : 'elem-nav'
+        return '<a class="' + cls + '" href="' + n.href + '">' +
+          '<span class="sym">' + n.sym + '</span>' +
+          n.label + '</a>'
+      }).join('')
+    }
 
     var sidebar = document.getElementById('sidebar-nav')
     if (sidebar) sidebar.innerHTML = html
   }
+
+  function escHtml(s) { if (!s) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') }
 
   // ─── 用户信息渲染 ───
   function renderUser() {
@@ -114,6 +148,7 @@
     if (path.indexOf('ocr') >= 0) active = 'ocr'
     else if (path.indexOf('exam') >= 0) active = 'exam'
     else if (path.indexOf('diagnosis') >= 0) active = 'diagnosis'
+    else if (path.indexOf('teacher') >= 0) active = 'teacher'
     else if (path.indexOf('students') >= 0) active = 'students'
     renderSidebar(active)
     renderActivities()

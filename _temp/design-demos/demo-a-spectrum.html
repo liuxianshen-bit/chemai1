@@ -1,0 +1,51 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>A · 光谱现代</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'DM Sans',sans-serif;background:#fcfcfc;min-height:100vh;display:flex;align-items:center;justify-content:center}
+.page{display:flex;width:100%;max-width:1100px;min-height:600px;margin:24px}
+.left{flex:1;background:#fff;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden}
+.left::before{content:'';position:absolute;inset:0;background:
+  repeating-linear-gradient(0deg,transparent,transparent 47px,rgba(0,0,0,.03) 47px,rgba(0,0,0,.03) 48px),
+  repeating-linear-gradient(90deg,transparent,transparent 47px,rgba(0,0,0,.03) 47px,rgba(0,0,0,.03) 48px)}
+.spectral-lines{position:absolute;left:0;right:0;top:40%;display:flex;flex-direction:column;gap:12px;align-items:center}
+.spectral-lines span{height:3px;border-radius:2px}
+.spectral-lines span:nth-child(1){width:60%;background:#FF6B35}
+.spectral-lines span:nth-child(2){width:45%;background:#00D4AA}
+.spectral-lines span:nth-child(3){width:55%;background:#7B2D8E}
+.spectral-lines span:nth-child(4){width:35%;background:#3B5BA5}
+.brand-text{position:relative;z-index:1;text-align:center}
+.brand-text h1{font-family:'Space Mono',monospace;font-size:28px;font-weight:700;color:#1a1a1a;letter-spacing:2px}
+.brand-text p{font-size:12px;color:#888;margin-top:4px;font-family:'Space Mono',monospace;letter-spacing:1px}
+.right{flex:1;background:#fff;display:flex;align-items:center;padding:0 64px;border-left:1px solid rgba(0,0,0,.06)}
+.form-wrap{width:100%;max-width:360px}
+.form-wrap h2{font-size:24px;font-weight:600;color:#1a1a1a;margin-bottom:4px}
+.form-wrap .sub{font-size:13px;color:#888;margin-bottom:32px}
+.field{margin-bottom:20px}
+.field label{display:block;font-family:'Space Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#aaa;margin-bottom:6px}
+.field input,.field select{width:100%;border:none;border-bottom:2px solid #e8e8e8;padding:10px 0;font-size:15px;font-family:'DM Sans',sans-serif;outline:none;transition:border-color .2s}
+.field input:focus,.field select:focus{border-bottom-color:#FF6B35}
+.btn{width:100%;padding:14px 0;background:#1a1a1a;color:#fff;border:none;font-size:14px;font-family:'DM Sans',sans-serif;font-weight:500;cursor:pointer;letter-spacing:.5px;transition:.2s}
+.btn:hover{background:#333}
+.footer{text-align:center;margin-top:24px;font-size:11px;color:#ccc;font-family:'Space Mono',monospace}
+.color-dots{display:flex;gap:6px;margin-top:8px}
+.color-dots span{width:8px;height:8px;border-radius:50%}
+</style></head><body>
+<div class="page">
+<div class="left">
+  <div class="spectral-lines"><span></span><span></span><span></span><span></span></div>
+  <div class="brand-text"><h1>智辅化学</h1><p>CHEMAI · Hydrogen Spectrum</p></div>
+</div>
+<div class="right">
+<div class="form-wrap">
+<h2>欢迎回来</h2><p class="sub">登录你的教师工作台</p>
+<div class="field"><label>用户名</label><input type="text" placeholder="hai"></div>
+<div class="field"><label>密码</label><input type="password" placeholder="········"></div>
+<div class="field"><label>身份</label><select><option>教师</option><option>学生</option><option>家长</option></select></div>
+<button class="btn">进入</button>
+<div class="color-dots"><span style="background:#FF6B35"></span><span style="background:#00D4AA"></span><span style="background:#7B2D8E"></span><span style="background:#3B5BA5"></span></div>
+</div>
+</div>
+</div>
+<p class="footer" style="position:fixed;bottom:24px">A · Spectrum Modern &nbsp;|&nbsp; Swiss Grid × Spectral Colors</p>
+</body></html>
