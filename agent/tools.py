@@ -18,7 +18,7 @@ async def search_exam_bank(
 
     何时用：用户需要真题参考、出题前想了解历年考法、或明确说"搜索真题"
     会发生什么：返回真题列表（含年份、来源、答案），在对话中展示
-    下一步：基于真题出变种题 → generate_questions；或直接展示结果给用户"""
+    下一步：简洁展示搜索结果即可，不要追问过多后续选项。用户会主动告诉你下一步需求"""
     from app.services.exam_bank import exam_bank_service
 
     results = exam_bank_service.search_questions(
@@ -96,11 +96,11 @@ async def generate_questions(
     quantity: int = 5,
     student_name: str = "",
 ) -> str:
-    """考试工作台 — 生成高中化学选择题
+    """[DEPRECATED for agent use] 考试工作台 — 生成高中化学选择题
 
-    何时用：用户要求出题，且已明确知识点、难度、数量。知识点未明确时不可调用（系统会拦截）
-    会发生什么：题目显示在考试工作台的"出题工作台"tab；无学生时自动跳转页面
-    下一步：无指定学生 → 必须调 save_to_bank 保存到题库；指定了学生 → 对话中展示即可"""
+    Agent 不应再调用此工具。请使用 navigate_to_exam_workbench 代替——
+    通过对话收集参数后跳转考试工作台，由页面端完成题目生成。
+    此函数保留供考试工作台页面直接调用。"""
     import re
     from agent.provider.deepseek import DeepSeekProvider
     from app.services.chemical_balance import audit_chemical_equation
@@ -758,12 +758,76 @@ async def save_to_bank(
         db.close()
 
 
+# ── 12. navigate_to_exam_workbench ──
+
+async def navigate_to_exam_workbench(
+    knowledge_points: str = "",
+    difficulty: str = "medium",
+    question_types: str = "",
+    variant_source: str = "",
+    set_name: str = "",
+) -> str:
+    """考试工作台 — 跳转到考试工作台并预填出题参数
+
+    何时用：用户要求出题，且已通过对话收集完所有必要参数（知识点、难度、题型和数量）
+    会发生什么：跳转到考试工作台的 AI 出题 tab，自动预填所有字段并立即开始生成题目
+    下一步：用户在考试工作台页面上预览题目、编辑、保存到题库。Agent 无需再做任何操作
+
+    question_types 格式: "题型:数量,题型:数量"，如 "single_choice:5,fill_blank:2"
+    可选题型: single_choice, fill_blank, calculation, experiment, inference
+    """
+    import logging
+    _log = logging.getLogger(__name__)
+
+    # Parse knowledge points
+    kps = [k.strip() for k in knowledge_points.split(",") if k.strip()]
+
+    # Parse question types
+    types = []
+    if question_types:
+        for item in question_types.split(","):
+            parts = item.strip().split(":")
+            if len(parts) == 2:
+                val, qty = parts[0].strip(), int(parts[1].strip())
+                types.append({"val": val, "active": True, "qty": qty})
+
+    if not types:
+        types = [{"val": "single_choice", "active": True, "qty": 3}]
+
+    # Assemble populate data for exam-v2 bridge
+    _data = {
+        "knowledge_points": kps,
+        "difficulty": difficulty,
+        "types": types,
+    }
+    if variant_source:
+        _data["variant_source"] = variant_source
+    if set_name:
+        _data["set_name"] = set_name
+
+    _log.info(f"[navigate_to_exam_workbench] kps={kps}, diff={difficulty}, types={types}")
+
+    return json.dumps({
+        "message": f"已为您准备好出题参数：{knowledge_points}，{difficulty}难度。正在跳转到考试工作台...",
+        "_route": {
+            "navigate": True,
+            "page": "exam-v2",
+            "params": {"knowledge_points": knowledge_points, "difficulty": difficulty},
+            "actions": [
+                {"action": "openTab", "payload": "generate"},
+                {"action": "setTypes", "payload": question_types or "single_choice:3"},
+            ],
+            "populate": {"target": "exam-config", "data": _data},
+        },
+    }, ensure_ascii=False)
+
+
 # ── Tool list for factory ──
 
 TOOLS = [
     search_exam_bank,
     web_search,
-    generate_questions,
+    navigate_to_exam_workbench,
     diagnose_barrier,
     chemistry_tutor,
     simulate_experiment,

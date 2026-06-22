@@ -513,9 +513,23 @@ mounted:function(){
           // Activate matching kp
           if (self.kps) { self.kps.forEach(function(k) { k.active = k.name.includes(act.payload) }) }
         }
+        if (act.action === 'setTypes') {
+          // payload format: "single_choice:5,fill_blank:2"
+          var typeMap = {}
+          var parts = (act.payload || '').split(',')
+          parts.forEach(function(p) {
+            var kv = p.split(':')
+            if (kv.length === 2) typeMap[kv[0].trim()] = parseInt(kv[1].trim()) || 1
+          })
+          self.types.forEach(function(t) {
+            if (typeMap[t.val] !== undefined) { t.active = true; t.qty = typeMap[t.val] }
+            else { t.active = false }
+          })
+        }
       })
     }
     // Populate data
+    var autoGenerate = false
     if (bridge.populates) {
       bridge.populates.forEach(function(pop) {
         if (pop.target === 'questions' && pop.data && pop.data.questions) {
@@ -527,6 +541,36 @@ mounted:function(){
           self.histTotal = pop.data.total || pop.data.questions.length
           self.tab = 'history'
         }
+        if (pop.target === 'exam-config' && pop.data) {
+          var cfg = pop.data
+          // Pre-fill knowledge points
+          if (cfg.knowledge_points && self.kps) {
+            cfg.knowledge_points.forEach(function(kp) {
+              var match = self.kps.find(function(k) { return k.name === kp })
+              if (match) match.active = true
+            })
+          }
+          // Pre-fill difficulty
+          if (cfg.difficulty) self.difficulty = cfg.difficulty
+          // Pre-fill question types with quantities
+          if (cfg.types) {
+            cfg.types.forEach(function(t) {
+              var type = self.types.find(function(tt) { return tt.val === t.val })
+              if (type) { type.active = t.active; if (t.qty) type.qty = t.qty }
+            })
+          }
+          // Pre-fill variant source
+          if (cfg.variant_source) { self.variantQid = cfg.variant_source; self.useVariant = true }
+          // Pre-fill folder (look up by name, fall back to raw value)
+          if (cfg.set_name) {
+            var folder = self.folders.find(function(f) { return f.name === cfg.set_name })
+            self.selectedFolder = folder ? folder.set_id : cfg.set_name
+          }
+          // Switch to AI generate tab
+          self.tab = 'workbench'; self.sourceMode = 'ai'
+          // Auto-trigger generation after pre-fill
+          autoGenerate = true
+        }
       })
     }
     // Navigate params
@@ -536,6 +580,11 @@ mounted:function(){
       if (p.difficulty) self.difficulty = p.difficulty
     }
     window.__chemai_bridge = null
+    // Auto-trigger generation if exam-config was populated
+    if (autoGenerate) {
+      var selfBridge = this
+      this.$nextTick(function() { selfBridge.aiGenerate() })
+    }
   }
 },
 methods:{

@@ -8,6 +8,6 @@ available_skills:
   - chemistry_tutor
   - search_exam_bank
   - web_search
-  - generate_questions
+  - navigate_to_exam_workbench
   - simulate_experiment
   - balance_equation

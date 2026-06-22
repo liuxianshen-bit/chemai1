@@ -5,7 +5,7 @@
   'use strict'
   var history = []
   var isSending = false
-  var currentConvId = null
+  var currentConvId = sessionStorage.getItem('chemai_active_cid') || null
   var agentContext = { class_id: '', class_name: '', exam_id: '', exam_name: '', student_id: '', student_name: '' }
   var _toolStartTime = 0
 
@@ -23,6 +23,7 @@
 
   window.newConversation = function() {
     currentConvId = null; history = [];
+    sessionStorage.removeItem('chemai_active_cid');
     var chat = document.getElementById('chat-messages')
     chat.innerHTML = '<div class="msg-ai"><div class="avatar">CHEMAI · 教研助手</div><p>你好，老师。</p><p style="font-size:13px;color:#555;margin-top:4px;line-height:1.7">我能帮你：配平化学方程式 · 生成练习题 · 诊断学习障碍 · 搜索历年真题 · 模拟化学实验 · 生成学习报告</p></div>'
     renderHistory()
@@ -231,6 +232,12 @@
     if (!text) { input.value = ''; input.style.height = 'auto'; if (preview) { preview.className = 'chem-preview'; preview.textContent = '' } }
     if (ChemAI.trackActivity) ChemAI.trackActivity('chat', msg.substring(0, 30))
 
+    // Ensure conversation_id exists and is persisted
+    if (!currentConvId) {
+      currentConvId = sessionStorage.getItem('chemai_active_cid') || newConvId()
+    }
+    sessionStorage.setItem('chemai_active_cid', currentConvId)
+
     isSending = true
     var sendBtn = document.getElementById('chat-send')
     if (sendBtn) { sendBtn.disabled = true; sendBtn.style.opacity = '.5' }
@@ -254,7 +261,7 @@
     fetch('/api/agent/chat/stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ persona: 'teacher', message: msg, provider: 'deepseek', history: history.slice(0, -1) })
+      body: JSON.stringify({ persona: 'teacher', message: msg, provider: 'deepseek', conversation_id: currentConvId, history: history.slice(0, -1) })
     }).then(function (resp) {
       if (!resp.ok) throw new Error('HTTP ' + resp.status)
       return streamResponse(resp, bubble)
@@ -371,6 +378,8 @@
       try {
         var nav = JSON.parse(navigateTo)
         if (nav.page) {
+          // Persist conversation_id before navigating away
+          if (currentConvId) sessionStorage.setItem('chemai_active_cid', currentConvId)
           setTimeout(function() {
             window.location.href = '/pages/' + nav.page + '.html'
           }, 500)

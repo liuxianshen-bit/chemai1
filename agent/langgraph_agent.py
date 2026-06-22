@@ -23,7 +23,7 @@ RECURSION_LIMIT = 8
 TOOL_CALL_LIMITS: dict[str, int] = {
     "search_exam_bank": 3,
     "web_search": 2,
-    "generate_questions": 5,
+    "navigate_to_exam_workbench": 3,
     "diagnose_barrier": 2,
     "weekly_report": 2,
     "balance_equation": 3,
@@ -38,11 +38,31 @@ TOOL_CALL_LIMITS: dict[str, int] = {
 # the call is blocked before execution with a "请先向用户确认" message.
 # This makes "反问用户" a structural gate, not a prompt hope.
 TOOL_PREREQUISITES: dict[str, list[str]] = {
-    "generate_questions": ["knowledge_points"],
+    "navigate_to_exam_workbench": ["knowledge_points"],
+    "search_exam_bank": ["keyword"],
     "diagnose_barrier": ["student_id_or_class_id"],
     "weekly_report": ["student_id_or_class_id"],
     "assign_adaptive_practice": ["student_id_or_class_id"],
 }
+
+# Keywords so generic they don't count as a specific request.
+# If search_exam_bank is called with only these as keyword, block and ask for specifics.
+# These are checked via substring containment — "找几个高考真题" contains "高考真题".
+VAGUE_KEYWORDS: list[str] = [
+    "高考真题", "真题", "化学题", "高考化学", "高中化学",
+    "高考", "找几个", "来几道", "题目", "搜题", "找题",
+    "出几道", "几道题", "出题",
+]
+
+def _is_keyword_too_vague(keyword: str) -> bool:
+    """Check if a search keyword is too generic to produce useful results."""
+    kw = keyword.strip()
+    if len(kw) <= 2:  # single character or empty after strip
+        return True
+    for vague in VAGUE_KEYWORDS:
+        if vague in kw:
+            return True
+    return False
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -89,6 +109,12 @@ class GuardState:
                 has_class_name = (kwargs.get("class_name", "") or "").strip()
                 if not (has_student or has_name or has_class or has_class_name):
                     return "缺少必要信息：请先向用户确认学生姓名/学号或班级。"
+                continue
+            # Special case: "keyword" field checks specificity (not just non-empty)
+            if field == "keyword":
+                val = (kwargs.get("keyword", "") or "").strip()
+                if not val or _is_keyword_too_vague(val):
+                    return "搜索关键词太宽泛。请先向用户确认：需要哪个具体知识点的真题？哪一年的？什么难度？"
                 continue
             val = kwargs.get(field, "")
             if not val or not str(val).strip():
