@@ -258,7 +258,7 @@
     // 思考状态进气泡
     var bubble = addMsg('ai', '<div class="think-status"><span class="dot"></span>思考中...</div><div class="think-dots"><span></span><span></span><span></span></div>')
 
-    fetch('/api/agent/chat/stream', {
+    fetch('/api/agent/chat/langgraph/stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ persona: 'teacher', message: msg, provider: 'deepseek', conversation_id: currentConvId, history: history.slice(0, -1) })
