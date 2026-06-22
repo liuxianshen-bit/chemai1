@@ -662,23 +662,29 @@ def test_regression_baseline(report: EvalReport):
                 traj = await run_langgraph_agent(scenario["input"], scenario["persona"])
                 baseline_traj = baseline["results"][sid]
 
-                # 对比 tool calls (set comparison, order-independent)
-                tools_match = set(traj["tools_called"]) == set(baseline_traj["tools_called"])
+                # 对比 tool calls — set comparison + trajectory order
+                tools_set_match = set(traj["tools_called"]) == set(baseline_traj["tools_called"])
+                tools_order_match = traj["tools_called"] == baseline_traj["tools_called"]
+                tools_match = tools_set_match  # set match is the gate; order is informational
                 # 对比 navigate
                 nav_match = traj["navigate_detected"] == baseline_traj["navigate_detected"]
 
-                if not tools_match:
+                if not tools_set_match:
+                    regressions += 1
+                if not tools_order_match:
                     regressions += 1
                 if not nav_match:
                     regressions += 1
 
                 entry_name = f"regression: {sid}"
-                passed = tools_match and nav_match
+                passed = tools_set_match and nav_match  # gate: set + nav
                 detail = ""
                 if not passed:
                     parts = []
-                    if not tools_match:
+                    if not tools_set_match:
                         parts.append(f"tools: was={baseline_traj['tools_called']} now={traj['tools_called']}")
+                    if not tools_order_match:
+                        parts.append(f"order: was={baseline_traj['tools_called']} now={traj['tools_called']}")
                     if not nav_match:
                         parts.append(f"nav: was={baseline_traj['navigate_detected']} now={traj['navigate_detected']}")
                     detail = "; ".join(parts)
@@ -687,7 +693,7 @@ def test_regression_baseline(report: EvalReport):
                 print(f"  [{sid}] {status} tools={traj['tools_called']}")
 
             if regressions > 0:
-                consistency = round((1 - regressions / (total * 2)) * 100)
+                consistency = round((1 - regressions / (total * 3)) * 100)
                 report.add("regression: SUMMARY", consistency >= 93,
                            f"{regressions} regressions; tool selection consistency ~{consistency}% (target >= 93%)")
             else:

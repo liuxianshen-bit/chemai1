@@ -14,7 +14,11 @@ async def search_exam_bank(
     difficulty: str = "",
     limit: int = 5,
 ) -> str:
-    """搜索历年高考化学真题。按知识点关键词、年份、难度筛选。"""
+    """考试工作台 — 搜索历年高考化学真题
+
+    何时用：用户需要真题参考、出题前想了解历年考法、或明确说"搜索真题"
+    会发生什么：返回真题列表（含年份、来源、答案），在对话中展示
+    下一步：基于真题出变种题 → generate_questions；或直接展示结果给用户"""
     from app.services.exam_bank import exam_bank_service
 
     results = exam_bank_service.search_questions(
@@ -43,7 +47,11 @@ async def search_exam_bank(
 # ── 2. web_search ──
 
 async def web_search(query: str = "") -> str:
-    """使用 MiMo 联网搜索功能查询实时化学信息、高考动态、教学资源。"""
+    """联网搜索 — 查询最新化学信息、高考动态、教学资源
+
+    何时用：用户询问的信息超出训练数据范围（如"2025高考大纲"）、需要最新政策或新闻
+    会发生什么：返回联网搜索结果摘要，在对话中展示
+    下一步：基于搜索结果回答用户问题；如需出题 → generate_questions"""
     import os, httpx
 
     api_key = os.getenv("XIAOMI_API_KEY", "")
@@ -88,21 +96,16 @@ async def generate_questions(
     quantity: int = 5,
     student_name: str = "",
 ) -> str:
-    """根据知识点和难度生成高中化学选择题。内部调用 LLM 出题，自动审核化学方程式配平。
-    student_name 可选：有学生名时题在 chat 里展示，不传时跳 exam-v2 页面。"""
+    """考试工作台 — 生成高中化学选择题
+
+    何时用：用户要求出题，且已明确知识点、难度、数量。知识点未明确时不可调用（系统会拦截）
+    会发生什么：题目显示在考试工作台的"出题工作台"tab；无学生时自动跳转页面
+    下一步：无指定学生 → 必须调 save_to_bank 保存到题库；指定了学生 → 对话中展示即可"""
     import re
     from agent.provider.deepseek import DeepSeekProvider
     from app.services.chemical_balance import audit_chemical_equation
 
     kps = [k.strip() for k in knowledge_points.split(",") if k.strip()]
-
-    # ── 拒绝空知识点: 强制 LLM 反问用户 ──
-    if not kps:
-        return json.dumps({
-            "error": "用户未指定知识点",
-            "hint": "请先向用户确认：1) 需要哪个知识点的题目？2) 什么难度？3) 几道题？4) 给哪个班/学生用？不要替用户猜测。",
-            "_route": {"navigate": False},
-        }, ensure_ascii=False)
 
     provider = DeepSeekProvider()
 
@@ -188,8 +191,11 @@ async def diagnose_barrier(
     student_name: str = "",
     class_id: str = "",
 ) -> str:
-    """诊断学生的化学学习障碍类型（概念理解/审题障碍/表述障碍）。
-    传 student_id 或 student_name 做个体诊断，传 class_id 做班级诊断。"""
+    """学情诊断 — 诊断学生的化学学习障碍类型（概念理解/审题障碍/表述障碍）
+
+    何时用：用户询问某个学生或班级的学习情况、错题原因、薄弱环节
+    会发生什么：个体诊断返回学生障碍分布和主导障碍类型；班级诊断返回全班障碍分布统计
+    下一步：个体诊断 → 根据障碍类型推荐针对性练习（assign_adaptive_practice）；班级诊断 → 跳转诊断页面展示图表"""
     import sys, os
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
     from app.models.database import get_db
@@ -301,7 +307,11 @@ async def chemistry_tutor(
     question: str = "",
     student_level: str = "中等",
 ) -> str:
-    """回答学生的化学问题，引导式教学不直接给答案。适用于概念解释、解题思路引导、知识点讲解。"""
+    """聊天辅导 — 引导式解答化学问题
+
+    何时用：学生提问化学概念、解题思路、知识点讲解等非出题类问题
+    会发生什么：以引导式教学分步讲解，不直接给答案；根据学生水平调整讲解深度
+    下一步：如学生仍有疑问 → 继续解答；如需要出题练习 → generate_questions"""
     from agent.provider.deepseek import DeepSeekProvider
 
     provider = DeepSeekProvider()
@@ -332,7 +342,11 @@ async def chemistry_tutor(
 # ── 6. simulate_experiment ──
 
 async def simulate_experiment(experiment_name: str = "") -> str:
-    """模拟高中化学实验，生成实验步骤、预测现象、写方程式、解释原理、提供安全提醒。"""
+    """实验模拟 — 模拟高中化学实验过程
+
+    何时用：用户想了解某个实验的操作步骤、现象、原理，或说"模拟XX实验"
+    会发生什么：生成实验步骤、预测现象、写出方程式、解释原理，附带安全提醒
+    下一步：基于实验结果回答用户追问；如需配平实验方程式 → balance_equation"""
     import re
     from agent.provider.deepseek import DeepSeekProvider
 
@@ -375,7 +389,11 @@ async def simulate_experiment(experiment_name: str = "") -> str:
 # ── 7. balance_equation ──
 
 async def balance_equation(equation: str = "") -> str:
-    """审核化学方程式是否配平，检查左右两侧各元素原子数量是否相等。"""
+    """方程式配平 — 审核化学方程式的配平正确性
+
+    何时用：用户发来一个化学方程式要求检查配平，或出题后需要审核题目中的方程式
+    会发生什么：检查等式两侧各元素的原子数量，返回配平状态和各元素计数
+    下一步：如配平正确 → 告知用户；如有问题 → 指出不平衡的元素和修正建议"""
     from app.services.chemical_balance import audit_chemical_equation
 
     result = audit_chemical_equation(equation)
@@ -385,8 +403,11 @@ async def balance_equation(equation: str = "") -> str:
 # ── 8. weekly_report ──
 
 async def weekly_report(student_id: str = "", student_name: str = "", class_name: str = "") -> str:
-    """生成学生本周化学学习周报，包含学习内容、掌握情况、成长空间和家庭配合建议。通俗易懂，面向家长。
-    传 student_id 或 student_name 查个人，传 class_name 查全班。"""
+    """学习报告 — 生成学生或班级的化学学习周报
+
+    何时用：用户（通常为家长或老师）要求查看学习报告、本周学习情况
+    会发生什么：个人报告包含学习内容、掌握情况、成长空间和家庭配合建议；班级报告包含整体统计
+    下一步：个人报告 → 对话中展示；班级报告 → 可跳转诊断页面查看图表"""
     import sys, os
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
     from agent.provider.deepseek import DeepSeekProvider
@@ -495,7 +516,11 @@ async def import_exam_paper(
     year: int = 2025,
     auto_approve: bool = False,
 ) -> str:
-    """上传试卷PDF，自动提取化学题目并审核入库。返回提取数量、审核结果和入库状态。"""
+    """试卷导入 — 上传PDF试卷自动提取化学题目并入库
+
+    何时用：用户有PDF格式的试卷需要导入题库，或说"导入这份试卷"
+    会发生什么：调用MinerU OCR解析PDF，提取化学题目，审核方程式配平，自动入库
+    下一步：导入完成 → 告知用户导入数量和题库位置；需调 request_approval 确认"""
     import os, re
 
     if not pdf_path or not os.path.exists(pdf_path):
@@ -570,7 +595,11 @@ async def assign_adaptive_practice(
     knowledge_points: str = "",
     question_count: int = 5,
 ) -> str:
-    """为班级学生布置自适应练习。根据每个学生的障碍类型和最近发展区生成个性化化学题。"""
+    """自适应练习 — 根据学生障碍类型布置个性化练习
+
+    何时用：诊断完成后，老师要求给班级/学生布置针对性练习
+    会发生什么：为每个学生生成符合其最近发展区的个性化化学题，自动分配
+    下一步：分配完成 → 告知老师分配结果；此工具需要先调 request_approval 确认"""
     import sys, os
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -625,14 +654,11 @@ async def save_to_bank(
     set_name: str = "",
     description: str = "",
 ) -> str:
-    """将生成的题目保存到题库。调用时机：出完题后，如果用户没有指定学生（题目不关联个人练习），
-    应主动调用此工具将题目存入题库，方便后续在考试工作台中管理和复用。
+    """考试工作台 — 将生成的题目保存到题库
 
-    questions: 已生成题目的 JSON 字符串（包含 questions 数组）
-    knowledge_points: 知识点，逗号分隔
-    set_name: 可选，题库文件夹名称，不传则自动生成
-    description: 可选，题库描述
-    """
+    何时用：generate_questions 出完题且没有指定学生姓名时，必须调此工具保存
+    会发生什么：创建题库文件夹（自动命名），将题目存入数据库，可在考试工作台中管理和复用
+    下一步：保存后告知用户文件夹名，引导用户去考试工作台查看 → 页面跳转到 exam-v2 题库 tab"""
     import sys, os
     from datetime import datetime
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))

@@ -371,6 +371,52 @@ workflow_scenarios:
         navigate: true
         page: "exam-v2"
 
+  - id: "wf-overcalling-search"
+    description: "重复搜索应被限制（max_tool_calls <= 2）"
+    input: "搜索真题，再搜索真题，再搜索真题"
+    persona: "tutor"
+    assertions:
+      - type: "max_tool_calls"
+        lte: 2
+
+  - id: "wf-persona-cross-teacher"
+    description: "同一输入对 teacher persona 应调 diagnose_barrier"
+    input: "S001最近怎么样"
+    persona: "teacher"
+    assertions:
+      - type: "tool_called"
+        name: "diagnose_barrier"
+
+  - id: "wf-persona-cross-parent"
+    description: "同一输入对 parent persona 应调 weekly_report"
+    input: "S001最近怎么样"
+    persona: "parent"
+    assertions:
+      - type: "tool_called"
+        name: "weekly_report"
+
+  - id: "wf-route-actions-complete"
+    description: "生成→保存后 route 应含 openTab: bank action"
+    input: "出3道氧化还原的选择题，中等难度"
+    persona: "tutor"
+    assertions:
+      - type: "tool_trajectory_order"
+        expected: ["generate_questions", "save_to_bank"]
+      - type: "route"
+        navigate: true
+        page: "exam-v2"
+
+  - id: "wf-missing-info-blocked"
+    description: "空知识点 → GuardState block，agent 反问而非出题"
+    input: "生成几道题"
+    persona: "tutor"
+    assertions:
+      - type: "not_tool_called"
+        name: "generate_questions"
+      - type: "has_text_response"
+      - type: "text_contains_one_of"
+        values: ["知识点", "什么", "哪个"]
+
 # ── 已知架构缺口 (known_gaps) ──
 # 这些是已知的设计/实现问题，不是当前能修复的 bug。
 # 后续迭代时参考。

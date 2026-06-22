@@ -34,6 +34,16 @@ TOOL_CALL_LIMITS: dict[str, int] = {
     "save_to_bank": 1,
 }
 
+# Per-tool required context fields. If any are missing from the tool call args,
+# the call is blocked before execution with a "请先向用户确认" message.
+# This makes "反问用户" a structural gate, not a prompt hope.
+TOOL_PREREQUISITES: dict[str, list[str]] = {
+    "generate_questions": ["knowledge_points"],
+    "diagnose_barrier": ["student_id_or_class_id"],
+    "weekly_report": ["student_id_or_class_id"],
+    "assign_adaptive_practice": ["student_id_or_class_id"],
+}
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # Guard state — per-agent-invocation, shared across all tools
@@ -65,19 +75,46 @@ class GuardState:
             return f"已调用 {name} {count} 次（上限 {limit} 次），请基于已有结果继续，不要重复调用。"
         return None
 
+    def check_prerequisites(self, name: str, kwargs: dict) -> str | None:
+        """Check required context fields before tool execution.
+        Returns error message if prerequisites not met, None if OK.
+        """
+        prereqs = TOOL_PREREQUISITES.get(name, [])
+        for field in prereqs:
+            # Special case: "student_id_or_class_id" checks multiple params
+            if field == "student_id_or_class_id":
+                has_student = (kwargs.get("student_id", "") or "").strip()
+                has_name = (kwargs.get("student_name", "") or "").strip()
+                has_class = (kwargs.get("class_id", "") or "").strip()
+                has_class_name = (kwargs.get("class_name", "") or "").strip()
+                if not (has_student or has_name or has_class or has_class_name):
+                    return "缺少必要信息：请先向用户确认学生姓名/学号或班级。"
+                continue
+            val = kwargs.get(field, "")
+            if not val or not str(val).strip():
+                return f"缺少必要信息: {field}。请先向用户确认。"
+        return None
+
 
 def _make_guarded_tool(fn, guard_state: GuardState, requires_approval: bool = False):
     """Wrap a tool with guardrail enforcement, preserving LLM-facing schema.
 
     Guardrails applied (per D8/D9):
-    1. Dedup: skip duplicate (same tool + same args) calls
-    2. Requires-approval: block destructive tools unless request_approval was called first
-    3. _route stripping: remove _route from tool result before it reaches LLM context
+    0. Prerequisites: block tools missing required context fields (e.g., generate_questions without knowledge_points)
+    1. Call limit: block excessive repeated calls per tool type
+    2. Dedup: skip duplicate (same tool + same args) calls
+    3. Requires-approval: block destructive tools unless request_approval was called first
+    4. _route stripping: remove _route from tool result before it reaches LLM context
     """
     base_tool = lc_tool(fn)
 
     async def _guarded(**kwargs) -> str:
         name = fn.__name__
+
+        # ── Prerequisite check (must be FIRST — block before any other check) ──
+        prereq_msg = guard_state.check_prerequisites(name, kwargs)
+        if prereq_msg:
+            return json.dumps({"error": prereq_msg, "missing_prerequisites": True}, ensure_ascii=False)
 
         # ── Call limit check (防止同一工具反复调用浪费 token) ──
         limit_msg = guard_state.check_limit(name)
@@ -191,55 +228,108 @@ def get_langchain_model(provider: str) -> ChatOpenAI:
     )
 
 
-def build_persona_prompt(persona: str, student_profile: dict | None = None,
-                         intent_hints: str = "") -> str:
-    """Build system prompt from persona YAML + optional hints."""
+# ═══════════════════════════════════════════════════════════════════════
+# Prompt builders — four-layer structured context
+# ═══════════════════════════════════════════════════════════════════════
+
+def _build_product_context() -> str:
+    """[PRODUCT] section — same for all personas."""
+    return """[PRODUCT]
+你是 ChemAI，一个高中化学 AI 教学助手。你可以帮用户完成以下四类任务：
+
+1. **聊天辅导** — 在对话中讲解化学概念、引导解题思路、答疑解惑。适合学生提问。
+2. **考试工作台** — 搜索历年高考真题、根据知识点出题组卷、将题目保存到题库文件夹管理。适合老师准备考试。
+3. **学情诊断** — 分析单个学生或整个班级的学习障碍（概念理解/审题/表述），找出薄弱环节。适合老师了解学情。
+4. **学习报告** — 生成学生或班级的周报、学情报告，面向家长通俗易懂。
+
+用户可能是老师（管理班级、出卷、诊断）、学生（提问、练习）、或家长（了解学习情况）。
+**关键原则：如果用户没说清楚（学生是谁、哪个知识点、什么难度、几道题），请先反问，不要猜测。**"""
+
+
+def _build_role_context(persona: str) -> str:
+    """[ROLE] section — persona-specific framing from YAML."""
     from agent.agents import load_persona
 
     cfg = load_persona(persona)
-    prompt = cfg.get("system_prompt", "")
+    yaml_prompt = cfg.get("system_prompt", "")
 
-    # Replace {tools} placeholder (not needed, LangGraph handles tool binding)
-    prompt = prompt.replace("{tools}", "")
+    # Strip tool-mapping bullet lines (keep role framing, remove tool rules)
+    lines = yaml_prompt.split("\n")
+    kept = []
+    for line in lines:
+        stripped = line.strip()
+        # Skip lines that map user intent to specific tools
+        if any(kw in stripped for kw in ["→", "->", "调用工具", "工具推荐", "{tools}"]):
+            continue
+        # Skip persona YAML placeholder
+        if stripped == "{student_profile}":
+            continue
+        kept.append(line)
+    cleaned = "\n".join(kept).strip()
 
-    # Replace {student_profile}
-    profile_str = "暂无学生信息"
+    if not cleaned:
+        cleaned = "你是高中化学教学助手。"
+
+    return f"[ROLE]\n{cleaned}"
+
+
+def _build_tool_context(tools: list) -> str:
+    """[TOOLS] section — auto-assembled from StructuredTool.description."""
+    import inspect
+
+    lines = ["[TOOLS]"]
+    for t in tools:
+        desc = getattr(t, "description", "") or ""
+        if "何时用" not in desc:
+            continue  # skip internal guardrail tools like request_approval
+        lines.append(desc)
+        lines.append("")  # blank line between tools
+
+    return "\n".join(lines).rstrip()
+
+
+def _build_reasoning_anchor() -> str:
+    """[REASONING] section — 3-question self-check before every action."""
+    return """[REASONING]
+每次行动前，快速自问：
+1. 用户真正想要的结果是什么？（出题→考试工作台 / 答疑→对话中 / 诊断→诊断页 / 报告→对话或跳转）
+2. 我现在掌握的信息够做这件事吗？（不够就先反问用户）
+3. 做完这一步后，用户还需要什么？（保存？跳转？继续出题？报告？）"""
+
+
+def build_persona_prompt(persona: str, student_profile: dict | None = None,
+                         intent_hints: str = "") -> str:
+    """Build system prompt: [PRODUCT] + [ROLE] + optional profile/hints + [REASONING] + [TOOLS].
+    The hardcoded behavior rules section is REMOVED — code guardrails (GuardState,
+    TOOL_CALL_LIMITS, check_prerequisites) enforce constraints at the architecture level.
+    """
+    from agent.langgraph_agent import get_tools_for_persona
+
+    sections = []
+
+    # ── Layer 1: Product context ──
+    sections.append(_build_product_context())
+
+    # ── Layer 2: Role context ──
+    sections.append(_build_role_context(persona))
+
+    # ── Optional: Student profile ──
     if student_profile:
         profile_str = json.dumps(student_profile, ensure_ascii=False)
-    prompt = prompt.replace("{student_profile}", profile_str)
+        sections.append(f"[PROFILE]\n{profile_str}")
 
-    # Append intent hints
+    # ── Optional: Classifier hints ──
     if intent_hints:
-        prompt += f"\n\n## 工具推荐\n{intent_hints}\n以上是推荐工具，你可以使用它们，也可以根据需要使用其他工具。自己判断最合适的。"
+        sections.append(f"[HINTS]\n{intent_hints}")
 
-    # Add guardrail instructions
-    prompt += """
-## 行为规则（必须遵守）
-1. 以下情况必须调用工具，不能空口回答：
-   - 出题/生成题目 → generate_questions
-   - 搜索真题 → search_exam_bank
-   - 诊断/学情分析 → diagnose_barrier
-   - 配平方程式 → balance_equation
-   - 模拟实验 → simulate_experiment
-   - 导入试卷 → import_exam_paper
-   - 布置练习 → assign_adaptive_practice
-   - 生成周报 → weekly_report
-   - 联网搜索最新信息 → web_search
-   - 化学知识辅导 → chemistry_tutor
-   - 保存题目到题库 → save_to_bank
-2. 即使你觉得可以直接回答，如果任务匹配上述场景，也要调用工具。
-3. 只有纯粹的闲聊（你好/再见/今天天气）才可以不调工具。
-4. 信息不足时先反问，不要猜参数。
-5. request_approval 只在出完题或准备执行发布/导入/布置等操作时调用。
-6. **效率规则**：
-   - 每个搜索类工具（search_exam_bank、web_search）最多调 1-2 次，拿到结果后直接基于结果回答或出题，不要反复搜索
-   - 如果一次搜索已返回足够数据，立即进入下一步（出题/回答），不要换关键词再搜
-   - 出题前先想清楚：是否需要搜索？如果用户已经给了明确的知识点范围，直接出题即可
-7. **保存规则**：
-   - 如果用户没有指定具体学生（只是说要出题），出完题后必须调用 save_to_bank 将题目保存到题库
-   - 保存后告诉用户题目存在哪个文件夹（set_name），并引导用户去考试工作台查看"""
+    # ── Layer 3: Reasoning anchor (before tools — guides selection) ──
+    sections.append(_build_reasoning_anchor())
 
-    return prompt
+    # ── Layer 4: Tool context (last — recency bias for selection) ──
+    persona_tools = get_tools_for_persona(persona)
+    sections.append(_build_tool_context(persona_tools))
+
+    return "\n\n".join(sections).strip()
 
 
 def create_chemai_agent(persona: str = "tutor", provider: str = "deepseek",

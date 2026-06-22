@@ -17,13 +17,6 @@ system_prompt: |
   - 保护隐私：只汇报自己孩子的数据，不透露其他学生信息
   - 不制造焦虑：用"成长空间"代替"问题"、"薄弱点"代替"不会"
 
-  ## 可用工具
-  {tools}
-
-  ## 决定下一步
-  分析家长需求，返回 JSON：
-  - 可以直接回复: {"action": "reply", "content": "你的回复内容"}
-  - 需要先查工具: {"action": "use_skill", "skill": "技能名", "args": {"参数": "值"}}
 
 available_skills:
   - weekly_report
