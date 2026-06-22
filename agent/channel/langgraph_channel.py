@@ -20,6 +20,41 @@ from agent.memory import MemoryStack
 
 
 # ── LangGraph agent 缓存 (per persona) ──
+# ── Pre-flight gate ──
+
+EXAM_INTENT_TRIGGERS = ["出题", "出卷", "组卷", "变种题", "真题", "高考题", "题目", "生成题", "出几道", "来几道"]
+KP_INDICATORS = ["氧化还原", "电化学", "有机", "无机", "化学平衡", "盐类水解", "元素周期", "物质结构",
+    "化学反应", "离子反应", "配平", "计算", "实验", "工业流程", "阿伏加德罗", "勒夏特列",
+    "电解质", "水解", "电离", "原电池", "电解池", "晶体", "分子", "原子", "摩尔",
+    "方程式", "同分异构", "官能团", "取代", "加成", "消去", "酯化", "聚合"]
+
+def _preflight_check(message: str) -> str | None:
+    """Check if user message is specific enough for tool calling.
+    Returns clarifying questions if too vague, None if OK to proceed."""
+    msg = message.strip()
+    if len(msg) <= 4 and any(kw in msg for kw in ["你好", "在吗", "hi", "hello", "ping"]):
+        return None
+    has_exam = any(t in msg for t in EXAM_INTENT_TRIGGERS)
+    if not has_exam:
+        return None
+    has_kp = any(kp in msg for kp in KP_INDICATORS)
+    has_qty = any(c in msg for c in "123456789") or any(w in msg for w in ["几道", "几题", "一道", "两道", "三道"])
+    has_diff = any(d in msg for d in ["简单", "中等", "困难", "基础", "中档", "综合"])
+    has_type = any(t in msg for t in ["选择题", "填空题", "计算题", "实验题", "推断题"])
+    if sum([has_kp, has_qty, has_diff, has_type]) >= 2:
+        return None
+    return (
+        "我先确认一下你的需求，以便准确为你出题：\n\n"
+        "**请告诉我以下信息：**\n"
+        "1. **知识点板块** — 氧化还原、电化学、有机化学、化学平衡、元素周期律...\n"
+        "2. **题型** — 选择题、填空题、计算题、实验题、推断题？\n"
+        "3. **难度** — 基础、中等、困难？\n"
+        "4. **数量** — 需要几道题？\n"
+        "5. **是否有参考真题** — 需要基于哪一年的高考真题出变种题？\n\n"
+        "可以直接说，比如：*\"氧化还原，选择题和填空题，中等难度，5道，参考2024年全国卷\"*"
+    )
+
+
 _agent_cache: dict[str, object] = {}
 
 
@@ -87,9 +122,29 @@ async def agent_chat_langgraph_stream(request: ChatRequest):
         return StreamingResponse(_nav_gen(), media_type="text/event-stream",
                                  headers={"Cache-Control": "no-cache", "Connection": "keep-alive"})
 
-    # Build hints
+    # ═══ Pre-flight gate: check if user message is specific enough for tool calling ═══
+    # If the user's message is too vague, don't enter the ReAct loop at all.
+    # Instead, directly ask clarifying questions — no tools called, no search loops.
+    preflight = _preflight_check(request.message)
+    if preflight:
+        async def _ask_gen():
+            yield f"data: {json.dumps({'type': 'phase', 'phase': 'reply'}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'type': 'text', 'content': preflight}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'type': 'done'}, ensure_ascii=False)}\n\n"
+            yield "data: [DONE]\n\n"
+        return StreamingResponse(_ask_gen(), media_type="text/event-stream",
+                                 headers={"Cache-Control": "no-cache", "Connection": "keep-alive"})
+
+    # Build hints — pre-flight passed with exam intent: route to navigate_to_exam_workbench
     hints = ""
-    if tool_names:
+    has_exam = any(t in request.message for t in EXAM_INTENT_TRIGGERS)
+    if has_exam:
+        hints = (
+            "用户已提供具体的出题参数（知识点、题型、难度、数量）。"
+            "请直接调用 navigate_to_exam_workbench 跳转到考试工作台自动出题。"
+            "不要再调 search_exam_bank 搜索——参数已经够了。"
+        )
+    elif tool_names:
         hints = f"推荐工具: {', '.join(tool_names[:5])}\n用户消息: {request.message}\n使用推荐工具或其他工具，自行判断。"
 
     agent, guard_state = _get_or_create_agent(
@@ -185,8 +240,16 @@ async def agent_chat_langgraph(request: ChatRequest):
     if intent and intent.type == "navigate" and intent.page:
         return {"content": "", "navigate": {"page": intent.page, "params": {}}}
 
+    # Pre-flight check (same as streaming endpoint)
+    preflight = _preflight_check(request.message)
+    if preflight:
+        return {"content": preflight}
+
+    has_exam = any(t in request.message for t in EXAM_INTENT_TRIGGERS)
     hints = ""
-    if tool_names:
+    if has_exam:
+        hints = "用户已提供具体的出题参数。请直接调用 navigate_to_exam_workbench，不要再搜索。"
+    elif tool_names:
         hints = f"推荐工具: {', '.join(tool_names[:5])}\n用户消息: {request.message}\n使用推荐工具或其他工具，自行判断。"
 
     agent, guard_state = _get_or_create_agent(

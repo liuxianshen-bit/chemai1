@@ -27,6 +27,14 @@ async def search_exam_bank(
         difficulty=difficulty or None,
         limit=limit,
     )
+    if not results:
+        return json.dumps({
+            "total": 0,
+            "questions": [],
+            "hint": "题库中暂无匹配结果。请向用户确认更具体的搜索条件（知识点、年份），而不是反复尝试不同关键词。",
+            "_route": {"navigate": False},
+        }, ensure_ascii=False)
+
     return json.dumps({
         "total": len(results),
         "questions": [
