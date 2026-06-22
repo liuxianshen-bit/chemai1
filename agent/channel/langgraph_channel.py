@@ -122,29 +122,9 @@ async def agent_chat_langgraph_stream(request: ChatRequest):
         return StreamingResponse(_nav_gen(), media_type="text/event-stream",
                                  headers={"Cache-Control": "no-cache", "Connection": "keep-alive"})
 
-    # ═══ Pre-flight gate: check if user message is specific enough for tool calling ═══
-    # If the user's message is too vague, don't enter the ReAct loop at all.
-    # Instead, directly ask clarifying questions — no tools called, no search loops.
-    preflight = _preflight_check(request.message)
-    if preflight:
-        async def _ask_gen():
-            yield f"data: {json.dumps({'type': 'phase', 'phase': 'reply'}, ensure_ascii=False)}\n\n"
-            yield f"data: {json.dumps({'type': 'text', 'content': preflight}, ensure_ascii=False)}\n\n"
-            yield f"data: {json.dumps({'type': 'done'}, ensure_ascii=False)}\n\n"
-            yield "data: [DONE]\n\n"
-        return StreamingResponse(_ask_gen(), media_type="text/event-stream",
-                                 headers={"Cache-Control": "no-cache", "Connection": "keep-alive"})
-
-    # Build hints — pre-flight passed with exam intent: route to navigate_to_exam_workbench
+    # Build hints from classifier
     hints = ""
-    has_exam = any(t in request.message for t in EXAM_INTENT_TRIGGERS)
-    if has_exam:
-        hints = (
-            "用户已提供具体的出题参数（知识点、题型、难度、数量）。"
-            "请直接调用 navigate_to_exam_workbench 跳转到考试工作台自动出题。"
-            "不要再调 search_exam_bank 搜索——参数已经够了。"
-        )
-    elif tool_names:
+    if tool_names:
         hints = f"推荐工具: {', '.join(tool_names[:5])}\n用户消息: {request.message}\n使用推荐工具或其他工具，自行判断。"
 
     agent, guard_state = _get_or_create_agent(
@@ -240,16 +220,8 @@ async def agent_chat_langgraph(request: ChatRequest):
     if intent and intent.type == "navigate" and intent.page:
         return {"content": "", "navigate": {"page": intent.page, "params": {}}}
 
-    # Pre-flight check (same as streaming endpoint)
-    preflight = _preflight_check(request.message)
-    if preflight:
-        return {"content": preflight}
-
-    has_exam = any(t in request.message for t in EXAM_INTENT_TRIGGERS)
     hints = ""
-    if has_exam:
-        hints = "用户已提供具体的出题参数。请直接调用 navigate_to_exam_workbench，不要再搜索。"
-    elif tool_names:
+    if tool_names:
         hints = f"推荐工具: {', '.join(tool_names[:5])}\n用户消息: {request.message}\n使用推荐工具或其他工具，自行判断。"
 
     agent, guard_state = _get_or_create_agent(

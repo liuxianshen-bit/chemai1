@@ -7,7 +7,6 @@ Replaces pydantic-ai Agent with LangGraph ReAct agent:
 - Guardrails: recursion_limit, tool dedup, requires_approval enforcement, _route stripping
 """
 import json, os, logging
-from langgraph.prebuilt import create_react_agent
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import interrupt
 from langchain_openai import ChatOpenAI
@@ -362,28 +361,82 @@ def create_chemai_agent(persona: str = "tutor", provider: str = "deepseek",
                         student_profile: dict | None = None,
                         intent_hints: str = "",
                         guard_state: GuardState = None) -> tuple["CompiledGraph", GuardState]:
-    """Create a ChemAI ReAct agent with guardrails.
+    """Create a ChemAI ReAct agent with pre-tool check node.
 
-    Args:
-        persona: tutor | teacher | parent
-        provider: deepseek | mimo | zhipu | dashscope
-        student_profile: student info dict for system prompt
-        intent_hints: classifier recommendations injected into prompt
-        guard_state: shared GuardState for dedup/approval tracking (auto-created if None)
+    Graph structure:
+        START → llm → [has tool_calls?] → check → tools → llm (loop)
+                        ↓ no                     ↓ fail
+                       END              inject msg → llm (ask user)
 
-    Returns:
-        (Compiled LangGraph ReAct agent, GuardState)
+    The check node is a structural gate — it blocks tool calls when
+    prerequisites are missing and forces the LLM to ask the user first.
+    This is NOT a prompt suggestion. It's a graph constraint.
     """
+    from langgraph.graph import StateGraph, MessagesState, START, END
+    from langgraph.prebuilt import ToolNode
+    from langchain_core.messages import SystemMessage, HumanMessage
+
     if guard_state is None:
         guard_state = GuardState()
     tools = get_tools_for_persona(persona, guard_state)
     model = get_langchain_model(provider)
     prompt = build_persona_prompt(persona, student_profile, intent_hints)
+    model_with_tools = model.bind_tools(tools)
 
-    agent = create_react_agent(
-        model=model,
-        tools=tools,
-        prompt=prompt,
-        checkpointer=MemorySaver(),
-    )
-    return agent, guard_state
+    # ── Node: llm ──
+    def _llm_node(state):
+        msgs = list(state["messages"])
+        if not any(getattr(m, 'type', '') == 'system' for m in msgs):
+            msgs = [SystemMessage(content=prompt)] + msgs
+        resp = model_with_tools.invoke(msgs)
+        return {"messages": [resp]}
+
+    # ── Node: check — pre-tool structural gate ──
+    def _check_node(state):
+        last = state["messages"][-1]
+        tc_list = getattr(last, 'tool_calls', []) or []
+        if not tc_list:
+            return {}
+
+        issues = []
+        for tc in tc_list:
+            name = tc.get("name", "")
+            args = tc.get("args", {})
+            err = guard_state.check_prerequisites(name, args)
+            if err:
+                issues.append(f"- {name}: {err}")
+
+        if issues:
+            msg = ("以下工具调用因缺少必要信息被拦截：\n" + "\n".join(issues) +
+                   "\n\n请先向用户确认缺失的信息，不要猜测参数，不要尝试绕过。")
+            return {"messages": [HumanMessage(content=msg)]}
+        return {}
+
+    # ── Node: tools ──
+    _tool_node = ToolNode(tools)
+
+    # ── Routing ──
+    def _route_after_llm(state):
+        last = state["messages"][-1]
+        if getattr(last, 'tool_calls', None):
+            return "check"
+        return END
+
+    def _route_after_check(state):
+        last = state["messages"][-1]
+        if isinstance(last, HumanMessage):
+            return "llm"  # check injected a block message → loop back
+        return "tools"
+
+    # ── Build ──
+    builder = StateGraph(MessagesState)
+    builder.add_node("llm", _llm_node)
+    builder.add_node("check", _check_node)
+    builder.add_node("tools", _tool_node)
+
+    builder.add_edge(START, "llm")
+    builder.add_conditional_edges("llm", _route_after_llm, {"check": "check", END: END})
+    builder.add_conditional_edges("check", _route_after_check, {"llm": "llm", "tools": "tools"})
+    builder.add_edge("tools", "llm")
+
+    return builder.compile(checkpointer=MemorySaver()), guard_state
