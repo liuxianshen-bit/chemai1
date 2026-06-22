@@ -109,39 +109,67 @@ class LangGraphSSEAdapter:
 
         return []
 
-    def finalize(self) -> list[str]:
+    def finalize(self, route: dict = None) -> list[str]:
         """Called after astream_events() completes.
-        Emits navigate/populate/action events from collected _route data,
+        Emits navigate/populate/action events from route dict (guard_state.last_route),
         then done + [DONE] sentinel.
+
+        Args:
+            route: Optional route dict from GuardState.last_route.
+                   Format: {"navigate": bool, "page": str, "populate": {...}, "actions": [...]}
         """
         events = []
 
-        # Extract _route from collected tool results
-        for tr in self._tool_results:
-            route = tr.get("result", {}).get("_route")
-            if route and route.get("navigate"):
+        # Use explicit route if provided (from guard_state), fall back to _tool_results
+        if route and route.get("navigate"):
+            events.append(json.dumps({
+                "type": "navigate",
+                "page": route.get("page"),
+                "params": route.get("params", {}),
+            }, ensure_ascii=False))
+
+            pop = route.get("populate")
+            if pop:
                 events.append(json.dumps({
-                    "type": "navigate",
-                    "page": route.get("page"),
-                    "params": route.get("params", {}),
+                    "type": "populate",
+                    "target": pop.get("target", ""),
+                    "data": pop.get("data", {}),
                 }, ensure_ascii=False))
 
-                pop = route.get("populate")
-                if pop:
+            for act in route.get("actions", []):
+                events.append(json.dumps({
+                    "type": "action",
+                    "action": act.get("action", ""),
+                    "payload": act.get("payload", ""),
+                }, ensure_ascii=False))
+
+        elif not route:
+            # Fallback: extract _route from collected tool results (legacy path)
+            for tr in self._tool_results:
+                r = tr.get("result", {}).get("_route")
+                if r and r.get("navigate"):
                     events.append(json.dumps({
-                        "type": "populate",
-                        "target": pop.get("target", ""),
-                        "data": pop.get("data", {}),
+                        "type": "navigate",
+                        "page": r.get("page"),
+                        "params": r.get("params", {}),
                     }, ensure_ascii=False))
 
-                for act in route.get("actions", []):
-                    events.append(json.dumps({
-                        "type": "action",
-                        "action": act.get("action", ""),
-                        "payload": act.get("payload", ""),
-                    }, ensure_ascii=False))
+                    pop = r.get("populate")
+                    if pop:
+                        events.append(json.dumps({
+                            "type": "populate",
+                            "target": pop.get("target", ""),
+                            "data": pop.get("data", {}),
+                        }, ensure_ascii=False))
 
-                break  # Only first navigation trigger
+                    for act in r.get("actions", []):
+                        events.append(json.dumps({
+                            "type": "action",
+                            "action": act.get("action", ""),
+                            "payload": act.get("payload", ""),
+                        }, ensure_ascii=False))
+
+                    break  # Only first navigation trigger
 
         events.append(json.dumps({"type": "done"}, ensure_ascii=False))
         events.append("[DONE]")

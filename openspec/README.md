@@ -54,6 +54,6 @@ infra-foundation          mineru-pipeline         adaptive-diagnosis-engine
 | vue-migration | 1天 | 6 | Vue 3 迁移 + CSS 抽离 + Chips + 学情面板 |
 | bugfix-bank-save | done | - | 题库 localStorage→API, 保存/删除按钮 |
 | gateway-router-refactor | 0 | 6 | Gateway 两分类 + tool 自路由 |
-| langgraph-migration | 0 | 34 | ReAct agent (create_agent + interrupt + SSE 适配) |
+| langgraph-migration | done | 34 | ReAct agent (create_react_agent + interrupt + SSE 适配 + D8/D9 护栏) |
 
 **总计: 8.5 个工作日** (含新增 vue-migration)

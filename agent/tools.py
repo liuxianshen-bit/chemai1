@@ -95,6 +95,15 @@ async def generate_questions(
     from app.services.chemical_balance import audit_chemical_equation
 
     kps = [k.strip() for k in knowledge_points.split(",") if k.strip()]
+
+    # ── 拒绝空知识点: 强制 LLM 反问用户 ──
+    if not kps:
+        return json.dumps({
+            "error": "用户未指定知识点",
+            "hint": "请先向用户确认：1) 需要哪个知识点的题目？2) 什么难度？3) 几道题？4) 给哪个班/学生用？不要替用户猜测。",
+            "_route": {"navigate": False},
+        }, ensure_ascii=False)
+
     provider = DeepSeekProvider()
 
     system_prompt = """你是资深高中化学教师。根据知识点生成高质量的化学选择题。
@@ -608,6 +617,121 @@ async def assign_adaptive_practice(
         db.close()
 
 
+# ── 11. save_to_bank ──
+
+async def save_to_bank(
+    questions: str = "",
+    knowledge_points: str = "",
+    set_name: str = "",
+    description: str = "",
+) -> str:
+    """将生成的题目保存到题库。调用时机：出完题后，如果用户没有指定学生（题目不关联个人练习），
+    应主动调用此工具将题目存入题库，方便后续在考试工作台中管理和复用。
+
+    questions: 已生成题目的 JSON 字符串（包含 questions 数组）
+    knowledge_points: 知识点，逗号分隔
+    set_name: 可选，题库文件夹名称，不传则自动生成
+    description: 可选，题库描述
+    """
+    import sys, os
+    from datetime import datetime
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+    from app.models.database import get_db, QuestionSet, QuestionSetItem, Question
+    from app.models.database import QuestionSource, AuditStatus, Difficulty
+
+    # Parse questions
+    try:
+        if isinstance(questions, str):
+            data = json.loads(questions)
+        else:
+            data = questions
+        q_list = data.get("questions", []) if isinstance(data, dict) else []
+    except (json.JSONDecodeError, TypeError):
+        return json.dumps({"error": "题目数据格式无效", "_route": {"navigate": False}}, ensure_ascii=False)
+
+    if not q_list:
+        return json.dumps({"error": "没有可保存的题目", "_route": {"navigate": False}}, ensure_ascii=False)
+
+    # Auto-generate set name
+    if not set_name:
+        kps = knowledge_points or "综合"
+        ts = datetime.now().strftime("%m%d%H%M")
+        set_name = f"AI生成-{kps}-{ts}"
+
+    db = next(get_db())
+    try:
+        set_id = f"qset_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+
+        question_set = QuestionSet(
+            set_id=set_id,
+            name=set_name,
+            teacher_id=None,
+            region="AI生成",
+            year=None,
+            source="agent",
+            description=description or f"Agent 自动生成: {knowledge_points}",
+            question_count=0,
+            is_system=False,
+        )
+        db.add(question_set)
+
+        import_count = 0
+        for i, q in enumerate(q_list):
+            question_id = f"q_{datetime.now().strftime('%Y%m%d%H%M%S')}_{i}"
+            difficulty = Difficulty.MEDIUM
+            if q.get("difficulty") == "easy":
+                difficulty = Difficulty.EASY
+            elif q.get("difficulty") == "hard":
+                difficulty = Difficulty.HARD
+
+            new_q = Question(
+                question_id=question_id,
+                record_id=None,
+                content=q.get("content", ""),
+                options=q.get("options"),
+                answer=str(q.get("answer", "")),
+                analysis=q.get("explanation") or q.get("analysis", ""),
+                knowledge_points=q.get("knowledge_points", []),
+                difficulty=difficulty,
+                source=QuestionSource.MANUAL_SELECTED,
+                source_exam=set_name,
+                audit_status=AuditStatus.PASSED,
+            )
+            db.add(new_q)
+
+            item = QuestionSetItem(
+                item_id=f"qsi_{datetime.now().strftime('%Y%m%d%H%M%S')}_{i}",
+                set_id=set_id,
+                question_id=question_id,
+                sort_order=i + 1,
+            )
+            db.add(item)
+            import_count += 1
+
+        question_set.question_count = import_count
+        db.commit()
+
+        return json.dumps({
+            "saved": True,
+            "set_id": set_id,
+            "set_name": set_name,
+            "count": import_count,
+            "message": f"已保存 {import_count} 道题目到题库「{set_name}」",
+            "_route": {
+                "navigate": True,
+                "page": "exam-v2",
+                "populate": {"target": "exam-set", "data": {"set_id": set_id, "set_name": set_name}},
+                "actions": [{"action": "openTab", "payload": "bank"}],
+            },
+        }, ensure_ascii=False)
+
+    except Exception as e:
+        db.rollback()
+        return json.dumps({"error": f"保存失败: {str(e)}", "_route": {"navigate": False}}, ensure_ascii=False)
+    finally:
+        db.close()
+
+
 # ── Tool list for factory ──
 
 TOOLS = [
@@ -621,4 +745,5 @@ TOOLS = [
     weekly_report,
     import_exam_paper,
     assign_adaptive_practice,
+    save_to_bank,
 ]

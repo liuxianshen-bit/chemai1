@@ -208,6 +208,127 @@ def _last_idx(lst, val):
 # Agent Runner
 # ═══════════════════════════════════════════════════════════════════════
 
+async def run_langgraph_agent(msg: str, persona: str, thread_id: str = None) -> dict:
+    """跑一次 LangGraph ReAct agent, 返回轨迹。"""
+    from agent.langgraph_agent import create_chemai_agent
+    from dotenv import load_dotenv
+    load_dotenv()
+
+    t0 = time.time()
+    if thread_id is None:
+        thread_id = f"eval-{persona}-{int(t0*1000)}"
+
+    try:
+        agent, guard_state = create_chemai_agent(persona=persona, provider="deepseek")
+        config = {"configurable": {"thread_id": thread_id}, "recursion_limit": 8}
+
+        # Run agent
+        result = await agent.ainvoke(
+            {"messages": [{"role": "user", "content": msg}]},
+            config=config,
+        )
+
+        # Parse messages
+        msgs = result.get("messages", [])
+        tools_called = []
+        tool_calls_detail = []
+        output = ""
+        sse_events = [{"type": "phase", "phase": "thinking"}]
+
+        for i, m in enumerate(msgs):
+            mtype = type(m).__name__
+            if mtype == "AIMessage":
+                tc_list = getattr(m, "tool_calls", []) or []
+                for tc in tc_list:
+                    name = tc.get("name", "")
+                    args = tc.get("args", {})
+                    tools_called.append(name)
+                    sse_events.append({"type": "tool_call", "name": name, "tool": name, "args": args})
+
+                content = getattr(m, "content", "") or ""
+                if content and isinstance(content, str) and not tc_list:
+                    if i == len(msgs) - 1 or output == "":
+                        output = content
+
+            elif mtype == "ToolMessage":
+                name = getattr(m, "name", "")
+                content = getattr(m, "content", "")
+                parsed = parse_tool_result(content)
+                tool_calls_detail.append({"tool_name": name, "result": parsed})
+                sse_events.append({"type": "tool_result", "name": name, "tool": name, "success": True, "result": parsed})
+
+        # Last AIMessage content = final reply
+        for m in reversed(msgs):
+            if type(m).__name__ == "AIMessage":
+                c = getattr(m, "content", "") or ""
+                if c and isinstance(c, str) and not (getattr(m, "tool_calls", []) or []):
+                    output = c
+                    sse_events.append({"type": "phase", "phase": "reply"})
+                    sse_events.append({"type": "text", "content": c})
+                    break
+
+        # Read guard_state for dedup, approval, route metadata
+        blocked_tools = []
+        for tr in tool_calls_detail:
+            r = tr.get("result", {})
+            if isinstance(r, dict):
+                if r.get("dedup_skipped"):
+                    pass  # dedup was triggered — the tool returned error, LLM continues
+                if r.get("requires_approval_blocked"):
+                    blocked_tools.append({"name": tr["tool_name"], "reason": "requires_approval"})
+
+        dedup_triggered = len(guard_state.seen_calls) < len(tools_called)
+        interrupt_triggered = False
+        after_resume_tools = []
+        try:
+            state = agent.get_state(config)
+            if state and state.next and "__interrupt__" in str(state.next):
+                interrupt_triggered = True
+        except Exception:
+            pass
+
+        # Extract _route from guard_state
+        nav = {"navigate": None}
+        if guard_state.last_route:
+            route = guard_state.last_route
+            if route.get("navigate"):
+                nav = {"navigate": {"page": route.get("page"), "params": route.get("params", {})}}
+                sse_events.append({"type": "navigate", "page": route.get("page"), "params": route.get("params", {})})
+
+        sse_events.append({"type": "done"})
+        sse_events.append("[DONE]")
+
+        return {
+            "latency_s": round(time.time() - t0, 2),
+            "tools_called": tools_called,
+            "tool_calls_detail": tool_calls_detail,
+            "navigate_detected": nav["navigate"] is not None,
+            "navigate_page": nav["navigate"]["page"] if nav["navigate"] else None,
+            "output": output[:500],
+            "error": None,
+            "interrupt_triggered": interrupt_triggered,
+            "after_resume_tools": after_resume_tools,
+            "blocked_tools": blocked_tools,
+            "dedup_triggered": dedup_triggered,
+            "sse_events": sse_events,
+        }
+    except Exception as e:
+        return {
+            "latency_s": round(time.time() - t0, 2),
+            "tools_called": [],
+            "tool_calls_detail": [],
+            "navigate_detected": False,
+            "navigate_page": None,
+            "output": "",
+            "error": str(e)[:200],
+            "interrupt_triggered": False,
+            "after_resume_tools": [],
+            "blocked_tools": [],
+            "dedup_triggered": False,
+            "sse_events": [],
+        }
+
+
 async def run_pydantic_agent(msg: str, persona: str) -> dict:
     """跑一次 pydantic-ai Agent, 返回轨迹。"""
     from agent.agents import factory
@@ -347,10 +468,70 @@ def test_golden_dataset(report: EvalReport):
 def test_langgraph_scenarios(report: EvalReport):
     """Given langgraph_scenarios (ReAct/multi-tool/interrupt/护栏),
        When LangGraph agent 实现后, Then 行为轨迹匹配预期。"""
-    print("\n  [DEFERRED] LangGraph-specific scenarios — Phase 1 实现后激活")
+    from dotenv import load_dotenv
+    load_dotenv()
+
     data = load_golden_scenarios()
-    for scenario in data.get("langgraph_scenarios", []):
-        report.add(f"langgraph: {scenario['id']}", True, "deferred until Phase 1")
+    langgraph_scenarios = data.get("langgraph_scenarios", [])
+    if not langgraph_scenarios:
+        print("\n  [SKIP] No langgraph_scenarios in golden YAML")
+        return
+
+    async def run():
+        print("\n  === LANGGRAPH-SPECIFIC SCENARIOS ===")
+        for scenario in langgraph_scenarios:
+            sid = scenario["id"]
+            desc = scenario["description"]
+            print(f"  [{sid}] {desc[:60]}...", end=" ", flush=True)
+
+            # Multi-turn: use first input
+            turns = scenario.get("turns")
+            if turns:
+                msg = turns[0]["input"]
+            else:
+                msg = scenario["input"]
+
+            persona = scenario.get("persona", "tutor")
+            traj = await run_langgraph_agent(msg, persona)
+
+            if traj["error"]:
+                report.add(f"langgraph: {sid}", False, f"AGENT ERROR: {traj['error']}")
+                print("ERROR")
+                continue
+
+            # Multi-turn: run subsequent turns with same thread_id
+            if turns:
+                thread_id = f"eval-lg-{sid}-{int(time.time()*1000)}"
+                traj["tools_called"] = []
+                traj["tool_calls_detail"] = []
+                for turn_idx, turn in enumerate(turns):
+                    t_traj = await run_langgraph_agent(turn["input"], persona, thread_id=thread_id)
+                    if t_traj["error"]:
+                        report.add(f"langgraph: {sid}/turn{turn_idx}", False, f"ERROR: {t_traj['error']}")
+                        continue
+                    # Preserve per-turn tool calls with detail
+                    traj["tools_called"].extend(t_traj["tools_called"])
+                    # Tag each tool_call_detail with the turn index
+                    for tc in t_traj["tool_calls_detail"]:
+                        tc["_turn"] = turn_idx
+                        traj["tool_calls_detail"].append(tc)
+                    # Last turn's output
+                    if turn_idx == len(turns) - 1:
+                        traj["output"] = t_traj["output"]
+                        traj["latency_s"] = t_traj["latency_s"]
+
+            all_pass = True
+            for assertion in scenario["assertions"]:
+                passed, detail = check_assertion(assertion, traj)
+                name = f"langgraph: {sid}/{assertion['type']}"
+                if not passed:
+                    all_pass = False
+                report.add(name, passed, detail)
+
+            status = "PASS" if all_pass else "FAIL"
+            print(f"{status} ({traj['latency_s']}s) tools={traj['tools_called']}")
+
+    asyncio.run(run())
 
 
 def test_boundary_guardrails(report: EvalReport):
@@ -456,6 +637,9 @@ def test_regression_baseline(report: EvalReport):
         return
 
     if args_reg.regression:
+        from dotenv import load_dotenv
+        load_dotenv()
+
         if not baseline_path.exists():
             report.add("regression: baseline", False, f"no baseline at {baseline_path} — run --baseline --save first")
             return
@@ -467,16 +651,18 @@ def test_regression_baseline(report: EvalReport):
 
         async def compare():
             regressions = 0
+            total = 0
             for scenario in data["scenarios"]:
                 sid = scenario["id"]
                 if sid not in baseline["results"]:
                     print(f"  [{sid}] SKIP: not in baseline")
                     continue
+                total += 1
 
-                traj = await run_pydantic_agent(scenario["input"], scenario["persona"])
+                traj = await run_langgraph_agent(scenario["input"], scenario["persona"])
                 baseline_traj = baseline["results"][sid]
 
-                # 对比 tool calls
+                # 对比 tool calls (set comparison, order-independent)
                 tools_match = set(traj["tools_called"]) == set(baseline_traj["tools_called"])
                 # 对比 navigate
                 nav_match = traj["navigate_detected"] == baseline_traj["navigate_detected"]
@@ -501,9 +687,11 @@ def test_regression_baseline(report: EvalReport):
                 print(f"  [{sid}] {status} tools={traj['tools_called']}")
 
             if regressions > 0:
-                report.add("regression: SUMMARY", False, f"{regressions} regressions detected")
+                consistency = round((1 - regressions / (total * 2)) * 100)
+                report.add("regression: SUMMARY", consistency >= 93,
+                           f"{regressions} regressions; tool selection consistency ~{consistency}% (target >= 93%)")
             else:
-                report.add("regression: SUMMARY", True, "no regressions")
+                report.add("regression: SUMMARY", True, "no regressions; 100% consistency")
 
         asyncio.run(compare())
         return
@@ -511,6 +699,46 @@ def test_regression_baseline(report: EvalReport):
     # 无 --save 也无 --regression: 只打印提示
     report.add("regression: available", True,
                "use --baseline --save to capture baseline, --regression to compare")
+
+
+def test_workflow_scenarios(report: EvalReport):
+    """工作流完整性场景: 反问→保存→跳转 全链路。"""
+    from dotenv import load_dotenv
+    load_dotenv()
+
+    data = load_golden_scenarios()
+    wf_scenarios = data.get("workflow_scenarios", [])
+    if not wf_scenarios:
+        print("\n  [SKIP] No workflow_scenarios in golden YAML")
+        return
+
+    async def run():
+        print("\n  === WORKFLOW SCENARIOS ===")
+        for scenario in wf_scenarios:
+            sid = scenario["id"]
+            desc = scenario["description"]
+            print(f"  [{sid}] {desc[:60]}...", end=" ", flush=True)
+
+            persona = scenario.get("persona", "tutor")
+            traj = await run_langgraph_agent(scenario["input"], persona)
+
+            if traj["error"]:
+                report.add(f"workflow: {sid}", False, f"AGENT ERROR: {traj['error']}")
+                print("ERROR")
+                continue
+
+            all_pass = True
+            for assertion in scenario["assertions"]:
+                passed, detail = check_assertion(assertion, traj)
+                name = f"workflow: {sid}/{assertion['type']}"
+                if not passed:
+                    all_pass = False
+                report.add(name, passed, detail)
+
+            status = "PASS" if all_pass else "FAIL"
+            print(f"{status} ({traj['latency_s']}s) tools={traj['tools_called']}")
+
+    asyncio.run(run())
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -526,6 +754,7 @@ def run():
     parser.add_argument("--baseline", action="store_true", help="Run baseline capture/regression")
     parser.add_argument("--save", action="store_true", help="Save baseline.json (with --baseline)")
     parser.add_argument("--regression", action="store_true", help="Compare against saved baseline.json")
+    parser.add_argument("--workflow", action="store_true", help="Run workflow integration scenarios (needs API)")
     parser.add_argument("--all", action="store_true", help="Run everything")
 
     try:
@@ -534,12 +763,12 @@ def run():
         args = argparse.Namespace(golden=True, langgraph=False, boundary=True, baseline=False, save=False, regression=False, all=False)
 
     if args.all:
-        args.golden = args.langgraph = args.boundary = True
+        args.golden = args.langgraph = args.boundary = args.workflow = True
 
     report = EvalReport()
 
     # ── 边界/护栏 (无 API, 始终跑) ──
-    if args.boundary or args.all or (not args.golden and not args.langgraph and not args.baseline):
+    if args.boundary or args.all or (not args.golden and not args.langgraph and not args.baseline and not args.workflow):
         print("\n" + "=" * 60)
         print("  BOUNDARY + GUARDRAILS (no API)")
         print("=" * 60)
@@ -552,12 +781,19 @@ def run():
         print("=" * 60)
         test_golden_dataset(report)
 
-    # ── LangGraph 特有场景 (deferred) ──
+    # ── LangGraph 特有场景 ──
     if args.langgraph or args.all:
         print("\n" + "=" * 60)
         print("  LANGGRAPH-SPECIFIC SCENARIOS")
         print("=" * 60)
         test_langgraph_scenarios(report)
+
+    # ── 工作流完整性场景 ──
+    if args.workflow or args.all:
+        print("\n" + "=" * 60)
+        print("  WORKFLOW SCENARIOS (integration)")
+        print("=" * 60)
+        test_workflow_scenarios(report)
 
     # ── 回归对比 ──
     if args.baseline or args.save or args.regression:

@@ -130,7 +130,10 @@ def _extract_route_events(tool_results: list[dict]) -> dict:
 
 @router.post("/chat")
 async def agent_chat(request: ChatRequest):
-    """非流式对话 — pydantic-ai Agent（Gateway 两分类 + tool 自路由）"""
+    """非流式对话 — [DEPRECATED] pydantic-ai Agent
+
+    此端点保留为 fallback。新开发请使用 /api/agent/chat/langgraph。
+    """
     import os, sys
     from dotenv import load_dotenv
 
@@ -206,7 +209,10 @@ async def agent_chat(request: ChatRequest):
 
 @router.post("/chat/stream")
 async def agent_chat_stream(request: ChatRequest):
-    """流式对话（SSE），pydantic-ai 1.107.0 + Gateway 两分类 + tool 自路由"""
+    """流式对话（SSE）— [DEPRECATED] pydantic-ai Agent
+
+    此端点保留为 fallback。新开发请使用 /api/agent/chat/langgraph/stream。
+    """
     import os, sys
     from dotenv import load_dotenv
 

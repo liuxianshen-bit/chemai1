@@ -309,3 +309,93 @@ sse_scenarios:
       - type: "event_present"
         event_type: "phase"
         phase: "awaiting_approval"
+
+# ── 工作流完整性场景 (2026-06-22 补完) ──
+# 这些场景覆盖了测试中发现的关键 UX 缺口：
+# 1. 模糊需求必须反问而非盲目生成
+# 2. 生成的题目必须保存到题库而非只在 chat 里展示
+# 3. 无学生的出题应跳转考试工作台
+# 后续更新时务必评估这些场景不被回归。
+workflow_scenarios:
+  - id: "wf-empty-kp-must-ask"
+    description: "空知识点→Agent 必须反问，不得盲出"
+    input: "根据高考真题出变种题"
+    persona: "tutor"
+    assertions:
+      - type: "not_tool_called"
+        name: "generate_questions"
+      - type: "has_text_response"
+      - type: "text_contains_one_of"
+        values: ["知识点", "难度", "几道", "什么"]
+
+  - id: "wf-generate-then-save"
+    description: "出题（无学生）→生成→保存到题库→跳转 exam-v2"
+    input: "出3道氧化还原的选择题，中等难度"
+    persona: "tutor"
+    assertions:
+      - type: "tool_trajectory_order"
+        expected: ["generate_questions", "save_to_bank"]
+      - type: "route"
+        navigate: true
+        page: "exam-v2"
+
+  - id: "wf-generate-for-student-no-save"
+    description: "出题（有学生）→生成→不保存（题在 chat 里展示即可）"
+    input: "给张梦琪出3道盐类水解的中等难度选择题"
+    persona: "teacher"
+    assertions:
+      - type: "tool_called"
+        name: "generate_questions"
+      - type: "not_tool_called"
+        name: "save_to_bank"
+      - type: "route"
+        navigate: false
+
+  - id: "wf-search-then-ask"
+    description: "搜索后信息不足→应反问而非擅自出题"
+    input: "搜索盐类水解真题"
+    persona: "tutor"
+    assertions:
+      - type: "tool_called"
+        name: "search_exam_bank"
+      - type: "has_text_response"
+
+  - id: "wf-save-to-bank-then-navigate"
+    description: "save_to_bank 成功后应跳转到考试工作台题库 tab"
+    input: "把刚才的题目保存起来"
+    persona: "teacher"
+    assertions:
+      - type: "tool_called"
+        name: "save_to_bank"
+      - type: "route"
+        navigate: true
+        page: "exam-v2"
+
+# ── 已知架构缺口 (known_gaps) ──
+# 这些是已知的设计/实现问题，不是当前能修复的 bug。
+# 后续迭代时参考。
+known_gaps:
+  - id: "gap-search-json-not-db"
+    description: "search_exam_bank 只读 JSON 文件+样本数据，不读 SQLite。Agent 保存到题库的题目无法被 agent 搜索到。"
+    severity: "high"
+    recommendation: "search_exam_bank 应同时查询 QuestionSet/Question 表，或 save_to_bank 时同步写入 ExamBankService 索引。"
+
+  - id: "gap-no-auto-save"
+    description: "generate_questions 不自动保存。依赖 LLM 记得调 save_to_bank（不可靠）。"
+    severity: "medium"
+    recommendation: "考虑在 generate_questions 中增加 auto_save 参数，或在 GuardState 中标记'有未保存题目'。"
+
+  - id: "gap-batch-import-missing"
+    description: "import_exam_paper 调用了 exam_bank_service.batch_import() 但 ExamBankService 没有此方法。"
+    severity: "high"
+    recommendation: "实现 ExamBankService.batch_import() 或改为直接写 QuestionSet/Question 表。"
+
+  - id: "gap-llm-skips-approval"
+    description: "LLM 不可靠地跳过 request_approval。即使明确说'出完请我确认'，仍有概率忽略。"
+    severity: "medium"
+    recommendation: "考虑在生成后强制 inject 一个 approval 检查（不仅是 LLM 自主选择），或在 save_to_bank/assign_adaptive_practice 执行前强制调 request_approval。"
+
+  - id: "gap-route-persistence"
+    description: "_route 通过 SSE 事件传递但不持久化。前端未打开或刷新后 route 数据丢失。"
+    severity: "low"
+    recommendation: "将 last_route 存入 session/conversation 记录中，前端轮询或 re-mount 时可恢复。"

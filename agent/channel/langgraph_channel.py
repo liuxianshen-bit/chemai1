@@ -27,13 +27,12 @@ def _get_or_create_agent(persona: str, provider: str, student_profile=None, inte
     """Get or create agent for persona. Cache by persona key (interrupt-safe)."""
     from agent.langgraph_agent import create_chemai_agent
 
-    cache_key = f"{persona}:{provider}"
-    if cache_key not in _agent_cache:
-        _agent_cache[cache_key] = create_chemai_agent(
-            persona=persona, provider=provider,
-            student_profile=student_profile, intent_hints=intent_hints,
-        )
-    return _agent_cache[cache_key]
+    # Each request gets a fresh guard_state — see D8/D9 guardrails
+    agent, gs = create_chemai_agent(
+        persona=persona, provider=provider,
+        student_profile=student_profile, intent_hints=intent_hints,
+    )
+    return agent, gs
 
 
 @router.post("/chat/langgraph/stream")
@@ -93,14 +92,14 @@ async def agent_chat_langgraph_stream(request: ChatRequest):
     if tool_names:
         hints = f"推荐工具: {', '.join(tool_names[:5])}\n用户消息: {request.message}\n使用推荐工具或其他工具，自行判断。"
 
-    agent = _get_or_create_agent(
+    agent, guard_state = _get_or_create_agent(
         request.persona, request.provider,
         student_profile=deps.student_profile, intent_hints=hints,
     )
 
     adapter = LangGraphSSEAdapter()
     full_reply = []
-    config = {"configurable": {"thread_id": cid or "default"}}
+    config = {"configurable": {"thread_id": cid or "default"}, "recursion_limit": 8}
 
     async def generate():
         nonlocal full_reply, message_history
@@ -133,8 +132,8 @@ async def agent_chat_langgraph_stream(request: ChatRequest):
                 yield f"data: {json.dumps({'type': 'phase', 'phase': 'awaiting_approval'}, ensure_ascii=False)}\n\n"
                 return
 
-            # Finalize: route events + done
-            for result in adapter.finalize():
+            # Finalize: route events + done (uses guard_state.last_route)
+            for result in adapter.finalize(route=guard_state.last_route):
                 if result == "[DONE]":
                     yield "data: [DONE]\n\n"
                 else:
@@ -190,12 +189,12 @@ async def agent_chat_langgraph(request: ChatRequest):
     if tool_names:
         hints = f"推荐工具: {', '.join(tool_names[:5])}\n用户消息: {request.message}\n使用推荐工具或其他工具，自行判断。"
 
-    agent = _get_or_create_agent(
+    agent, guard_state = _get_or_create_agent(
         request.persona, request.provider,
         student_profile=deps.student_profile, intent_hints=hints,
     )
 
-    config = {"configurable": {"thread_id": cid or "default"}}
+    config = {"configurable": {"thread_id": cid or "default"}, "recursion_limit": 8}
     adapter = LangGraphSSEAdapter()
 
     try:
@@ -215,27 +214,15 @@ async def agent_chat_langgraph(request: ChatRequest):
             text = content
             break
 
-    # Collect tool results for route extraction
-    for m in msgs:
-        if hasattr(m, "type") and m.type == "tool":
-            try:
-                data = json.loads(m.content) if isinstance(m.content, str) else m.content
-                adapter._tool_results.append({"tool_name": m.name, "result": data})
-            except (json.JSONDecodeError, TypeError):
-                pass
-
+    # Route from guard_state (not from tool results — _route is stripped there)
     response = {"content": text}
-    nav_events = adapter.finalize()
-    for evt_str in nav_events:
-        if evt_str == "[DONE]":
-            continue
-        evt = json.loads(evt_str)
-        if evt["type"] == "navigate":
-            response["navigate"] = {"page": evt["page"], "params": evt.get("params", {})}
-        elif evt["type"] == "populate":
-            response.setdefault("populate", []).append(evt)
-        elif evt["type"] == "action":
-            response.setdefault("actions", []).append(evt)
+    if guard_state.last_route and guard_state.last_route.get("navigate"):
+        route = guard_state.last_route
+        response["navigate"] = {"page": route.get("page"), "params": route.get("params", {})}
+        if route.get("populate"):
+            response.setdefault("populate", []).append(route["populate"])
+        for act in route.get("actions", []):
+            response.setdefault("actions", []).append(act)
 
     return response
 
@@ -253,9 +240,9 @@ async def agent_chat_langgraph_resume(request: ChatRequest):
     cid = request.conversation_id or "default"
     user_response = request.message or ""
 
-    agent = _get_or_create_agent(request.persona, request.provider)
+    agent, guard_state = _get_or_create_agent(request.persona, request.provider)
     adapter = LangGraphSSEAdapter()
-    config = {"configurable": {"thread_id": cid}}
+    config = {"configurable": {"thread_id": cid}, "recursion_limit": 8}
     full_reply = []
 
     async def generate():
@@ -280,7 +267,7 @@ async def agent_chat_langgraph_resume(request: ChatRequest):
                 yield f"data: {json.dumps({'type': 'phase', 'phase': 'awaiting_approval'}, ensure_ascii=False)}\n\n"
                 return
 
-            for result in adapter.finalize():
+            for result in adapter.finalize(route=guard_state.last_route):
                 if result == "[DONE]":
                     yield "data: [DONE]\n\n"
                 else:
