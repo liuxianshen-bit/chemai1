@@ -774,7 +774,7 @@
 
     // KPs
     fetch('/api/knowledge/list', {credentials: 'include'}).then(function(r){return r.json()}).then(function(data){
-      var allKps=(data.knowledge_points||data.data||[]).map(function(k){return typeof k==='string'?{name:k,active:false}:{name:k.name||k,active:false}})
+      var allKps=(data.knowledge_points||data.data||[]).map(function(k){var n=typeof k==='string'?k:(k.name||k);return{name:n,active:false}})
       if(preKps){preKps.split('、').forEach(function(pk){var m=allKps.find(function(k){return k.name===pk});if(m)m.active=true})}
       panel._kps=allKps; _renderKps()
     }).catch(function(){})
