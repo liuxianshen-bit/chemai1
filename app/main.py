@@ -51,7 +51,7 @@ app.add_middleware(
 )
 
 # 无需认证的路径
-PUBLIC_PREFIXES = ["/api/auth/", "/api/agent/", "/api/classes", "/docs", "/redoc", "/openapi.json", "/health"]
+PUBLIC_PREFIXES = ["/api/auth/", "/api/agent/", "/api/classes", "/docs", "/redoc", "/openapi.json", "/health", "/api/knowledge/", "/api/exam-bank/", "/api/question/"]
 PUBLIC_EXTENSIONS = {".html", ".js", ".css", ".png", ".ico", ".svg", ".woff2"}
 
 @app.middleware("http")

@@ -358,7 +358,6 @@
               } catch(e) {}
               break
             case 'component':
-              console.log('component event received:', evt.component, evt.params)
               sessionStorage.removeItem('chemai_navigate')
               if (evt.component === 'exam-workbench') renderExamWorkbench(evt.params || {}, bubble)
               else if (evt.component === 'diagnosis') renderDiagnosis(evt.params || {}, bubble)
@@ -377,10 +376,12 @@
       }
     }
 
-    // Remove thinking dots, then append reply (don't replace — preserves inline panels)
+    // Remove thinking dots. If panel was rendered inline, skip reply text
+    // (the streaming text already showed the reply; panel is the UI).
     var thinkEl = bubble.querySelector('.think-status')
     if (thinkEl) thinkEl.remove()
-    if (reply) {
+    var hasPanel = bubble.querySelector('.inline-exam-panel, .inline-diag-panel')
+    if (reply && !hasPanel) {
       bubble.insertAdjacentHTML('beforeend', renderMarkdown(reply))
       history.push({ role: 'assistant', content: reply })
       saveCurrentConv()
@@ -737,10 +738,7 @@
 
   // ─── Inline Exam Workbench Panel (Full Interactive) ───
   function renderExamWorkbench(params, bubble) {
-    console.log('renderExamWorkbench called, bubble:', bubble, 'params:', params)
-    if (!bubble) { console.error('renderExamWorkbench: bubble is null!'); return }
-    // Visible test element
-    bubble.insertAdjacentHTML('beforeend', '<div style="background:#ff0;padding:10px;margin:10px 0;font-weight:bold;border:2px solid red">PANEL TEST - renderExamWorkbench was called</div>')
+    if (!bubble) return
     var preKps = (params.knowledge_points || []).join('、')
     var preDiff = params.difficulty || 'medium'
     var preTypes = params.types || [{val:'single_choice',active:true,qty:3}]
@@ -775,7 +773,7 @@
     typesContainer.addEventListener('change',function(e){ if(e.target.tagName==='INPUT'){ var chip=e.target.closest('.inline-exam-type-chip'); typeDefs[parseInt(chip.dataset.idx)].qty=parseInt(e.target.value)||1 } })
 
     // KPs
-    fetch('/api/knowledge/list').then(function(r){return r.json()}).then(function(data){
+    fetch('/api/knowledge/list', {credentials: 'include'}).then(function(r){return r.json()}).then(function(data){
       var allKps=(data.knowledge_points||data.data||[]).map(function(k){return typeof k==='string'?{name:k,active:false}:{name:k.name||k,active:false}})
       if(preKps){preKps.split('、').forEach(function(pk){var m=allKps.find(function(k){return k.name===pk});if(m)m.active=true})}
       panel._kps=allKps; _renderKps()
@@ -793,7 +791,7 @@
     }
 
     // Folders
-    fetch('/api/exam-bank/exam-sets').then(function(r){return r.json()}).then(function(data){
+    fetch('/api/exam-bank/exam-sets', {credentials: 'include'}).then(function(r){return r.json()}).then(function(data){
       var sets=(data.data&&data.data.exam_sets)||data.exam_sets||[]
       var sel=panel.querySelector('.inline-exam-folder'); sets.forEach(function(s){sel.innerHTML+='<option value="'+s.set_id+'">'+escHtml(s.name)+' ('+(s.question_count||0)+')</option>'})
     }).catch(function(){})
