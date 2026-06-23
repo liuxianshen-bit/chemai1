@@ -528,8 +528,14 @@ mounted:function(){
         }
       })
     }
-    // Populate data
+    // Populate data — sessionStorage stores as {data: {target: data}} dict,
+    // but existing code expects a [{target, data}] array. Normalize both formats.
     var autoGenerate = false
+    if (!bridge.populates && bridge.data) {
+      bridge.populates = Object.keys(bridge.data).map(function(k) {
+        return {target: k, data: bridge.data[k]}
+      })
+    }
     if (bridge.populates) {
       bridge.populates.forEach(function(pop) {
         if (pop.target === 'questions' && pop.data && pop.data.questions) {
