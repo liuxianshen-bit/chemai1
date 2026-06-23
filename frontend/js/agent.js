@@ -358,6 +358,7 @@
               } catch(e) {}
               break
             case 'component':
+              console.log('component event received:', evt.component, evt.params)
               sessionStorage.removeItem('chemai_navigate')
               if (evt.component === 'exam-workbench') renderExamWorkbench(evt.params || {}, bubble)
               else if (evt.component === 'diagnosis') renderDiagnosis(evt.params || {}, bubble)
@@ -376,8 +377,11 @@
       }
     }
 
+    // Remove thinking dots, then append reply (don't replace — preserves inline panels)
+    var thinkEl = bubble.querySelector('.think-status')
+    if (thinkEl) thinkEl.remove()
     if (reply) {
-      bubble.innerHTML = renderMarkdown(reply)
+      bubble.insertAdjacentHTML('beforeend', renderMarkdown(reply))
       history.push({ role: 'assistant', content: reply })
       saveCurrentConv()
     }
@@ -733,6 +737,10 @@
 
   // ─── Inline Exam Workbench Panel (Full Interactive) ───
   function renderExamWorkbench(params, bubble) {
+    console.log('renderExamWorkbench called, bubble:', bubble, 'params:', params)
+    if (!bubble) { console.error('renderExamWorkbench: bubble is null!'); return }
+    // Visible test element
+    bubble.insertAdjacentHTML('beforeend', '<div style="background:#ff0;padding:10px;margin:10px 0;font-weight:bold;border:2px solid red">PANEL TEST - renderExamWorkbench was called</div>')
     var preKps = (params.knowledge_points || []).join('、')
     var preDiff = params.difficulty || 'medium'
     var preTypes = params.types || [{val:'single_choice',active:true,qty:3}]
