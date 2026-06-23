@@ -747,6 +747,46 @@ def test_workflow_scenarios(report: EvalReport):
     asyncio.run(run())
 
 
+def test_inline_panel_scenarios(report: EvalReport):
+    """内联面板场景: show_exam_workbench 直接调用 / search_exam_bank 分离 / 不反问。"""
+    from dotenv import load_dotenv
+    load_dotenv()
+
+    data = load_golden_scenarios()
+    ip_scenarios = data.get("inline_panel_scenarios", [])
+    if not ip_scenarios:
+        print("\n  [SKIP] No inline_panel_scenarios in golden YAML")
+        return
+
+    async def run():
+        print("\n  === INLINE PANEL SCENARIOS ===")
+        for scenario in ip_scenarios:
+            sid = scenario["id"]
+            desc = scenario["description"]
+            print(f"  [{sid}] {desc[:60]}...", end=" ", flush=True)
+
+            persona = scenario.get("persona", "tutor")
+            traj = await run_langgraph_agent(scenario["input"], persona)
+
+            if traj["error"]:
+                report.add(f"panel: {sid}", False, f"AGENT ERROR: {traj['error']}")
+                print("ERROR")
+                continue
+
+            all_pass = True
+            for assertion in scenario["assertions"]:
+                passed, detail = check_assertion(assertion, traj)
+                name = f"panel: {sid}/{assertion['type']}"
+                if not passed:
+                    all_pass = False
+                report.add(name, passed, detail)
+
+            status = "PASS" if all_pass else "FAIL"
+            print(f"{status} ({traj['latency_s']}s) tools={traj['tools_called']}")
+
+    asyncio.run(run())
+
+
 # ═══════════════════════════════════════════════════════════════════════
 # 运行器
 # ═══════════════════════════════════════════════════════════════════════
@@ -761,6 +801,7 @@ def run():
     parser.add_argument("--save", action="store_true", help="Save baseline.json (with --baseline)")
     parser.add_argument("--regression", action="store_true", help="Compare against saved baseline.json")
     parser.add_argument("--workflow", action="store_true", help="Run workflow integration scenarios (needs API)")
+    parser.add_argument("--inline-panel", action="store_true", help="Run inline panel scenarios (needs API)")
     parser.add_argument("--all", action="store_true", help="Run everything")
 
     try:
@@ -769,7 +810,7 @@ def run():
         args = argparse.Namespace(golden=True, langgraph=False, boundary=True, baseline=False, save=False, regression=False, all=False)
 
     if args.all:
-        args.golden = args.langgraph = args.boundary = args.workflow = True
+        args.golden = args.langgraph = args.boundary = args.workflow = args.inline_panel = True
 
     report = EvalReport()
 
@@ -800,6 +841,13 @@ def run():
         print("  WORKFLOW SCENARIOS (integration)")
         print("=" * 60)
         test_workflow_scenarios(report)
+
+    # ── 内联面板场景 ──
+    if args.inline_panel or args.all:
+        print("\n" + "=" * 60)
+        print("  INLINE PANEL SCENARIOS")
+        print("=" * 60)
+        test_inline_panel_scenarios(report)
 
     # ── 回归对比 ──
     if args.baseline or args.save or args.regression:

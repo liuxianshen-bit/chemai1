@@ -417,6 +417,48 @@ workflow_scenarios:
       - type: "text_contains_one_of"
         values: ["知识点", "什么", "哪个"]
 
+# ── 内联面板 + Agent 行为 evals (2026-06-23 沉淀) ──
+# 这些场景覆盖了本轮开发中发现的关键行为缺口。
+# 后续更新时务必跑这些场景验证不回归。
+inline_panel_scenarios:
+  - id: "panel-show-on-exam-intent"
+    description: "用户说'我要出题' → Agent 应直接调 show_exam_workbench，不反问"
+    input: "我要出题"
+    persona: "teacher"
+    assertions:
+      - type: "tool_called"
+        name: "show_exam_workbench"
+      - type: "not_tool_called"
+        name: "search_exam_bank"
+
+  - id: "panel-no-search-on-generate"
+    description: "用户说'出氧化还原选择题' → 应调 show_exam_workbench，不搜真题"
+    input: "出3道氧化还原的选择题，中等难度"
+    persona: "teacher"
+    assertions:
+      - type: "tool_called"
+        name: "show_exam_workbench"
+      - type: "not_tool_called"
+        name: "search_exam_bank"
+
+  - id: "panel-immediate-no-questions"
+    description: "出题意图 → 直接调用工具，不反问用户参数"
+    input: "我想出高考变种题"
+    persona: "teacher"
+    assertions:
+      - type: "tool_called"
+        name: "show_exam_workbench"
+
+  - id: "panel-search-only-on-explicit-search"
+    description: "用户明确说'搜索真题'时才能搜，说'出题'不能搜"
+    input: "搜索氧化还原真题"
+    persona: "tutor"
+    assertions:
+      - type: "tool_called"
+        name: "search_exam_bank"
+      - type: "not_tool_called"
+        name: "show_exam_workbench"
+
 # ── 已知架构缺口 (known_gaps) ──
 # 这些是已知的设计/实现问题，不是当前能修复的 bug。
 # 后续迭代时参考。
