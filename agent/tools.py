@@ -780,10 +780,7 @@ async def show_exam_workbench(
     何时用：用户说"出题""出卷""生成题目""组卷"等任何出题意图时，立即调用！
     不要再反问用户、不要先搜真题、不要确认参数——直接展示面板让用户在面板里配置。
     会发生什么：在聊天界面中渲染考试工作台面板，用户可直接在面板中配置参数、出题、预览、编辑、保存
-    下一步：用户在面板中操作完成后，Agent 收到总结消息"""
-
-    question_types 格式: "题型:数量,题型:数量"，如 "single_choice:5,fill_blank:2"
-    可选题型: single_choice, fill_blank, calculation, experiment, inference
+    下一步：用户在面板中操作完成后，Agent 收到总结消息。question_types 格式如 "single_choice:5,fill_blank:2"
     """
     import logging
     _log = logging.getLogger(__name__)
