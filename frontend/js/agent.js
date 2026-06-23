@@ -361,6 +361,7 @@
               sessionStorage.removeItem('chemai_navigate')
               if (evt.component === 'exam-workbench') renderExamWorkbench(evt.params || {}, bubble)
               else if (evt.component === 'diagnosis') renderDiagnosis(evt.params || {}, bubble)
+              else if (evt.component === 'diagnosis') renderDiagnosis(evt.params || {}, bubble)
               break
             case 'error':
               var errHtml = '<div style="color:#b43c28;padding:8px 0;font-size:13px">' +
@@ -823,7 +824,7 @@
       var ov=document.createElement('div'); ov.className='inline-exam-vb-overlay'; ov.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.3);z-index:9999;display:flex;align-items:center;justify-content:center'
       ov.innerHTML='<div style="background:#fff;border-radius:8px;padding:16px;max-width:600px;max-height:80vh;overflow-y:auto;width:90%"><div style="font-weight:700;margin-bottom:10px">选择真题蓝本</div><div class="ivb-content" style="font-size:13px">加载中...</div><button style="margin-top:10px;padding:4px 16px;border:1px solid #ddd;border-radius:4px;cursor:pointer;float:right">关闭</button></div>'
       document.body.appendChild(ov); ov.querySelector('button').addEventListener('click',function(){document.body.removeChild(ov)}); ov.addEventListener('click',function(e){if(e.target===ov)document.body.removeChild(ov)})
-      fetch('/api/exam-bank/papers').then(function(r){return r.json()}).then(function(data){var ps=(data.papers||data.data||[]),c=ov.querySelector('.ivb-content')
+      fetch('/api/exam-bank/papers').then(function(r){return r.json()}).then(function(data){var groups=(data.data&&data.data.groups)||data.groups||[]; var ps=[]; groups.forEach(function(g){var r=g.region; (g.years||[]).forEach(function(y){ (y.papers||[]).forEach(function(p){ p.region=r; p.year=y.year; ps.push(p) }) }) }); var c=ov.querySelector('.ivb-content')
         c.innerHTML='<div style="font-size:12px;color:#888;margin-bottom:8px">点击试卷浏览题目，再点击题目选为蓝本</div>'+ps.slice(0,50).map(function(p){return '<div class="ivb-paper" style="padding:6px 8px;margin:2px 0;border:1px solid #eee;border-radius:4px;cursor:pointer;font-size:12px" data-r="'+escHtml(p.region||'')+'" data-y="'+(p.year||'')+'">'+escHtml(p.source||p.name||'')+' · '+(p.year||'')+' ('+(p.question_count||p.total||'?')+'题)</div>'}).join('')
         c.querySelectorAll('.ivb-paper').forEach(function(el){el.addEventListener('click',function(){c.innerHTML='加载中...'
           fetch('/api/exam-bank/historical?region='+encodeURIComponent(el.dataset.r)+'&year='+encodeURIComponent(el.dataset.y)+'&page_size=30').then(function(r){return r.json()}).then(function(qd){var qs=(qd.questions||qd.data||[])
