@@ -367,7 +367,7 @@
               resetSendState()
               break
           }
-        } catch (e) {}
+        } catch (e) { console.error('SSE event error:', e) }
       }
     }
 
