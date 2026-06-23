@@ -829,11 +829,23 @@
   }
 
   // ─── Shared panel helpers ───
-  window.ChemAI._saveQ = function(btn,idx){var c=btn.closest('.inline-exam-questions'),q=(c._qs||[])[idx];if(!q||q._saved)return;fetch('/api/exam-bank/import-questions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({set_id:c._fid,questions:[{content:q.content,options:q.options||[],answer:q.answer||'',knowledge_points:q.knowledge_points||[],difficulty:q.difficulty||'medium'}]})}).then(function(r){return r.json()}).then(function(d){if(d.success){q._saved=true;btn.textContent='已保存';btn.disabled=true;btn.style.opacity='.4'}})}
-  window.ChemAI._delQ = function(btn,idx){var c=btn.closest('.inline-exam-qcard');if(c)c.style.display='none'}
-  window.ChemAI._saveAll = function(btn){var c=btn.closest('.inline-exam-questions'),qs=(c._qs||[]).filter(function(q){return!q._saved});if(!qs.length)return;fetch('/api/exam-bank/import-questions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({set_id:c._fid,questions:qs.map(function(q){return{content:q.content,options:q.options||[],answer:q.answer||'',knowledge_points:q.knowledge_points||[],difficulty:q.difficulty||'medium'}})}))}).then(function(r){return r.json()}).then(function(d){if(d.success){qs.forEach(function(q){q._saved=true});btn.textContent='已保存';btn.disabled=true;btn.style.opacity='.4'}})}
-  window.ChemAI._redo = function(btn){var p=btn.closest('.inline-exam-panel');p.querySelector('.inline-exam-questions').style.display='none';p.querySelector('.inline-exam-status').textContent='';p.querySelector('.inline-exam-gen-btn').click()}
-  window.ChemAI._done = function(btn){var p=btn.closest('.inline-exam-panel'),c=p.querySelector('.inline-exam-questions'),qs=c._qs||[];p.querySelector('.inline-exam-status').textContent='已完成';sendMessage('出题完成：共生成'+qs.length+'道题，已保存'+qs.filter(function(q){return q._saved}).length+'道。')}
+  window.ChemAI._saveQ = function(btn, idx) {
+    var c = btn.closest('.inline-exam-questions'), q = (c._qs || [])[idx]
+    if (!q || q._saved) return
+    var body = JSON.stringify({set_id: c._fid, questions: [{content: q.content, options: q.options || [], answer: q.answer || '', knowledge_points: q.knowledge_points || [], difficulty: q.difficulty || 'medium'}]})
+    fetch('/api/exam-bank/import-questions', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: body})
+      .then(function(r) { return r.json() }).then(function(d) { if (d.success) { q._saved = true; btn.textContent = '已保存'; btn.disabled = true; btn.style.opacity = '.4' } })
+  }
+  window.ChemAI._delQ = function(btn, idx) { var c = btn.closest('.inline-exam-qcard'); if (c) c.style.display = 'none' }
+  window.ChemAI._saveAll = function(btn) {
+    var c = btn.closest('.inline-exam-questions'), qs = (c._qs || []).filter(function(q) { return !q._saved })
+    if (!qs.length) return
+    var body = JSON.stringify({set_id: c._fid, questions: qs.map(function(q) { return {content: q.content, options: q.options || [], answer: q.answer || '', knowledge_points: q.knowledge_points || [], difficulty: q.difficulty || 'medium'} })})
+    fetch('/api/exam-bank/import-questions', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: body})
+      .then(function(r) { return r.json() }).then(function(d) { if (d.success) { qs.forEach(function(q) { q._saved = true }); btn.textContent = '已保存'; btn.disabled = true; btn.style.opacity = '.4' } })
+  }
+  window.ChemAI._redo = function(btn) { var p = btn.closest('.inline-exam-panel'); p.querySelector('.inline-exam-questions').style.display = 'none'; p.querySelector('.inline-exam-status').textContent = ''; p.querySelector('.inline-exam-gen-btn').click() }
+  window.ChemAI._done = function(btn) { var p = btn.closest('.inline-exam-panel'), c = p.querySelector('.inline-exam-questions'), qs = c._qs || []; p.querySelector('.inline-exam-status').textContent = '已完成'; sendMessage('出题完成：共生成' + qs.length + '道题，已保存' + qs.filter(function(q) { return q._saved }).length + '道。') }
 
   // ─── Inline Diagnosis Panel ───
   function renderDiagnosis(params, bubble) {
