@@ -359,8 +359,12 @@
               break
             case 'component':
               sessionStorage.removeItem('chemai_navigate')
+              var rawText = bubble.textContent || ''
+              if (rawText.trim()) {
+                rawText = rawText.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/^- /gm, '· ').replace(/\n\n/g, '<br>')
+                bubble.textContent = ''; bubble.insertAdjacentHTML('afterbegin', '<div style="font-size:14px">'+rawText+'</div>')
+              }
               if (evt.component === 'exam-workbench') renderExamWorkbench(evt.params || {}, bubble)
-              else if (evt.component === 'diagnosis') renderDiagnosis(evt.params || {}, bubble)
               else if (evt.component === 'diagnosis') renderDiagnosis(evt.params || {}, bubble)
               break
             case 'error':
@@ -746,7 +750,20 @@
     var preVariant = params.variant_source || ''
     var preFolder = params.set_name || ''
 
-    var html = '<div class="inline-exam-panel">'+
+    var html = '<style>'+
+      '.inline-exam-btn{display:inline-block;padding:6px 14px;border:1px solid #ddd;border-radius:6px;font-size:12px;cursor:pointer;background:#fff;color:#555;transition:all .15s;margin:2px}'+
+      '.inline-exam-btn:hover{background:#f5f5f5;border-color:#bbb}'+
+      '.inline-exam-btn.primary{background:#b43c28;color:#fff;border-color:#b43c28;font-weight:600}'+
+      '.inline-exam-btn.primary:hover{background:#9a3522}'+
+      '.inline-exam-btn.sm{padding:3px 10px;font-size:11px}'+
+      '.inline-exam-btn-sm{padding:3px 8px;border:1px solid #ddd;border-radius:4px;font-size:11px;cursor:pointer;background:#fff;color:#555;margin:1px}'+
+      '.inline-exam-btn-sm:hover{background:#f5f5f5}'+
+      '.inline-exam-btn-sm.danger{color:#b43c28;border-color:#b43c28}'+
+      '.inline-exam-btn-sm.danger:hover{background:rgba(180,60,40,.06)}'+
+      '.inline-exam-qcard{border:1px solid #eee;border-radius:6px;padding:10px;margin:8px 0;background:#fff}'+
+      '.inline-exam-qcard:hover{border-color:#ddd}'+
+      '</style>'+
+      '<div class="inline-exam-panel">'+
       '<div class="inline-exam-header" style="font-weight:700;margin-bottom:10px;font-size:15px;border-bottom:2px solid #b43c28;padding-bottom:8px">考试工作台</div>'+
       '<div style="margin-bottom:12px"><div style="font-size:12px;color:#888;margin-bottom:4px">题型与数量</div><div class="inline-exam-types"></div></div>'+
       '<div style="margin-bottom:12px"><span style="font-size:12px;color:#888">难度</span> <select class="inline-exam-diff" style="padding:4px 8px;border:1px solid #ddd;border-radius:4px;font-size:13px"><option value="easy"'+(preDiff==='easy'?' selected':'')+'>容易</option><option value="medium"'+(preDiff==='medium'?' selected':'')+'>中等</option><option value="hard"'+(preDiff==='hard'?' selected':'')+'>偏难</option></select></div>'+
@@ -814,16 +831,24 @@
       progressHTML+='</div><div class="exam-qcards"></div>'
       qa.innerHTML=progressHTML; st.textContent=''
       var pending=active.length
+      // Show skeleton loading while generating
+      var skeletonHTML='<div style="padding:10px;font-size:13px;color:#888">正在提交出题请求...</div>'
+      qa.querySelector('.exam-qcards').innerHTML=skeletonHTML
       active.forEach(function(t){
-        var progEl=qa.querySelector('.exam-prog-'+t.val); if(progEl)progEl.innerHTML='🔄 '+typeLabels[t.val]+' ×'+t.qty+' 生成中...'
+        var progEl=qa.querySelector('.exam-prog-'+t.val)
+        if(progEl)progEl.textContent='⏳ '+typeLabels[t.val]+' ×'+t.qty+' 已提交'
+        var t0=Date.now()
         fetch('/api/question/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({knowledge_points:kps,difficulty:diff,quantity:t.qty,question_types:[t.val]})})
           .then(function(r){return r.json()}).then(function(d){
+            if(progEl)progEl.textContent='🔄 '+typeLabels[t.val]+' ×'+t.qty+' AI组织题目中...('+Math.round((Date.now()-t0)/1000)+'s)'
             var qs=d.questions||[]; qs.forEach(function(q){q._typeLabel=t.val;q._saved=false}); qa._qs=qa._qs.concat(qs)
-            if(progEl)progEl.innerHTML='✅ '+typeLabels[t.val]+' ×'+qs.length+' 已完成'
+            // Clear skeleton on first result
+            if(qa.querySelector('.exam-qcards').textContent.includes('正在提交'))qa.querySelector('.exam-qcards').innerHTML=''
             _renderQs(qs,qa.querySelector('.exam-qcards'))
+            if(progEl)progEl.textContent='✅ '+typeLabels[t.val]+' ×'+qs.length+' 完成 ('+Math.round((Date.now()-t0)/1000)+'s)'
             pending--; if(pending===0){ _renderQsFooter(qa) }
           }).catch(function(){
-            if(progEl)progEl.innerHTML='❌ '+typeLabels[t.val]+' 失败'
+            if(progEl)progEl.textContent='❌ '+typeLabels[t.val]+' 失败'
             pending--; if(pending===0){ _renderQsFooter(qa) }
           })
       })
@@ -871,7 +896,7 @@
       fetch('/api/exam-bank/papers').then(function(r){return r.json()}).then(function(data){var groups=(data.data&&data.data.groups)||data.groups||[]; var ps=[]; groups.forEach(function(g){var r=g.region; (g.years||[]).forEach(function(y){ (y.papers||[]).forEach(function(p){ p.region=r; p.year=y.year; ps.push(p) }) }) }); var c=ov.querySelector('.ivb-content')
         c.innerHTML='<div style="font-size:12px;color:#888;margin-bottom:8px">点击试卷浏览题目，再点击题目选为蓝本</div>'+ps.slice(0,50).map(function(p){return '<div class="ivb-paper" style="padding:6px 8px;margin:2px 0;border:1px solid #eee;border-radius:4px;cursor:pointer;font-size:12px" data-r="'+escHtml(p.region||'')+'" data-y="'+(p.year||'')+'">'+escHtml(p.source||p.name||'')+' · '+(p.year||'')+' ('+(p.question_count||p.total||'?')+'题)</div>'}).join('')
         c.querySelectorAll('.ivb-paper').forEach(function(el){el.addEventListener('click',function(){c.innerHTML='加载中...'
-          fetch('/api/exam-bank/historical?region='+encodeURIComponent(el.dataset.r)+'&year='+encodeURIComponent(el.dataset.y)+'&page_size=30').then(function(r){return r.json()}).then(function(qd){var qs=(qd.questions||qd.data||[])
+          fetch('/api/exam-bank/historical?region='+encodeURIComponent(el.dataset.r)+'&year='+encodeURIComponent(el.dataset.y)+'&page_size=30').then(function(r){return r.json()}).then(function(qd){var qs=(qd.data&&qd.data.questions)||qd.questions||[]
             c.innerHTML='<div style="font-size:12px;color:#888;margin-bottom:8px">点击题目选为蓝本</div>'+qs.map(function(q,i){return '<div class="ivb-q" data-qid="'+(q.exam_id||q.question_id||'')+'" style="padding:6px 8px;margin:2px 0;border:1px solid #eee;border-radius:4px;cursor:pointer;font-size:12px"><b>#'+(i+1)+'</b> '+escHtml((q.content||'').substring(0,80))+'</div>'}).join('')
             c.querySelectorAll('.ivb-q').forEach(function(qel){qel.addEventListener('click',function(){panel._variantQid=qel.dataset.qid;panel._variantSource=(el.dataset.r||'')+' · #'+(Array.from(qel.parentNode.children).indexOf(qel)+1);panel.querySelector('.inline-exam-variant-info').textContent='当前蓝本: '+panel._variantSource;document.body.removeChild(ov)})})
           }).catch(function(){c.innerHTML='加载失败'})
@@ -907,7 +932,8 @@
   function _doSaveAll(qArea, qs, fid) {
     var body=JSON.stringify({set_id:fid,questions:qs.map(function(q){return{content:q.content,options:q.options||[],answer:q.answer||'',knowledge_points:q.knowledge_points||[],difficulty:q.difficulty||'medium'}})})
     fetch('/api/exam-bank/import-questions',{method:'POST',headers:{'Content-Type':'application/json'},body:body})
-      .then(function(r){return r.json()}).then(function(d){if(d.success){qs.forEach(function(q){q._saved=true});_updatePanelCount(qArea)}})
+      .then(function(r){return r.json()}).then(function(d){if(d.success){qs.forEach(function(q){q._saved=true});_updatePanelCount(qArea)
+        var fn=qArea._fn||'';sendMessage('[系统] 已保存 '+qs.length+' 道题到「'+fn+'」')}})
   }
   function _ensureFolder(qArea, cb) {
     var fid=qArea._fid; if(fid&&!String(fid).startsWith('auto-')){cb(fid);return}
