@@ -379,7 +379,7 @@ def create_chemai_agent(persona: str = "tutor", provider: str = "deepseek",
     """
     from langgraph.graph import StateGraph, MessagesState, START, END
     from langgraph.prebuilt import ToolNode
-    from langchain_core.messages import SystemMessage, HumanMessage, ToolMessage
+    from langchain_core.messages import SystemMessage, HumanMessage, ToolMessage, AIMessage
 
     if guard_state is None:
         guard_state = GuardState()
@@ -428,25 +428,23 @@ def create_chemai_agent(persona: str = "tutor", provider: str = "deepseek",
 
         text = _user_text(state)
         if _has_exam_params(text):
-            # Return ToolMessages for ALL tool_calls to satisfy API contract.
-            # search_exam_bank gets redirect message; other tools pass through empty.
+            # Strip tool_calls from the AIMessage and inject redirect instruction.
+            # Same ID → LangGraph replaces the original message in state.
+            # This avoids an extra LLM round-trip (no double response).
             return {"messages": [
-                ToolMessage(
-                    content=(
-                        "被拦截。用户已提供具体出题参数。"
-                        "请直接调用 navigate_to_exam_workbench 跳转考试工作台。"
-                    ) if tc in search_calls else "",
-                    tool_call_id=tc["id"]
-                ) for tc in tc_list
+                AIMessage(
+                    content="[系统提示] 用户已提供具体出题参数。"
+                            "请直接调用 navigate_to_exam_workbench 跳转考试工作台，不要再搜索。",
+                    id=last.id
+                )
             ]}
         return {}
 
     # ── Node: check — pre-tool structural gate ──
     def _check_node(state):
-        from langchain_core.messages import ToolMessage as TM
         last = state["messages"][-1]
-        # Skip ToolMessages (from router) and HumanMessages (from previous block)
-        if isinstance(last, TM) or isinstance(last, HumanMessage):
+        # Skip if already processed (AIMessage without tool_calls from replacement)
+        if isinstance(last, AIMessage) and not getattr(last, 'tool_calls', None):
             return {}
         tc_list = getattr(last, 'tool_calls', []) or []
         if not tc_list:
@@ -461,13 +459,12 @@ def create_chemai_agent(persona: str = "tutor", provider: str = "deepseek",
                 issues.append(f"- {name}: {err}")
 
         if issues:
-            # Create ToolMessages for ALL tool_calls to satisfy API contract,
-            # with error messages for blocked ones
+            # Replace AIMessage: strip tool_calls, keep existing text + add block notice.
+            # Same ID → LangGraph replaces the original. No extra LLM round-trip.
+            existing_text = last.content or ""
+            block_text = "（以下工具调用被拦截：\n" + "\n".join(issues) + "\n请先向用户确认缺失的信息。）"
             return {"messages": [
-                ToolMessage(
-                    content=f"被拦截：{next((i for i in issues if tc.get('name','') in i), '缺少必要信息')}",
-                    tool_call_id=tc["id"]
-                ) for tc in tc_list
+                AIMessage(content=existing_text + "\n\n" + block_text, id=last.id)
             ]}
         return {}
 
@@ -482,17 +479,17 @@ def create_chemai_agent(persona: str = "tutor", provider: str = "deepseek",
         return END
 
     def _route_after_router(state):
-        from langchain_core.messages import ToolMessage as TM
         last = state["messages"][-1]
-        if isinstance(last, TM):
-            return "llm"  # injected ToolMessages → back to LLM
+        # If AIMessage has no tool_calls → it was replaced by router → END
+        if isinstance(last, AIMessage) and not getattr(last, 'tool_calls', None):
+            return END
         return "check"
 
     def _route_after_check(state):
-        from langchain_core.messages import ToolMessage as TM
         last = state["messages"][-1]
-        if isinstance(last, TM):
-            return "llm"  # injected ToolMessages → back to LLM
+        # If AIMessage has no tool_calls → it was replaced by check → END
+        if isinstance(last, AIMessage) and not getattr(last, 'tool_calls', None):
+            return END
         return "tools"
 
     # ── Build ──
@@ -504,8 +501,8 @@ def create_chemai_agent(persona: str = "tutor", provider: str = "deepseek",
 
     builder.add_edge(START, "llm")
     builder.add_conditional_edges("llm", _route_after_llm, {"router": "router", END: END})
-    builder.add_conditional_edges("router", _route_after_router, {"llm": "llm", "check": "check"})
-    builder.add_conditional_edges("check", _route_after_check, {"llm": "llm", "tools": "tools"})
+    builder.add_conditional_edges("router", _route_after_router, {"llm": "llm", "check": "check", END: END})
+    builder.add_conditional_edges("check", _route_after_check, {"llm": "llm", "tools": "tools", END: END})
     builder.add_edge("tools", "llm")
 
     return builder.compile(checkpointer=_checkpointer), guard_state
