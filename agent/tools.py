@@ -822,12 +822,119 @@ async def show_exam_workbench(
     }, ensure_ascii=False)
 
 
+# ── 13. show_diagnosis ──
+
+async def show_diagnosis(student_id: str = "", student_name: str = "", class_id: str = "") -> str:
+    """学情诊断 — 在聊天中展示诊断结果和图表
+
+    何时用：用户要求查看学生或班级的诊断结果
+    会发生什么：在聊天中渲染诊断面板，包含障碍分布图和关键指标
+    下一步：用户可点击"针对出题"快捷按钮，跳转到出题面板
+    """
+    import logging
+    _log = logging.getLogger(__name__)
+
+    # Call diagnose_barrier to get data
+    from agent.tools import diagnose_barrier as _diag
+    diag_result = await _diag(student_id=student_id, student_name=student_name, class_id=class_id)
+
+    try:
+        data = json.loads(diag_result) if isinstance(diag_result, str) else diag_result
+    except (json.JSONDecodeError, TypeError):
+        data = {"error": "诊断数据解析失败"}
+
+    if "error" in data:
+        return json.dumps({"message": data.get("error", "诊断失败"), "_component": None}, ensure_ascii=False)
+
+    return json.dumps({
+        "message": "诊断结果已生成，请查看下方图表。",
+        "_component": {
+            "component": "diagnosis",
+            "params": data,
+        },
+    }, ensure_ascii=False)
+
+
+# ── 15. list_banks ──
+
+async def list_banks() -> str:
+    """题库管理 — 列出所有题库文件夹
+
+    何时用：用户想查看有哪些题库文件夹，或需要知道题库名称和题目数量
+    会发生什么：返回题库列表（set_id、名称、题目数量）
+    下一步：用户可能要求删除某个题库（delete_bank）或查看某个题库的内容
+    """
+    import sys, os
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+    from app.models.database import get_db, QuestionSet
+
+    db = next(get_db())
+    try:
+        sets = db.query(QuestionSet).order_by(QuestionSet.created_at.desc()).all()
+        result = [{
+            "set_id": s.set_id,
+            "name": s.name,
+            "question_count": s.question_count or 0,
+            "created_at": str(s.created_at) if s.created_at else "",
+        } for s in sets]
+        return json.dumps({"banks": result, "total": len(result)}, ensure_ascii=False)
+    finally:
+        db.close()
+
+
+# ── 16. delete_bank ──
+
+async def delete_bank(set_id: str = "") -> str:
+    """题库管理 — 删除题库文件夹及其中所有题目
+
+    何时用：用户明确要求删除某个题库文件夹
+    会发生什么：删除题库文件夹和其中的题目关联（题目本身保留）
+    下一步：告知用户删除结果
+
+    注意：此操作不可逆，需要先调 request_approval 确认
+    """
+    import sys, os
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+    from app.models.database import get_db, QuestionSet, QuestionSetItem
+
+    if not set_id:
+        return json.dumps({"error": "请指定要删除的题库 set_id"}, ensure_ascii=False)
+
+    db = next(get_db())
+    try:
+        qs = db.query(QuestionSet).filter(QuestionSet.set_id == set_id).first()
+        if not qs:
+            return json.dumps({"error": f"题库 {set_id} 不存在"}, ensure_ascii=False)
+
+        name = qs.name
+        count = qs.question_count or 0
+
+        # Delete QuestionSetItems first, then QuestionSet
+        db.query(QuestionSetItem).filter(QuestionSetItem.set_id == set_id).delete()
+        db.delete(qs)
+        db.commit()
+
+        return json.dumps({
+            "deleted": True,
+            "set_id": set_id,
+            "name": name,
+            "question_count": count,
+            "message": f"已删除题库「{name}」（含 {count} 道题目关联）",
+        }, ensure_ascii=False)
+    except Exception as e:
+        db.rollback()
+        return json.dumps({"error": f"删除失败: {str(e)}"}, ensure_ascii=False)
+    finally:
+        db.close()
+
+
 # ── Tool list for factory ──
 
 TOOLS = [
     search_exam_bank,
     web_search,
     show_exam_workbench,
+    show_diagnosis,
     diagnose_barrier,
     chemistry_tutor,
     simulate_experiment,
@@ -836,4 +943,6 @@ TOOLS = [
     import_exam_paper,
     assign_adaptive_practice,
     save_to_bank,
+    list_banks,
+    delete_bank,
 ]

@@ -353,7 +353,8 @@
               } catch(e) {}
               break
             case 'component':
-              renderExamWorkbench(evt.params || {}, bubble)
+              if (evt.component === 'exam-workbench') renderExamWorkbench(evt.params || {}, bubble)
+              else if (evt.component === 'diagnosis') renderDiagnosis(evt.params || {}, bubble)
               break
             case 'error':
               var errHtml = '<div style="color:#b43c28;padding:8px 0;font-size:13px">' +
@@ -725,187 +726,136 @@
     })
   }
 
-  // ─── Inline Exam Workbench Panel ───
+  // ─── Inline Exam Workbench Panel (Full Interactive) ───
   function renderExamWorkbench(params, bubble) {
-    var kps = (params.knowledge_points || []).join('、')
-    var diff = params.difficulty || 'medium'
-    var diffLabel = {easy:'容易',medium:'中等',hard:'偏难'}[diff] || diff
-    var types = params.types || []
-    var typesStr = types.map(function(t){return (t.active?'●':'○')+' '+({single_choice:'选择题',fill_blank:'填空题',calculation:'计算题',experiment:'实验题',inference:'推断题'}[t.val]||t.val)+' ×'+t.qty}).join('  ')
-    var variant = params.variant_source || '无'
-    var folder = params.set_name || '自动创建'
+    var preKps = (params.knowledge_points || []).join('、')
+    var preDiff = params.difficulty || 'medium'
+    var preTypes = params.types || [{val:'single_choice',active:true,qty:3}]
+    var preVariant = params.variant_source || ''
+    var preFolder = params.set_name || ''
 
     var html = '<div class="inline-exam-panel">'+
-      '<div class="inline-exam-header">考试工作台</div>'+
-      '<div class="inline-exam-params">'+
-        '<div><b>知识点:</b> '+escHtml(kps||'未指定')+' ✓</div>'+
-        '<div><b>难度:</b> '+escHtml(diffLabel)+' ✓</div>'+
-        '<div><b>题型:</b> '+typesStr+' ✓</div>'+
-        '<div><b>变种蓝本:</b> '+escHtml(variant)+'</div>'+
-        '<div><b>保存到:</b> '+escHtml(folder)+'</div>'+
-      '</div>'+
-      '<div class="inline-exam-actions">'+
-        '<button class="inline-exam-btn primary" onclick="ChemAI.inlineExamGenerate(this)">生成题目</button>'+
-        '<button class="inline-exam-btn" onclick="ChemAI.inlineExamModify(this)">修改参数</button>'+
-      '</div>'+
-      '<div class="inline-exam-questions" style="display:none"></div>'+
-      '<div class="inline-exam-status"></div>'+
-    '</div>'
+      '<div class="inline-exam-header" style="font-weight:700;margin-bottom:10px;font-size:15px;border-bottom:2px solid #b43c28;padding-bottom:8px">考试工作台</div>'+
+      '<div style="margin-bottom:12px"><div style="font-size:12px;color:#888;margin-bottom:4px">题型与数量</div><div class="inline-exam-types"></div></div>'+
+      '<div style="margin-bottom:12px"><span style="font-size:12px;color:#888">难度</span> <select class="inline-exam-diff" style="padding:4px 8px;border:1px solid #ddd;border-radius:4px;font-size:13px"><option value="easy"'+(preDiff==='easy'?' selected':'')+'>容易</option><option value="medium"'+(preDiff==='medium'?' selected':'')+'>中等</option><option value="hard"'+(preDiff==='hard'?' selected':'')+'>偏难</option></select></div>'+
+      '<div style="margin-bottom:12px;border-top:1px solid #eee;padding-top:10px"><div style="font-size:12px;color:#888;margin-bottom:4px">知识点 <span style="font-weight:400">（搜索并点击选中）</span></div><div class="inline-exam-kps-active" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px;min-height:20px"></div><input class="inline-exam-kp-search" placeholder="搜索知识点..." style="width:100%;padding:6px 10px;border:1px solid #ddd;border-radius:4px;font-size:13px;box-sizing:border-box;margin-bottom:6px"><div class="inline-exam-kps-list" style="display:flex;flex-wrap:wrap;gap:4px;max-height:100px;overflow-y:auto"></div></div>'+
+      '<div style="margin-bottom:12px;border-top:1px solid #eee;padding-top:10px"><label style="font-size:13px;cursor:pointer"><input type="checkbox" class="inline-exam-use-variant" style="margin-right:4px"'+(preVariant?' checked':'')+'>基于真题生成变种题</label><div class="inline-exam-variant-info" style="margin-top:4px;font-size:12px;color:#b43c28">'+(preVariant?'当前蓝本: '+escHtml(preVariant):'')+'</div><button class="inline-exam-btn sm inline-exam-variant-browse" style="margin-top:4px;display:'+(preVariant?'inline-block':'none')+'">浏览真题蓝本</button></div>'+
+      '<div style="margin-bottom:12px;border-top:1px solid #eee;padding-top:10px"><div style="font-size:12px;color:#888;margin-bottom:4px">保存到</div><select class="inline-exam-folder" style="padding:4px 8px;border:1px solid #ddd;border-radius:4px;font-size:13px;min-width:200px"><option value="">自动创建</option></select><button class="inline-exam-btn sm inline-exam-new-folder" style="margin-left:6px">+ 新建</button></div>'+
+      '<div class="inline-exam-actions" style="margin-bottom:10px"><button class="inline-exam-btn primary inline-exam-gen-btn">AI 出题</button></div>'+
+      '<div class="inline-exam-questions" style="display:none"></div><div class="inline-exam-status" style="font-size:13px;color:#888"></div></div>'
 
     bubble.insertAdjacentHTML('beforeend', html)
-  }
 
-  // Store panel state per panel element
-  var _examPanels = {}
+    // Post-render: populate interactive controls
+    var panel = bubble.querySelector('.inline-exam-panel:last-child')
+    if (!panel) return
 
-  window.ChemAI = window.ChemAI || {}
-  window.ChemAI.inlineExamGenerate = function(btn) {
-    var panel = btn.closest('.inline-exam-panel')
-    var qArea = panel.querySelector('.inline-exam-questions')
-    var status = panel.querySelector('.inline-exam-status')
-    var paramsEl = panel.querySelector('.inline-exam-params')
+    panel._preKps = preKps; panel._variantSource = preVariant; panel._variantQid = ''
 
-    // Parse params from the panel's data attributes or text
-    var diffMap = {容易:'easy',中等:'medium',偏难:'hard'}
-    var pText = paramsEl.textContent
-    var diffMatch = pText.match(/难度:.+?(容易|中等|偏难)/)
-    var diff = diffMap[diffMatch ? diffMatch[1] : '中等'] || 'medium'
-    var kpMatch = pText.match(/知识点:.+?(.+?) ✓/)
-    var kps = kpMatch ? kpMatch[1].split('、') : ['高中化学综合']
-    var typesMatch = pText.match(/题型:(.+?) ✓/)
-    var typesStr = typesMatch ? typesMatch[1] : ''
+    // Types
+    var typesContainer = panel.querySelector('.inline-exam-types')
+    var typeDefs = [{val:'single_choice',label:'选择题',active:false,qty:3},{val:'fill_blank',label:'填空题',active:false,qty:2},{val:'calculation',label:'计算题',active:false,qty:1},{val:'experiment',label:'实验题',active:false,qty:1},{val:'inference',label:'推断题',active:false,qty:1}]
+    preTypes.forEach(function(pt){ var m=typeDefs.find(function(t){return t.val===pt.val}); if(m){m.active=pt.active;m.qty=pt.qty||m.qty} })
+    function _renderTypes(){ typesContainer.innerHTML = typeDefs.map(function(t,i){ return '<span class="inline-exam-type-chip" data-idx="'+i+'" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;margin:2px;border:1.5px solid '+(t.active?'#b43c28':'#ddd')+';border-radius:14px;cursor:pointer;font-size:12px;background:'+(t.active?'rgba(180,60,40,.06)':'#fff')+';color:'+(t.active?'#b43c28':'#888')+'">'+(t.active?'●':'○')+' '+t.label+(t.active?' <input type="number" min="1" max="10" value="'+t.qty+'" style="width:36px;padding:2px 4px;border:1px solid #ddd;border-radius:3px;font-size:12px;text-align:center" onclick="event.stopPropagation()">':'')+'</span>' }).join('') }
+    _renderTypes()
+    typesContainer.addEventListener('click',function(e){ var chip=e.target.closest('.inline-exam-type-chip'); if(!chip)return; var t=typeDefs[parseInt(chip.dataset.idx)]; t.active=!t.active; _renderTypes() })
+    typesContainer.addEventListener('change',function(e){ if(e.target.tagName==='INPUT'){ var chip=e.target.closest('.inline-exam-type-chip'); typeDefs[parseInt(chip.dataset.idx)].qty=parseInt(e.target.value)||1 } })
 
-    status.textContent = '生成中...'
-    qArea.style.display = 'none'
-
-    // Parse types back from display format
-    var typeList = []
-    var typeMap = {选择题:'single_choice',填空题:'fill_blank',计算题:'calculation',实验题:'experiment',推断题:'inference'}
-    if (typesStr) {
-      typesStr.split('  ').forEach(function(t) {
-        var m = t.match(/[●○]\s*(.+?)\s*×(\d+)/)
-        if (m && typeMap[m[1]]) {
-          typeList.push({val: typeMap[m[1]], qty: parseInt(m[2])})
-        }
-      })
+    // KPs
+    fetch('/api/knowledge/list').then(function(r){return r.json()}).then(function(data){
+      var allKps=(data.knowledge_points||data.data||[]).map(function(k){return typeof k==='string'?{name:k,active:false}:{name:k.name||k,active:false}})
+      if(preKps){preKps.split('、').forEach(function(pk){var m=allKps.find(function(k){return k.name===pk});if(m)m.active=true})}
+      panel._kps=allKps; _renderKps()
+    }).catch(function(){})
+    var kpSearch=panel.querySelector('.inline-exam-kp-search'); kpSearch.addEventListener('input',function(){_renderKps()})
+    function _renderKps(){
+      var kps=panel._kps||[], s=kpSearch.value.toLowerCase()
+      var active=panel.querySelector('.inline-exam-kps-active'), list=panel.querySelector('.inline-exam-kps-list')
+      var aKps=kps.filter(function(k){return k.active})
+      active.innerHTML=aKps.length?aKps.map(function(k){return '<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:rgba(180,60,40,.08);border:1px solid #b43c28;border-radius:12px;font-size:12px;color:#b43c28;cursor:pointer" data-kp="'+escHtml(k.name)+'">'+escHtml(k.name)+'<span style="font-size:14px">&times;</span></span>'}).join(''):'<span style="font-size:12px;color:#bbb">未选择</span>'
+      active.querySelectorAll('span[data-kp]').forEach(function(c){c.addEventListener('click',function(){var m=kps.find(function(k){return k.name===c.dataset.kp});if(m)m.active=false;_renderKps()})})
+      var filtered=kps.filter(function(k){return!k.active&&(!s||k.name.toLowerCase().includes(s))})
+      list.innerHTML=filtered.slice(0,30).map(function(k){return '<span style="display:inline-block;padding:3px 8px;border:1.5px solid #ddd;border-radius:12px;font-size:12px;cursor:pointer;color:#555;white-space:nowrap" data-kp="'+escHtml(k.name)+'">'+escHtml(k.name)+'</span>'}).join('')
+      list.querySelectorAll('span[data-kp]').forEach(function(c){c.addEventListener('click',function(){var m=kps.find(function(k){return k.name===c.dataset.kp});if(m)m.active=true;_renderKps()})})
     }
-    if (!typeList.length) typeList = [{val:'single_choice',qty:3}]
 
-    var pending = typeList.length
-    var allQs = []
-    typeList.forEach(function(t) {
-      fetch('/api/question/generate', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({knowledge_points:kps,difficulty:diff,quantity:t.qty,question_types:[t.val]})
-      }).then(function(r){return r.json()}).then(function(data){
-        (data.questions||[]).forEach(function(q){
-          q._typeLabel = t.val
-          q._saved = false
-        })
-        allQs = allQs.concat(data.questions||[])
-        pending--
-        if (pending === 0) {
-          status.textContent = ''
-          qArea.style.display = 'block'
-          renderQuestions(allQs, qArea, panel)
-        }
-      }).catch(function(){
-        pending--
-        if (pending === 0) {
-          status.textContent = '生成失败，请重试'
-        }
-      })
+    // Folders
+    fetch('/api/exam-bank/exam-sets').then(function(r){return r.json()}).then(function(data){
+      var sets=(data.data&&data.data.exam_sets)||data.exam_sets||[]
+      var sel=panel.querySelector('.inline-exam-folder'); sets.forEach(function(s){sel.innerHTML+='<option value="'+s.set_id+'">'+escHtml(s.name)+' ('+(s.question_count||0)+')</option>'})
+    }).catch(function(){})
+
+    // Generate
+    panel.querySelector('.inline-exam-gen-btn').addEventListener('click',function(){
+      var active=typeDefs.filter(function(t){return t.active}), st=panel.querySelector('.inline-exam-status'), qa=panel.querySelector('.inline-exam-questions')
+      if(!active.length){st.textContent='请至少选择一种题型';return}
+      var diff=panel.querySelector('.inline-exam-diff').value
+      var kps=(panel._kps||[]).filter(function(k){return k.active}).map(function(k){return k.name})
+      if(!kps.length)kps=['高中化学综合']
+      var fs=panel.querySelector('.inline-exam-folder'), fid=fs.value||'auto', fn=fs.selectedOptions&&fs.selectedOptions[0]?fs.selectedOptions[0].textContent.replace(/\s*\(\d+\)\s*$/,''):'自动创建'
+      st.textContent='生成中...'; qa.style.display='none'
+      var pending=active.length, all=[]
+      active.forEach(function(t){fetch('/api/question/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({knowledge_points:kps,difficulty:diff,quantity:t.qty,question_types:[t.val]})}).then(function(r){return r.json()}).then(function(d){(d.questions||[]).forEach(function(q){q._typeLabel=t.val;q._saved=false});all=all.concat(d.questions||[]);pending--;if(pending===0){st.textContent='';qa.style.display='block';_renderQs(all,qa,fid,fn)}}).catch(function(){pending--;if(pending===0)st.textContent='生成失败'})})
     })
-  }
 
-  function renderQuestions(questions, container, panel) {
-    var folder = '自动创建'
-    var pText = panel.querySelector('.inline-exam-params').textContent
-    var fm = pText.match(/保存到:.+?(.+)/)
-    if (fm) folder = fm[1].trim()
+    function _renderQs(qs,container,folderId,folderName){
+      var h='<div style="margin-top:12px;font-size:13px">共 '+qs.length+' 题 · '+escHtml(folderName)+'</div>'
+      qs.forEach(function(q,i){var o=(q.options||[]).map(function(o,j){return '<div>'+String.fromCharCode(65+j)+'. '+escHtml(o)+'</div>'}).join('')
+        h+='<div class="inline-exam-qcard" data-idx="'+i+'" style="border:1px solid #eee;border-radius:6px;padding:10px;margin:8px 0"><div><b>'+(i+1)+'.</b> '+(typeof renderChemistry==='function'?renderChemistry(q.content||''):escHtml(q.content||''))+'</div>'+(q.options?'<div style="margin:8px 0 0 20px;font-size:13px">'+o+'</div>':'')+'<div style="margin-top:6px;font-size:12px;color:#999">答案: <span style="color:#b43c28">'+escHtml(q.answer||'')+'</span></div><div style="margin-top:6px"><button onclick="ChemAI._saveQ(this,'+i+')" class="inline-exam-btn sm">保存</button><button onclick="ChemAI._delQ(this,'+i+')" class="inline-exam-btn sm">删除</button></div></div>'})
+      h+='<div style="margin-top:10px"><button onclick="ChemAI._saveAll(this)" class="inline-exam-btn primary">全部保存</button><button onclick="ChemAI._redo(this)" class="inline-exam-btn">全部重出</button><button onclick="ChemAI._done(this)" class="inline-exam-btn">完成</button></div>'
+      container.innerHTML=h; container._qs=qs; container._fid=folderId; container._fn=folderName
+    }
 
-    var html = '<div style="margin-top:12px">共 '+questions.length+' 题</div>'
-    questions.forEach(function(q, i) {
-      var opts = (q.options||[]).map(function(o,j){
-        return '<div>'+String.fromCharCode(65+j)+'. '+escHtml(o)+'</div>'
-      }).join('')
-      html += '<div class="inline-exam-qcard" data-idx="'+i+'">'+
-        '<div class="inline-exam-qbody">'+
-          '<b>'+(i+1)+'.</b> '+(typeof renderChemistry==='function'?renderChemistry(q.content):escHtml(q.content||''))+
-        '</div>'+
-        (q.options ? '<div style="margin:8px 0 0 20px;font-size:13px">'+opts+'</div>' : '')+
-        '<div class="inline-exam-qmeta" style="margin-top:6px;font-size:12px;color:#999">'+
-          '<span style="color:#b43c28">答案: '+escHtml(q.answer||'')+'</span>'+
-        '</div>'+
-        '<div class="inline-exam-qactions" style="margin-top:6px">'+
-          '<button onclick="ChemAI.inlineExamSave(this,'+i+')" class="inline-exam-btn sm" '+((q._saved)?'disabled style="opacity:.4"':'')+'>'+(q._saved?'已保存':'保存')+'</button>'+
-          '<button onclick="ChemAI.inlineExamDelete(this,'+i+')" class="inline-exam-btn sm">删除</button>'+
-        '</div>'+
-      '</div>'
+    // Variant
+    panel.querySelector('.inline-exam-use-variant').addEventListener('change',function(){panel.querySelector('.inline-exam-variant-browse').style.display=this.checked?'inline-block':'none'})
+    panel.querySelector('.inline-exam-variant-browse').addEventListener('click',function(){
+      var ov=document.createElement('div'); ov.className='inline-exam-vb-overlay'; ov.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.3);z-index:9999;display:flex;align-items:center;justify-content:center'
+      ov.innerHTML='<div style="background:#fff;border-radius:8px;padding:16px;max-width:600px;max-height:80vh;overflow-y:auto;width:90%"><div style="font-weight:700;margin-bottom:10px">选择真题蓝本</div><div class="ivb-content" style="font-size:13px">加载中...</div><button style="margin-top:10px;padding:4px 16px;border:1px solid #ddd;border-radius:4px;cursor:pointer;float:right">关闭</button></div>'
+      document.body.appendChild(ov); ov.querySelector('button').addEventListener('click',function(){document.body.removeChild(ov)}); ov.addEventListener('click',function(e){if(e.target===ov)document.body.removeChild(ov)})
+      fetch('/api/exam-bank/papers').then(function(r){return r.json()}).then(function(data){var ps=(data.papers||data.data||[]),c=ov.querySelector('.ivb-content')
+        c.innerHTML='<div style="font-size:12px;color:#888;margin-bottom:8px">点击试卷浏览题目，再点击题目选为蓝本</div>'+ps.slice(0,50).map(function(p){return '<div class="ivb-paper" style="padding:6px 8px;margin:2px 0;border:1px solid #eee;border-radius:4px;cursor:pointer;font-size:12px" data-r="'+escHtml(p.region||'')+'" data-y="'+(p.year||'')+'">'+escHtml(p.source||p.name||'')+' · '+(p.year||'')+' ('+(p.question_count||p.total||'?')+'题)</div>'}).join('')
+        c.querySelectorAll('.ivb-paper').forEach(function(el){el.addEventListener('click',function(){c.innerHTML='加载中...'
+          fetch('/api/exam-bank/historical?region='+encodeURIComponent(el.dataset.r)+'&year='+encodeURIComponent(el.dataset.y)+'&page_size=30').then(function(r){return r.json()}).then(function(qd){var qs=(qd.questions||qd.data||[])
+            c.innerHTML='<div style="font-size:12px;color:#888;margin-bottom:8px">点击题目选为蓝本</div>'+qs.map(function(q,i){return '<div class="ivb-q" data-qid="'+(q.exam_id||q.question_id||'')+'" style="padding:6px 8px;margin:2px 0;border:1px solid #eee;border-radius:4px;cursor:pointer;font-size:12px"><b>#'+(i+1)+'</b> '+escHtml((q.content||'').substring(0,80))+'</div>'}).join('')
+            c.querySelectorAll('.ivb-q').forEach(function(qel){qel.addEventListener('click',function(){panel._variantQid=qel.dataset.qid;panel._variantSource=(el.dataset.r||'')+' · #'+(Array.from(qel.parentNode.children).indexOf(qel)+1);panel.querySelector('.inline-exam-variant-info').textContent='当前蓝本: '+panel._variantSource;document.body.removeChild(ov)})})
+          }).catch(function(){c.innerHTML='加载失败'})
+        })})
+      }).catch(function(){ov.querySelector('.ivb-content').innerHTML='加载失败'})
     })
-    html += '<div style="margin-top:10px">'+
-      '<button onclick="ChemAI.inlineExamSaveAll(this)" class="inline-exam-btn primary">全部保存</button>'+
-      '<button onclick="ChemAI.inlineExamDone(this)" class="inline-exam-btn">完成</button>'+
-    '</div>'
-    container.innerHTML = html
-    container._questions = questions
-    container._folder = folder
+
+    // New folder
+    panel.querySelector('.inline-exam-new-folder').addEventListener('click',function(){var n=prompt('请输入新题库名称：');if(!n)return
+      fetch('/api/exam-bank/exam-sets',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:n,region:'',year:null,source:'agent',description:''})}).then(function(r){return r.json()}).then(function(d){if(d.success){var s=panel.querySelector('.inline-exam-folder');s.innerHTML+='<option value="'+d.exam_set.set_id+'" selected>'+escHtml(n)+' (0)</option>'}}).catch(function(){})})
   }
 
-  window.ChemAI.inlineExamSave = function(btn, idx) {
-    var container = btn.closest('.inline-exam-questions')
-    var q = (container._questions || [])[idx]
-    if (!q || q._saved) return
-    fetch('/api/exam-bank/import-questions',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({set_id:container._folder,questions:[{
-        content:q.content,options:q.options||[],answer:q.answer||'',
-        knowledge_points:q.knowledge_points||[],difficulty:q.difficulty||'medium'
-      }]})
-    }).then(function(r){return r.json()}).then(function(d){
-      if (d.success) { q._saved = true; btn.textContent = '已保存'; btn.disabled = true; btn.style.opacity = '.4' }
-    })
+  // ─── Shared panel helpers ───
+  window.ChemAI._saveQ = function(btn,idx){var c=btn.closest('.inline-exam-questions'),q=(c._qs||[])[idx];if(!q||q._saved)return;fetch('/api/exam-bank/import-questions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({set_id:c._fid,questions:[{content:q.content,options:q.options||[],answer:q.answer||'',knowledge_points:q.knowledge_points||[],difficulty:q.difficulty||'medium'}]})}).then(function(r){return r.json()}).then(function(d){if(d.success){q._saved=true;btn.textContent='已保存';btn.disabled=true;btn.style.opacity='.4'}})}
+  window.ChemAI._delQ = function(btn,idx){var c=btn.closest('.inline-exam-qcard');if(c)c.style.display='none'}
+  window.ChemAI._saveAll = function(btn){var c=btn.closest('.inline-exam-questions'),qs=(c._qs||[]).filter(function(q){return!q._saved});if(!qs.length)return;fetch('/api/exam-bank/import-questions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({set_id:c._fid,questions:qs.map(function(q){return{content:q.content,options:q.options||[],answer:q.answer||'',knowledge_points:q.knowledge_points||[],difficulty:q.difficulty||'medium'}})}))}).then(function(r){return r.json()}).then(function(d){if(d.success){qs.forEach(function(q){q._saved=true});btn.textContent='已保存';btn.disabled=true;btn.style.opacity='.4'}})}
+  window.ChemAI._redo = function(btn){var p=btn.closest('.inline-exam-panel');p.querySelector('.inline-exam-questions').style.display='none';p.querySelector('.inline-exam-status').textContent='';p.querySelector('.inline-exam-gen-btn').click()}
+  window.ChemAI._done = function(btn){var p=btn.closest('.inline-exam-panel'),c=p.querySelector('.inline-exam-questions'),qs=c._qs||[];p.querySelector('.inline-exam-status').textContent='已完成';sendMessage('出题完成：共生成'+qs.length+'道题，已保存'+qs.filter(function(q){return q._saved}).length+'道。')}
+
+  // ─── Inline Diagnosis Panel ───
+  function renderDiagnosis(params, bubble) {
+    var h='<div class="inline-diag-panel" style="border:1px solid #eee;border-radius:8px;padding:14px;margin:8px 0">'
+    h+='<div style="font-weight:700;margin-bottom:10px;font-size:15px">学情诊断: '+escHtml(params.student_name||params.student_id||'')+'</div>'
+    if(params.dominant_barrier){h+='<div style="margin-bottom:8px;font-size:13px">主导障碍: <b>'+escHtml(params.dominant_barrier)+'</b> · 完成练习: '+(params.exercises_completed||0)+'</div>'}
+    var barrier=params.barrier_distribution||{}
+    if(Object.keys(barrier).length){
+      h+='<div class="inline-diag-chart" style="width:100%;height:200px;margin:8px 0"></div>'
+      h+='<div class="inline-diag-fallback" style="display:none">'
+      Object.keys(barrier).forEach(function(k){h+='<div style="margin:4px 0;font-size:13px">'+escHtml(k)+': <b>'+Math.round((barrier[k]||0)*100)+'%</b></div>'})
+      h+='</div>'
+    }
+    h+='<div style="margin-top:8px"><button onclick="ChemAI._diagToExam(this)" class="inline-exam-btn primary">针对障碍出题练习</button></div></div>'
+    bubble.insertAdjacentHTML('beforeend',h)
+
+    // ECharts
+    var chartDiv=bubble.querySelector('.inline-diag-chart:last-child')
+    if(chartDiv&&typeof echarts!=='undefined'){
+      try{var chart=echarts.init(chartDiv);chart.setOption({tooltip:{},xAxis:{type:'category',data:Object.keys(barrier)},yAxis:{type:'value',max:1},series:[{type:'bar',data:Object.values(barrier),itemStyle:{color:'#b43c28'}}]})}catch(e){chartDiv.style.display='none';bubble.querySelector('.inline-diag-fallback:last-child').style.display='block'}
+    }else if(chartDiv){chartDiv.style.display='none';bubble.querySelector('.inline-diag-fallback:last-child').style.display='block'}
   }
 
-  window.ChemAI.inlineExamSaveAll = function(btn) {
-    var container = btn.closest('.inline-exam-questions')
-    var qs = (container._questions||[]).filter(function(q){return !q._saved})
-    if (!qs.length) return
-    fetch('/api/exam-bank/import-questions',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({set_id:container._folder,questions:qs.map(function(q){
-        return {content:q.content,options:q.options||[],answer:q.answer||'',
-          knowledge_points:q.knowledge_points||[],difficulty:q.difficulty||'medium'}
-      })})
-    }).then(function(r){return r.json()}).then(function(d){
-      if (d.success) {
-        qs.forEach(function(q){q._saved=true})
-        container.querySelectorAll('.inline-exam-btn.sm').forEach(function(b,i){
-          b.textContent='已保存';b.disabled=true;b.style.opacity='.4'
-        })
-      }
-    })
-  }
-
-  window.ChemAI.inlineExamDelete = function(btn, idx) {
-    var card = btn.closest('.inline-exam-qcard')
-    if (card) card.style.display = 'none'
-  }
-
-  window.ChemAI.inlineExamModify = function(btn) {
-    sendMessage('修改出题参数：')
-  }
-
-  window.ChemAI.inlineExamDone = function(btn) {
-    var panel = btn.closest('.inline-exam-panel')
-    var status = panel.querySelector('.inline-exam-status')
-    status.textContent = '已完成'
-    var container = panel.querySelector('.inline-exam-questions')
-    var count = (container._questions||[]).length
-    var saved = (container._questions||[]).filter(function(q){return q._saved}).length
-    sendMessage('题目已生成：'+count+'道，已保存'+saved+'道。')
-  }
+  window.ChemAI._diagToExam = function(btn){sendMessage('针对学习障碍出题练习')}
 })()

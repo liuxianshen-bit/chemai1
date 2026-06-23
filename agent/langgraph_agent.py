@@ -20,7 +20,7 @@ from langchain_core.tools import tool as lc_tool, StructuredTool
 logger = logging.getLogger(__name__)
 
 # ── Guardrail config ──
-TOOL_APPROVAL_REQUIRED = {"assign_adaptive_practice", "import_exam_paper"}
+TOOL_APPROVAL_REQUIRED = {"assign_adaptive_practice", "import_exam_paper", "delete_bank"}
 RECURSION_LIMIT = 8
 
 # Per-tool call limits (防止 LLM 在同一轮里反复调同一工具浪费 token)
@@ -42,7 +42,7 @@ TOOL_CALL_LIMITS: dict[str, int] = {
 # the call is blocked before execution with a "请先向用户确认" message.
 # This makes "反问用户" a structural gate, not a prompt hope.
 TOOL_PREREQUISITES: dict[str, list[str]] = {
-    "show_exam_workbench": ["knowledge_points", "question_types"],
+    "show_exam_workbench": [],
     "search_exam_bank": ["keyword"],
     "diagnose_barrier": ["student_id_or_class_id"],
     "weekly_report": ["student_id_or_class_id"],
