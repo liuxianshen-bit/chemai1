@@ -7,7 +7,7 @@ system_prompt: |
 available_skills:
   - search_exam_bank
   - web_search
-  - navigate_to_exam_workbench
+  - show_exam_workbench
   - diagnose_barrier
   - balance_equation
   - import_exam_paper

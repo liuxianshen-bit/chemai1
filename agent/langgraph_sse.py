@@ -109,16 +109,23 @@ class LangGraphSSEAdapter:
 
         return []
 
-    def finalize(self, route: dict = None) -> list[str]:
+    def finalize(self, route: dict = None, component: dict = None) -> list[str]:
         """Called after astream_events() completes.
-        Emits navigate/populate/action events from route dict (guard_state.last_route),
-        then done + [DONE] sentinel.
+        Emits component/navigate/populate/action events, then done + [DONE] sentinel.
 
         Args:
             route: Optional route dict from GuardState.last_route.
-                   Format: {"navigate": bool, "page": str, "populate": {...}, "actions": [...]}
+            component: Optional component dict from GuardState.last_component.
         """
         events = []
+
+        # ── Component: inline UI in chat ──
+        if component and component.get("component"):
+            events.append(json.dumps({
+                "type": "component",
+                "component": component["component"],
+                "params": component.get("params", {}),
+            }, ensure_ascii=False))
 
         # Use explicit route if provided (from guard_state), fall back to _tool_results
         if route and route.get("navigate"):

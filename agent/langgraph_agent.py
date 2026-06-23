@@ -27,7 +27,7 @@ RECURSION_LIMIT = 8
 TOOL_CALL_LIMITS: dict[str, int] = {
     "search_exam_bank": 3,
     "web_search": 2,
-    "navigate_to_exam_workbench": 3,
+    "show_exam_workbench": 3,
     "diagnose_barrier": 2,
     "weekly_report": 2,
     "balance_equation": 3,
@@ -42,7 +42,7 @@ TOOL_CALL_LIMITS: dict[str, int] = {
 # the call is blocked before execution with a "请先向用户确认" message.
 # This makes "反问用户" a structural gate, not a prompt hope.
 TOOL_PREREQUISITES: dict[str, list[str]] = {
-    "navigate_to_exam_workbench": ["knowledge_points"],
+    "show_exam_workbench": ["knowledge_points", "question_types"],
     "search_exam_bank": ["keyword"],
     "diagnose_barrier": ["student_id_or_class_id"],
     "weekly_report": ["student_id_or_class_id"],
@@ -80,6 +80,7 @@ class GuardState:
         self.call_counts: dict[str, int] = {}
         self.approved: bool = False
         self.last_route: dict | None = None
+        self.last_component: dict | None = None
 
     def check_dedup(self, name: str, kwargs: dict) -> bool:
         key = f"{name}:{json.dumps(kwargs, sort_keys=True, ensure_ascii=False)}"
@@ -167,13 +168,20 @@ def _make_guarded_tool(fn, guard_state: GuardState, requires_approval: bool = Fa
         if isinstance(result, str):
             try:
                 data = json.loads(result)
-                if isinstance(data, dict) and "_route" in data:
-                    guard_state.last_route = data.pop("_route")
-                    return json.dumps(data, ensure_ascii=False)
+                if isinstance(data, dict):
+                    if "_route" in data:
+                        guard_state.last_route = data.pop("_route")
+                    if "_component" in data:
+                        guard_state.last_component = data.pop("_component")
+                    if "_route" in data or "_component" in data:
+                        return json.dumps(data, ensure_ascii=False)
             except (json.JSONDecodeError, TypeError):
                 pass
-        elif isinstance(result, dict) and "_route" in result:
-            guard_state.last_route = result.pop("_route")
+        elif isinstance(result, dict):
+            if "_route" in result:
+                guard_state.last_route = result.pop("_route")
+            if "_component" in result:
+                guard_state.last_component = result.pop("_component")
 
         return result
 

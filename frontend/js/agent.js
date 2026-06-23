@@ -352,6 +352,9 @@
                 sessionStorage.setItem('chemai_navigate', JSON.stringify(navAct))
               } catch(e) {}
               break
+            case 'component':
+              renderExamWorkbench(evt.params || {}, bubble)
+              break
             case 'error':
               var errHtml = '<div style="color:#b43c28;padding:8px 0;font-size:13px">' +
                 '<span style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#999">' + (evt.code || 'ERROR') + '</span><br>' +
@@ -720,5 +723,189 @@
       try { return katex.renderToString(formula, {throwOnError:false, trust:true, strict:false}) }
       catch(e) { return '<code>'+escHtml(formula)+'</code>' }
     })
+  }
+
+  // ─── Inline Exam Workbench Panel ───
+  function renderExamWorkbench(params, bubble) {
+    var kps = (params.knowledge_points || []).join('、')
+    var diff = params.difficulty || 'medium'
+    var diffLabel = {easy:'容易',medium:'中等',hard:'偏难'}[diff] || diff
+    var types = params.types || []
+    var typesStr = types.map(function(t){return (t.active?'●':'○')+' '+({single_choice:'选择题',fill_blank:'填空题',calculation:'计算题',experiment:'实验题',inference:'推断题'}[t.val]||t.val)+' ×'+t.qty}).join('  ')
+    var variant = params.variant_source || '无'
+    var folder = params.set_name || '自动创建'
+
+    var html = '<div class="inline-exam-panel">'+
+      '<div class="inline-exam-header">考试工作台</div>'+
+      '<div class="inline-exam-params">'+
+        '<div><b>知识点:</b> '+escHtml(kps||'未指定')+' ✓</div>'+
+        '<div><b>难度:</b> '+escHtml(diffLabel)+' ✓</div>'+
+        '<div><b>题型:</b> '+typesStr+' ✓</div>'+
+        '<div><b>变种蓝本:</b> '+escHtml(variant)+'</div>'+
+        '<div><b>保存到:</b> '+escHtml(folder)+'</div>'+
+      '</div>'+
+      '<div class="inline-exam-actions">'+
+        '<button class="inline-exam-btn primary" onclick="ChemAI.inlineExamGenerate(this)">生成题目</button>'+
+        '<button class="inline-exam-btn" onclick="ChemAI.inlineExamModify(this)">修改参数</button>'+
+      '</div>'+
+      '<div class="inline-exam-questions" style="display:none"></div>'+
+      '<div class="inline-exam-status"></div>'+
+    '</div>'
+
+    bubble.insertAdjacentHTML('beforeend', html)
+  }
+
+  // Store panel state per panel element
+  var _examPanels = {}
+
+  window.ChemAI = window.ChemAI || {}
+  window.ChemAI.inlineExamGenerate = function(btn) {
+    var panel = btn.closest('.inline-exam-panel')
+    var qArea = panel.querySelector('.inline-exam-questions')
+    var status = panel.querySelector('.inline-exam-status')
+    var paramsEl = panel.querySelector('.inline-exam-params')
+
+    // Parse params from the panel's data attributes or text
+    var diffMap = {容易:'easy',中等:'medium',偏难:'hard'}
+    var pText = paramsEl.textContent
+    var diffMatch = pText.match(/难度:.+?(容易|中等|偏难)/)
+    var diff = diffMap[diffMatch ? diffMatch[1] : '中等'] || 'medium'
+    var kpMatch = pText.match(/知识点:.+?(.+?) ✓/)
+    var kps = kpMatch ? kpMatch[1].split('、') : ['高中化学综合']
+    var typesMatch = pText.match(/题型:(.+?) ✓/)
+    var typesStr = typesMatch ? typesMatch[1] : ''
+
+    status.textContent = '生成中...'
+    qArea.style.display = 'none'
+
+    // Parse types back from display format
+    var typeList = []
+    var typeMap = {选择题:'single_choice',填空题:'fill_blank',计算题:'calculation',实验题:'experiment',推断题:'inference'}
+    if (typesStr) {
+      typesStr.split('  ').forEach(function(t) {
+        var m = t.match(/[●○]\s*(.+?)\s*×(\d+)/)
+        if (m && typeMap[m[1]]) {
+          typeList.push({val: typeMap[m[1]], qty: parseInt(m[2])})
+        }
+      })
+    }
+    if (!typeList.length) typeList = [{val:'single_choice',qty:3}]
+
+    var pending = typeList.length
+    var allQs = []
+    typeList.forEach(function(t) {
+      fetch('/api/question/generate', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({knowledge_points:kps,difficulty:diff,quantity:t.qty,question_types:[t.val]})
+      }).then(function(r){return r.json()}).then(function(data){
+        (data.questions||[]).forEach(function(q){
+          q._typeLabel = t.val
+          q._saved = false
+        })
+        allQs = allQs.concat(data.questions||[])
+        pending--
+        if (pending === 0) {
+          status.textContent = ''
+          qArea.style.display = 'block'
+          renderQuestions(allQs, qArea, panel)
+        }
+      }).catch(function(){
+        pending--
+        if (pending === 0) {
+          status.textContent = '生成失败，请重试'
+        }
+      })
+    })
+  }
+
+  function renderQuestions(questions, container, panel) {
+    var folder = '自动创建'
+    var pText = panel.querySelector('.inline-exam-params').textContent
+    var fm = pText.match(/保存到:.+?(.+)/)
+    if (fm) folder = fm[1].trim()
+
+    var html = '<div style="margin-top:12px">共 '+questions.length+' 题</div>'
+    questions.forEach(function(q, i) {
+      var opts = (q.options||[]).map(function(o,j){
+        return '<div>'+String.fromCharCode(65+j)+'. '+escHtml(o)+'</div>'
+      }).join('')
+      html += '<div class="inline-exam-qcard" data-idx="'+i+'">'+
+        '<div class="inline-exam-qbody">'+
+          '<b>'+(i+1)+'.</b> '+(typeof renderChemistry==='function'?renderChemistry(q.content):escHtml(q.content||''))+
+        '</div>'+
+        (q.options ? '<div style="margin:8px 0 0 20px;font-size:13px">'+opts+'</div>' : '')+
+        '<div class="inline-exam-qmeta" style="margin-top:6px;font-size:12px;color:#999">'+
+          '<span style="color:#b43c28">答案: '+escHtml(q.answer||'')+'</span>'+
+        '</div>'+
+        '<div class="inline-exam-qactions" style="margin-top:6px">'+
+          '<button onclick="ChemAI.inlineExamSave(this,'+i+')" class="inline-exam-btn sm" '+((q._saved)?'disabled style="opacity:.4"':'')+'>'+(q._saved?'已保存':'保存')+'</button>'+
+          '<button onclick="ChemAI.inlineExamDelete(this,'+i+')" class="inline-exam-btn sm">删除</button>'+
+        '</div>'+
+      '</div>'
+    })
+    html += '<div style="margin-top:10px">'+
+      '<button onclick="ChemAI.inlineExamSaveAll(this)" class="inline-exam-btn primary">全部保存</button>'+
+      '<button onclick="ChemAI.inlineExamDone(this)" class="inline-exam-btn">完成</button>'+
+    '</div>'
+    container.innerHTML = html
+    container._questions = questions
+    container._folder = folder
+  }
+
+  window.ChemAI.inlineExamSave = function(btn, idx) {
+    var container = btn.closest('.inline-exam-questions')
+    var q = (container._questions || [])[idx]
+    if (!q || q._saved) return
+    fetch('/api/exam-bank/import-questions',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({set_id:container._folder,questions:[{
+        content:q.content,options:q.options||[],answer:q.answer||'',
+        knowledge_points:q.knowledge_points||[],difficulty:q.difficulty||'medium'
+      }]})
+    }).then(function(r){return r.json()}).then(function(d){
+      if (d.success) { q._saved = true; btn.textContent = '已保存'; btn.disabled = true; btn.style.opacity = '.4' }
+    })
+  }
+
+  window.ChemAI.inlineExamSaveAll = function(btn) {
+    var container = btn.closest('.inline-exam-questions')
+    var qs = (container._questions||[]).filter(function(q){return !q._saved})
+    if (!qs.length) return
+    fetch('/api/exam-bank/import-questions',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({set_id:container._folder,questions:qs.map(function(q){
+        return {content:q.content,options:q.options||[],answer:q.answer||'',
+          knowledge_points:q.knowledge_points||[],difficulty:q.difficulty||'medium'}
+      })})
+    }).then(function(r){return r.json()}).then(function(d){
+      if (d.success) {
+        qs.forEach(function(q){q._saved=true})
+        container.querySelectorAll('.inline-exam-btn.sm').forEach(function(b,i){
+          b.textContent='已保存';b.disabled=true;b.style.opacity='.4'
+        })
+      }
+    })
+  }
+
+  window.ChemAI.inlineExamDelete = function(btn, idx) {
+    var card = btn.closest('.inline-exam-qcard')
+    if (card) card.style.display = 'none'
+  }
+
+  window.ChemAI.inlineExamModify = function(btn) {
+    sendMessage('修改出题参数：')
+  }
+
+  window.ChemAI.inlineExamDone = function(btn) {
+    var panel = btn.closest('.inline-exam-panel')
+    var status = panel.querySelector('.inline-exam-status')
+    status.textContent = '已完成'
+    var container = panel.querySelector('.inline-exam-questions')
+    var count = (container._questions||[]).length
+    var saved = (container._questions||[]).filter(function(q){return q._saved}).length
+    sendMessage('题目已生成：'+count+'道，已保存'+saved+'道。')
   }
 })()

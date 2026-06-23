@@ -766,21 +766,21 @@ async def save_to_bank(
         db.close()
 
 
-# ── 12. navigate_to_exam_workbench ──
+# ── 12. show_exam_workbench ──
 
-async def navigate_to_exam_workbench(
+async def show_exam_workbench(
     knowledge_points: str = "",
     difficulty: str = "medium",
     question_types: str = "",
     variant_source: str = "",
     set_name: str = "",
 ) -> str:
-    """考试工作台 — 跳转到考试工作台并预填出题参数
+    """考试工作台 — 在聊天中打开内联出题面板
 
-    何时用：用户要求出题且已提供知识点+难度+题型参数时，优先调用此工具。
-    不要再调 search_exam_bank 搜索——参数够了就直接跳转，不用先搜真题。
-    会发生什么：跳转到考试工作台的 AI 出题 tab，自动预填所有字段并立即开始生成题目
-    下一步：用户在考试工作台页面上预览题目、编辑、保存到题库。Agent 无需再做任何操作
+    何时用：用户要求出题且已提供知识点+题型参数时调用。
+    不要再调 search_exam_bank——参数够了就展示面板。
+    会发生什么：在聊天界面中渲染考试工作台面板，用户可直接在面板中出题、预览、编辑、保存
+    下一步：用户在面板中操作完成后，Agent 收到总结消息
 
     question_types 格式: "题型:数量,题型:数量"，如 "single_choice:5,fill_blank:2"
     可选题型: single_choice, fill_blank, calculation, experiment, inference
@@ -788,10 +788,8 @@ async def navigate_to_exam_workbench(
     import logging
     _log = logging.getLogger(__name__)
 
-    # Parse knowledge points
     kps = [k.strip() for k in knowledge_points.split(",") if k.strip()]
 
-    # Parse question types
     types = []
     if question_types:
         for item in question_types.split(","):
@@ -803,7 +801,6 @@ async def navigate_to_exam_workbench(
     if not types:
         types = [{"val": "single_choice", "active": True, "qty": 3}]
 
-    # Assemble populate data for exam-v2 bridge
     _data = {
         "knowledge_points": kps,
         "difficulty": difficulty,
@@ -814,19 +811,13 @@ async def navigate_to_exam_workbench(
     if set_name:
         _data["set_name"] = set_name
 
-    _log.info(f"[navigate_to_exam_workbench] kps={kps}, diff={difficulty}, types={types}")
+    _log.info(f"[show_exam_workbench] kps={kps}, diff={difficulty}, types={types}")
 
     return json.dumps({
-        "message": f"已为您准备好出题参数：{knowledge_points}，{difficulty}难度。正在跳转到考试工作台...",
-        "_route": {
-            "navigate": True,
-            "page": "exam-v2",
-            "params": {"knowledge_points": knowledge_points, "difficulty": difficulty},
-            "actions": [
-                {"action": "openTab", "payload": "generate"},
-                {"action": "setTypes", "payload": question_types or "single_choice:3"},
-            ],
-            "populate": {"target": "exam-config", "data": _data},
+        "message": f"参数已确认：{knowledge_points}，{difficulty}难度。请在下方面板中生成题目。",
+        "_component": {
+            "component": "exam-workbench",
+            "params": _data,
         },
     }, ensure_ascii=False)
 
@@ -836,7 +827,7 @@ async def navigate_to_exam_workbench(
 TOOLS = [
     search_exam_bank,
     web_search,
-    navigate_to_exam_workbench,
+    show_exam_workbench,
     diagnose_barrier,
     chemistry_tutor,
     simulate_experiment,

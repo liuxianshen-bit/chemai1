@@ -168,7 +168,7 @@ async def agent_chat_langgraph_stream(request: ChatRequest):
                 return
 
             # Finalize: route events + done (uses guard_state.last_route)
-            for result in adapter.finalize(route=guard_state.last_route):
+            for result in adapter.finalize(route=guard_state.last_route, component=guard_state.last_component):
                 if result == "[DONE]":
                     yield "data: [DONE]\n\n"
                 else:
@@ -302,7 +302,7 @@ async def agent_chat_langgraph_resume(request: ChatRequest):
                 yield f"data: {json.dumps({'type': 'phase', 'phase': 'awaiting_approval'}, ensure_ascii=False)}\n\n"
                 return
 
-            for result in adapter.finalize(route=guard_state.last_route):
+            for result in adapter.finalize(route=guard_state.last_route, component=guard_state.last_component):
                 if result == "[DONE]":
                     yield "data: [DONE]\n\n"
                 else:
