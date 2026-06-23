@@ -3,6 +3,7 @@
  */
 (function () {
   'use strict'
+  sessionStorage.removeItem('chemai_navigate')  // 清除旧版跳转残留
   var history = []
   var isSending = false
   var currentConvId = sessionStorage.getItem('chemai_active_cid') || null
@@ -225,6 +226,7 @@
   // ─── 全局发送入口 ───
   window.sendMessage = function (text) {
     if (isSending) return
+    sessionStorage.removeItem('chemai_navigate')  // 清除旧版跳转残留
     var input = document.getElementById('chat-input')
     var preview = document.getElementById('chem-preview')
     var msg = text || (preview && preview.textContent) || input.value.trim()
