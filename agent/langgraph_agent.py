@@ -164,16 +164,19 @@ def _make_guarded_tool(fn, guard_state: GuardState, requires_approval: bool = Fa
         # ── Execute original tool ──
         result = await fn(**kwargs)
 
-        # ── Strip _route from LLM context ──
+        # ── Strip _route/_component from LLM context ──
+        stripped = False
         if isinstance(result, str):
             try:
                 data = json.loads(result)
                 if isinstance(data, dict):
                     if "_route" in data:
                         guard_state.last_route = data.pop("_route")
+                        stripped = True
                     if "_component" in data:
                         guard_state.last_component = data.pop("_component")
-                    if "_route" in data or "_component" in data:
+                        stripped = True
+                    if stripped:
                         return json.dumps(data, ensure_ascii=False)
             except (json.JSONDecodeError, TypeError):
                 pass
