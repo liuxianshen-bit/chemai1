@@ -9,6 +9,11 @@ Replaces pydantic-ai Agent with LangGraph ReAct agent:
 import json, os, logging
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import interrupt
+
+# Shared checkpointer — module-level so state persists across HTTP requests.
+# If this were created inside create_chemai_agent(), each request would get
+# a fresh MemorySaver with no prior state → thread_id lookups always miss.
+_checkpointer = MemorySaver()
 from langchain_openai import ChatOpenAI
 from langchain_core.tools import tool as lc_tool, StructuredTool
 
@@ -503,4 +508,4 @@ def create_chemai_agent(persona: str = "tutor", provider: str = "deepseek",
     builder.add_conditional_edges("check", _route_after_check, {"llm": "llm", "tools": "tools"})
     builder.add_edge("tools", "llm")
 
-    return builder.compile(checkpointer=MemorySaver()), guard_state
+    return builder.compile(checkpointer=_checkpointer), guard_state
