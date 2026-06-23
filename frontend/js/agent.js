@@ -287,9 +287,12 @@
       for (var i = 0; i < lines.length; i++) {
         var line = lines[i]
         if (!line.startsWith('data: ')) continue
+        var payload = line.slice(6)
+        if (payload === '[DONE]') break
         try {
-          var evt = JSON.parse(line.slice(6))
-          if (evt.type === 'done') break
+          var evt = JSON.parse(payload)
+        } catch (e) { console.error('SSE event error:', e, payload); continue }
+        if (evt.type === 'done') break
           switch (evt.type) {
             case 'phase':
               var st = bubble.querySelector('.think-status')
@@ -368,7 +371,6 @@
               resetSendState()
               break
           }
-        } catch (e) { console.error('SSE event error:', e) }
       }
     }
 
