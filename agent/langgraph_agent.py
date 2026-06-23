@@ -433,8 +433,8 @@ def create_chemai_agent(persona: str = "tutor", provider: str = "deepseek",
             # This avoids an extra LLM round-trip (no double response).
             return {"messages": [
                 AIMessage(
-                    content="[系统提示] 用户已提供具体出题参数。"
-                            "请直接调用 navigate_to_exam_workbench 跳转考试工作台，不要再搜索。",
+                    content="好的，您已提供了出题所需的参数。"
+                            "现在直接为您跳转到考试工作台自动生成题目。",
                     id=last.id
                 )
             ]}
