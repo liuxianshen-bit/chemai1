@@ -414,9 +414,11 @@
   function addMsg(role, text) {
     var container = document.getElementById('chat-messages')
     var el = document.createElement('div')
-    el.className = role === 'user' ? 'msg-user' : 'msg-ai'
+    el.className = role === 'user' ? 'msg-user' : role === 'system' ? 'msg-system' : 'msg-ai'
     if (role === 'ai') {
       el.innerHTML = '<div class="avatar">CHEMAI · 教研助手</div>' + text
+    } else if (role === 'system') {
+      el.innerHTML = '<div style="padding:6px 12px;font-size:12px;color:#2c6e49;background:rgba(44,110,73,.06);border-radius:6px;margin:4px 0">'+text+'</div>'
     } else {
       el.textContent = text
     }
@@ -884,7 +886,13 @@
       var fb=qa.lastElementChild
       fb.querySelector('.inline-exam-save-all-btn').addEventListener('click',function(){ChemAI._saveAllInPanel(qa)})
       fb.querySelector('.inline-exam-redo-btn').addEventListener('click',function(){panel.querySelector('.inline-exam-gen-btn').click()})
-      fb.querySelector('.inline-exam-done-btn').addEventListener('click',function(){panel.querySelector('.inline-exam-status').textContent='已完成';sendMessage('出题完成：共生成'+qa._qs.length+'道题，已保存'+qa._qs.filter(function(q){return q._saved}).length+'道到「'+qa._fn+'」。')})
+      fb.querySelector('.inline-exam-done-btn').addEventListener('click',function(){
+        this.disabled=true;this.style.opacity='.4';this.textContent='已完成'
+        // Save all remaining before closing
+        ChemAI._saveAllInPanel(qa)
+        panel.querySelector('.inline-exam-status').textContent='已完成'
+        addMsg('system','✅ 出题完成：共生成'+qa._qs.length+'道题，已保存'+qa._qs.filter(function(q){return q._saved}).length+'道到「'+qa._fn+'」')
+      })
     }
 
     // Variant
@@ -930,10 +938,22 @@
     _ensureFolder(qArea, function(fid){ _doSaveAll(qArea, qs, fid) })
   }
   function _doSaveAll(qArea, qs, fid) {
-    var body=JSON.stringify({set_id:fid,questions:qs.map(function(q){return{content:q.content,options:q.options||[],answer:q.answer||'',knowledge_points:q.knowledge_points||[],difficulty:q.difficulty||'medium'}})})
-    fetch('/api/exam-bank/import-questions',{method:'POST',headers:{'Content-Type':'application/json'},body:body})
-      .then(function(r){return r.json()}).then(function(d){if(d.success){qs.forEach(function(q){q._saved=true});_updatePanelCount(qArea)
-        var fn=qArea._fn||'';sendMessage('[系统] 已保存 '+qs.length+' 道题到「'+fn+'」')}})
+    var body = JSON.stringify({set_id: fid, questions: qs.map(function(q) { return {content: q.content, options: q.options || [], answer: q.answer || '', knowledge_points: q.knowledge_points || [], difficulty: q.difficulty || 'medium'} })})
+    fetch('/api/exam-bank/import-questions', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: body})
+      .then(function(r) { return r.json() })
+      .then(function(d) {
+        if (d.success) {
+          qs.forEach(function(q) { q._saved = true })
+          _updatePanelCount(qArea)
+          var fn = qArea._fn || ''
+          addMsg('system', '已保存 ' + qs.length + ' 道题到「' + fn + '」')
+          var fb = qArea.querySelector('.inline-exam-qcards+div') || qArea.lastElementChild
+          if (fb) {
+            var b = fb.querySelector('.inline-exam-save-all-btn')
+            if (b) { b.disabled = true; b.style.opacity = '.4'; b.textContent = '已保存' }
+          }
+        }
+      })
   }
   function _ensureFolder(qArea, cb) {
     var fid=qArea._fid; if(fid&&!String(fid).startsWith('auto-')){cb(fid);return}
