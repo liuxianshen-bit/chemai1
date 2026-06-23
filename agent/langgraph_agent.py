@@ -361,20 +361,20 @@ def create_chemai_agent(persona: str = "tutor", provider: str = "deepseek",
                         student_profile: dict | None = None,
                         intent_hints: str = "",
                         guard_state: GuardState = None) -> tuple["CompiledGraph", GuardState]:
-    """Create a ChemAI ReAct agent with pre-tool check node.
+    """Create a ChemAI ReAct agent with router + check nodes.
 
     Graph structure:
-        START → llm → [has tool_calls?] → check → tools → llm (loop)
-                        ↓ no                     ↓ fail
-                       END              inject msg → llm (ask user)
+        START → llm → router → check → tools → llm (loop)
+                        ↓        ↓        ↓ fail
+                       END    redirect   inject msg → llm
 
-    The check node is a structural gate — it blocks tool calls when
-    prerequisites are missing and forces the LLM to ask the user first.
-    This is NOT a prompt suggestion. It's a graph constraint.
+    router: redirects search_exam_bank → navigate_to_exam_workbench
+            when user has already provided exam parameters
+    check:  blocks tool calls when prerequisites are missing
     """
     from langgraph.graph import StateGraph, MessagesState, START, END
     from langgraph.prebuilt import ToolNode
-    from langchain_core.messages import SystemMessage, HumanMessage
+    from langchain_core.messages import SystemMessage, HumanMessage, ToolMessage
 
     if guard_state is None:
         guard_state = GuardState()
@@ -382,6 +382,25 @@ def create_chemai_agent(persona: str = "tutor", provider: str = "deepseek",
     model = get_langchain_model(provider)
     prompt = build_persona_prompt(persona, student_profile, intent_hints)
     model_with_tools = model.bind_tools(tools)
+
+    # ── Helpers ──
+    def _user_text(state):
+        """Extract recent user message text (excluding injected block messages)."""
+        user_msgs = [m for m in state["messages"]
+                     if isinstance(m, HumanMessage)
+                     and not getattr(m, 'content', '').startswith("以下工具调用")
+                     and not getattr(m, 'content', '').startswith("检测到")]
+        return " ".join([m.content for m in user_msgs[-3:]])
+
+    def _has_exam_params(text):
+        """Check if user has given enough specificity for exam generation."""
+        has_kp = any(kp in text for kp in ["氧化还原", "电化学", "有机", "化学平衡", "盐类水解",
+            "元素周期", "物质结构", "化学反应", "离子反应", "元素化合物", "金属", "非金属",
+            "电解质", "水解", "电离", "原电池", "电解池", "晶体", "分子", "原子", "摩尔",
+            "方程式", "同分异构", "官能团", "取代", "加成", "消去", "酯化", "聚合",
+            "工业流程", "阿伏加德罗", "勒夏特列", "配平", "实验", "计算"])
+        has_types = any(t in text for t in ["选择题", "填空题", "计算题", "实验题", "推断题", "选择", "填空"])
+        return has_kp or has_types
 
     # ── Node: llm ──
     def _llm_node(state):
@@ -391,9 +410,39 @@ def create_chemai_agent(persona: str = "tutor", provider: str = "deepseek",
         resp = model_with_tools.invoke(msgs)
         return {"messages": [resp]}
 
+    # ── Node: router — redirect wrong tool choices ──
+    def _router_node(state):
+        last = state["messages"][-1]
+        tc_list = getattr(last, 'tool_calls', []) or []
+        if not tc_list:
+            return {}
+
+        search_calls = [tc for tc in tc_list if tc.get("name") == "search_exam_bank"]
+        if not search_calls:
+            return {}
+
+        text = _user_text(state)
+        if _has_exam_params(text):
+            # Return ToolMessages for ALL tool_calls to satisfy API contract.
+            # search_exam_bank gets redirect message; other tools pass through empty.
+            return {"messages": [
+                ToolMessage(
+                    content=(
+                        "被拦截。用户已提供具体出题参数。"
+                        "请直接调用 navigate_to_exam_workbench 跳转考试工作台。"
+                    ) if tc in search_calls else "",
+                    tool_call_id=tc["id"]
+                ) for tc in tc_list
+            ]}
+        return {}
+
     # ── Node: check — pre-tool structural gate ──
     def _check_node(state):
+        from langchain_core.messages import ToolMessage as TM
         last = state["messages"][-1]
+        # Skip ToolMessages (from router) and HumanMessages (from previous block)
+        if isinstance(last, TM) or isinstance(last, HumanMessage):
+            return {}
         tc_list = getattr(last, 'tool_calls', []) or []
         if not tc_list:
             return {}
@@ -407,9 +456,14 @@ def create_chemai_agent(persona: str = "tutor", provider: str = "deepseek",
                 issues.append(f"- {name}: {err}")
 
         if issues:
-            msg = ("以下工具调用因缺少必要信息被拦截：\n" + "\n".join(issues) +
-                   "\n\n请先向用户确认缺失的信息，不要猜测参数，不要尝试绕过。")
-            return {"messages": [HumanMessage(content=msg)]}
+            # Create ToolMessages for ALL tool_calls to satisfy API contract,
+            # with error messages for blocked ones
+            return {"messages": [
+                ToolMessage(
+                    content=f"被拦截：{next((i for i in issues if tc.get('name','') in i), '缺少必要信息')}",
+                    tool_call_id=tc["id"]
+                ) for tc in tc_list
+            ]}
         return {}
 
     # ── Node: tools ──
@@ -419,23 +473,33 @@ def create_chemai_agent(persona: str = "tutor", provider: str = "deepseek",
     def _route_after_llm(state):
         last = state["messages"][-1]
         if getattr(last, 'tool_calls', None):
-            return "check"
+            return "router"
         return END
 
-    def _route_after_check(state):
+    def _route_after_router(state):
+        from langchain_core.messages import ToolMessage as TM
         last = state["messages"][-1]
-        if isinstance(last, HumanMessage):
-            return "llm"  # check injected a block message → loop back
+        if isinstance(last, TM):
+            return "llm"  # injected ToolMessages → back to LLM
+        return "check"
+
+    def _route_after_check(state):
+        from langchain_core.messages import ToolMessage as TM
+        last = state["messages"][-1]
+        if isinstance(last, TM):
+            return "llm"  # injected ToolMessages → back to LLM
         return "tools"
 
     # ── Build ──
     builder = StateGraph(MessagesState)
     builder.add_node("llm", _llm_node)
+    builder.add_node("router", _router_node)
     builder.add_node("check", _check_node)
     builder.add_node("tools", _tool_node)
 
     builder.add_edge(START, "llm")
-    builder.add_conditional_edges("llm", _route_after_llm, {"check": "check", END: END})
+    builder.add_conditional_edges("llm", _route_after_llm, {"router": "router", END: END})
+    builder.add_conditional_edges("router", _route_after_router, {"llm": "llm", "check": "check"})
     builder.add_conditional_edges("check", _route_after_check, {"llm": "llm", "tools": "tools"})
     builder.add_edge("tools", "llm")
 
