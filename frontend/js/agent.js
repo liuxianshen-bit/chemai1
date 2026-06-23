@@ -353,6 +353,7 @@
               } catch(e) {}
               break
             case 'component':
+              sessionStorage.removeItem('chemai_navigate')
               if (evt.component === 'exam-workbench') renderExamWorkbench(evt.params || {}, bubble)
               else if (evt.component === 'diagnosis') renderDiagnosis(evt.params || {}, bubble)
               break
