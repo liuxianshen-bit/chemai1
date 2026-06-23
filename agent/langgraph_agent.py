@@ -333,8 +333,8 @@ def _build_reasoning_anchor() -> str:
     """[REASONING] section — 3-question self-check before every action."""
     return """[REASONING]
 每次行动前，快速自问：
-1. 用户真正想要的结果是什么？（出题→考试工作台 / 答疑→对话中 / 诊断→诊断页 / 报告→对话或跳转）
-2. 我现在掌握的信息够做这件事吗？（不够就先反问用户）
+1. 用户想要什么结果？（出题→立即调 show_exam_workbench / 答疑→对话 / 诊断→show_diagnosis / 搜题→search_exam_bank）
+2. 出题意图 → 直接调 show_exam_workbench，不要反问参数。面板里有完整配置控件，用户自己会调。
 3. 做完这一步后，用户还需要什么？（保存？跳转？继续出题？报告？）"""
 
 
