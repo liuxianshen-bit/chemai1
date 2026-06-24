@@ -39,10 +39,11 @@ CLASSIFY_PROMPT = """你是化学教研助手的意图分类器。回答两个�
 }
 
 页面映射（仅 navigate 时需要）：
-- 考试/出题/组卷 → exam-v2
-- 诊断/学习计划 → diagnosis
-- 学生/学员 → students
-- 班级/学情 → teacher
+- "打开考试工作台" → exam-v2
+- "打开诊断页面" → diagnosis
+- "打开学生管理" → students
+- "去首页/班级列表" → teacher
+- 查询类（"有哪些学生""XX班的谁"）一律走 chat，不走 navigate
 
 可用工具（仅 chat 时需要，最多3个，只从以下列表中选择）：
 {tool_list}
@@ -198,18 +199,19 @@ class IntentClassifier:
         if any(kw in text for kw in ["图片", "照片", "图像", "识别", "OCR", "上传"]):
             provider = "mimo"
 
-        # Pure page navigation (no tools)
-        if any(kw in text for kw in ["打开考试", "考试工作台", "去首页", "首页", "打开诊断", "打开学生", "班级列表"]):
+        # Pure page navigation (no tools) — only explicit open/go-to phrases
+        if any(kw in text for kw in ["打开考试工作台", "打开学生管理", "打开诊断页面", "去首页"]):
             page = None
-            if any(kw in text for kw in ["考试", "出题", "组卷"]):
+            if any(kw in text for kw in ["考试"]):
                 page = "exam-v2"
-            elif any(kw in text for kw in ["诊断", "学习计划"]):
+            elif any(kw in text for kw in ["诊断"]):
                 page = "diagnosis"
-            elif any(kw in text for kw in ["学生", "学员"]):
+            elif any(kw in text for kw in ["学生管理"]):
                 page = "students"
-            elif any(kw in text for kw in ["班级", "学情", "首页"]):
+            elif any(kw in text for kw in ["首页"]):
                 page = "teacher"
-            return IntentResult(type="navigate", page=page, tools=[], provider=provider)
+            if page:
+                return IntentResult(type="navigate", page=page, tools=[], provider=provider)
 
         # Keyword-based tool recommendation
         tools = []
