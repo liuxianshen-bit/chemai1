@@ -11,6 +11,34 @@
   var _toolStartTime = 0
   var _timerInterval = 0
 
+  // ─── 共享计时器 ───
+  window.ChemAI.startTimer = function() {
+    var stBar = document.getElementById('agent-status')
+    var stTime = document.getElementById('status-time')
+    var stTool = document.getElementById('status-tool')
+    if (stBar) stBar.style.display = 'flex'
+    if (stTime) { stTime.textContent = '0.0s'; stTime.classList.add('ticking') }
+    if (stTool) stTool.textContent = '运行中...'
+    _toolStartTime = Date.now()
+    clearInterval(_timerInterval)
+    _timerInterval = setInterval(function() {
+      var st = document.getElementById('status-time')
+      if (st) st.textContent = ((Date.now() - _toolStartTime) / 1000).toFixed(1) + 's'
+    }, 100)
+  }
+
+  window.ChemAI.stopTimer = function() {
+    clearInterval(_timerInterval)
+    _timerInterval = 0
+    var stTime = document.getElementById('status-time')
+    if (stTime) stTime.classList.remove('ticking')
+    var stBar = document.getElementById('agent-status')
+    if (stBar) {
+      setTimeout(function() { stBar.style.display = 'none' }, 3000)
+    }
+    _toolStartTime = 0
+  }
+
   // ─── 历史对话管理 ───
   function getConversations() {
     try { return JSON.parse(localStorage.getItem('chemai_convs') || '[]') } catch(e) { return [] }
@@ -246,20 +274,8 @@
     if (sendBtn) { sendBtn.disabled = true; sendBtn.style.opacity = '.5' }
     if (input) input.disabled = true
 
-    // Show status bar
-    var stBar = document.getElementById('agent-status')
-    if (stBar) { stBar.style.display = 'flex' }
-    var stTool = document.getElementById('status-tool')
-    if (stTool) stTool.textContent = '分析中...'
-    var stTime = document.getElementById('status-time')
-    if (stTime) { stTime.textContent = '0.0s'; stTime.classList.add('ticking') }
-    _toolStartTime = Date.now()
-    // Live ticking timer
-    clearInterval(_timerInterval)
-    _timerInterval = setInterval(function () {
-      var st = document.getElementById('status-time')
-      if (st) st.textContent = ((Date.now() - _toolStartTime) / 1000).toFixed(1) + 's'
-    }, 100)
+    // Show status bar + start live timer
+    ChemAI.startTimer()
 
     addMsg('user', msg)
     history.push({ role: 'user', content: msg })
@@ -275,8 +291,7 @@
       if (!resp.ok) throw new Error('HTTP ' + resp.status)
       return streamResponse(resp, bubble)
     }).catch(function (e) {
-      clearInterval(_timerInterval)
-      _timerInterval = 0
+      ChemAI.stopTimer()
       bubble.innerHTML = '<span style="color:#b43c28">抱歉，请求失败: ' + e.message + '</span>'
       resetSendState()
     })
@@ -712,20 +727,11 @@
 
   function resetSendState() {
     isSending = false
-    clearInterval(_timerInterval)
-    _timerInterval = 0
+    ChemAI.stopTimer()
     var sendBtn = document.getElementById('chat-send')
     var input = document.getElementById('chat-input')
     if (sendBtn) { sendBtn.disabled = false; sendBtn.style.opacity = '' }
     if (input) input.disabled = false
-    // Keep final time visible for 3s then hide status bar
-    var stTime = document.getElementById('status-time')
-    if (stTime) stTime.classList.remove('ticking')
-    var stBar = document.getElementById('agent-status')
-    setTimeout(function () {
-      if (stBar) stBar.style.display = 'none'
-    }, 3000)
-    _toolStartTime = 0
   }
 
   // ─── Markdown 渲染（自包含解析器 + KaTeX） ───
@@ -988,6 +994,10 @@
     panel.querySelector('.inline-exam-gen-btn').addEventListener('click',function(){
       var active=typeDefs.filter(function(t){return t.active}), st=panel.querySelector('.inline-exam-status'), qa=panel.querySelector('.inline-exam-questions')
       if(!active.length){st.textContent='请至少选择一种题型';return}
+      // Start shared timer
+      var stTool = document.getElementById('status-tool')
+      if (stTool) stTool.textContent = 'AI 出题中...'
+      ChemAI.startTimer()
       var diff=panel.querySelector('.inline-exam-diff').value
       var kps=(panel._kps||[]).filter(function(k){return k.active}).map(function(k){return k.name})
       if(!kps.length)kps=['高中化学综合']
@@ -1016,10 +1026,10 @@
             if(qa.querySelector('.exam-qcards').textContent.includes('正在提交'))qa.querySelector('.exam-qcards').innerHTML=''
             _renderQs(qs,qa.querySelector('.exam-qcards'))
             if(progEl)progEl.textContent='✅ '+typeLabels[t.val]+' ×'+qs.length+' 完成 ('+Math.round((Date.now()-t0)/1000)+'s)'
-            pending--; if(pending===0){ _renderQsFooter(qa) }
+            pending--; if(pending===0){ ChemAI.stopTimer(); _renderQsFooter(qa) }
           }).catch(function(){
             if(progEl)progEl.textContent='❌ '+typeLabels[t.val]+' 失败'
-            pending--; if(pending===0){ _renderQsFooter(qa) }
+            pending--; if(pending===0){ ChemAI.stopTimer(); _renderQsFooter(qa) }
           })
       })
     })
