@@ -243,7 +243,7 @@ _SUB_AGENT_DEFS = {
         "approval": set(),
     },
     "diagnosis_expert": {
-        "tools": ["diagnose_barrier", "show_diagnosis", "show_students", "assign_adaptive_practice"],
+        "tools": ["diagnose_barrier", "show_diagnosis", "list_classes", "show_students", "assign_adaptive_practice"],
         "prompt": ("诊断专家。不闲聊。直接调工具。\n"
                    "规则：\n"
                    "1. 消息包含具体学号(纯数字)或\"诊断学生 XXX\" → 调 diagnose_barrier(student_id=学号)\n"
