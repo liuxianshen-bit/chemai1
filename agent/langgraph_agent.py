@@ -150,7 +150,8 @@ class MultiAgentState(MessagesState):
 # ═══════════════════════════════════════════════════════════════════════
 
 _SUB_AGENT_OUTPUT_CONTRACT = """
-输出格式：返回合法的 JSON 对象，至少包含 "result" 键。如果获取了学生/班级信息，在 JSON 顶层包含这些字段。"""
+输出格式：返回合法的 JSON 对象，至少包含 "result" 键。如果获取了学生/班级信息，在 JSON 顶层包含这些字段。
+**严禁生成任何额外文字。** 工具调用完成后立即输出 JSON，不要加任何解释、问候、列表、建议。"""
 
 
 def create_sub_agent_node(name: str, tool_names: list[str], system_prompt: str,
@@ -235,8 +236,9 @@ _SUB_AGENT_DEFS = {
     },
     "exam_expert": {
         "tools": ["show_exam_workbench", "save_to_bank"],
-        "prompt": ("出题专家。不闲聊。出题意图→立即调 show_exam_workbench，调完返回JSON。"
-                   "不反问我、不自己出题。保存调 save_to_bank。"),
+        "prompt": ("出题专家。你的唯一任务：立即调用 show_exam_workbench。"
+                   "不要生成任何文字。不要反问用户。不要列出任何选项。"
+                   "工具返回后立刻输出JSON结束。保存用 save_to_bank。"),
         "approval": set(),
     },
     "diagnosis_expert": {
@@ -340,9 +342,10 @@ def _coordinator_node(state: MultiAgentState) -> dict:
             ctx_str = "已知信息: " + json.dumps(ctx, ensure_ascii=False) + "\n"
         response = model.invoke(
             [SystemMessage(content=(
-                "你是 ChemAI 高中化学助教。基于专家的处理结果回复用户。"
-                "只输出结果本身，不要加\"好的\"\"我来\"等开场白。"
-                "不要重复子Agent的思考过程，直接给答案。"
+                "你是 ChemAI 高中化学助教。子Agent已经在面板中展示了完整结果，"
+                "你只需要用1-2句话简要概括结论即可。"
+                "绝对不要重复子Agent已经列出的内容（如知识点列表、步骤、选项等）。"
+                "不要加\"好的\"\"我来\"等开场白。"
             ))] + msgs
         )
         return {"route_decision": {"agent": "respond", "query": ""}, "messages": [response]}
