@@ -933,15 +933,40 @@ async def show_students(
 
     session = next(get_db())
 
-    # Resolve class_name → class_id
+    # Resolve class_name → class_id (with flexible matching)
     if class_name and not class_id:
+        cn = str.maketrans("一二三四五六七八九十", "1234567890")
+        import re as _re
+
+        # Step 1: exact match
         row = session.execute(
-            text("SELECT class_id FROM classes WHERE name LIKE :n"),
-            {"n": f"%{class_name}%"},
+            text("SELECT class_id, name FROM classes WHERE name = :n"),
+            {"n": class_name},
         ).fetchone()
+
+        # Step 2: LIKE match
+        if not row:
+            row = session.execute(
+                text("SELECT class_id, name FROM classes WHERE name LIKE :n"),
+                {"n": f"%{class_name}%"},
+            ).fetchone()
+
+        # Step 3: normalize class number (高一一班/高一(1)班/高一（一）班 → match 高一(1)班)
+        if not row:
+            clean = class_name.replace("(", "").replace(")", "").replace("（", "").replace("）", "")
+            m = _re.match(r"(.+)([一二三四五六七八九十\d]+)\s*班", clean)
+            if m:
+                prefix = m.group(1)
+                num = m.group(2).translate(cn)
+                pattern = f"%{prefix}%{num}%班%"
+                row = session.execute(
+                    text("SELECT class_id, name FROM classes WHERE REPLACE(REPLACE(name, '(', ''), ')', '') LIKE :p"),
+                    {"p": pattern},
+                ).fetchone()
+
         if not row:
             session.close()
-            return json.dumps({"message": f"未找到班级 '{class_name}'", "_component": None}, ensure_ascii=False)
+            return json.dumps({"message": f"未找到班级 '{class_name}'，可用班级：高一(1)班、高一(2)班", "_component": None}, ensure_ascii=False)
         class_id = row[0]
 
     if not class_id:
