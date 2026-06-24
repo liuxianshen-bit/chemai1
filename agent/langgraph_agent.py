@@ -25,7 +25,8 @@ TOOL_CALL_LIMITS: dict[str, int] = {
     "search_exam_bank": 3, "web_search": 2, "show_exam_workbench": 3,
     "diagnose_barrier": 2, "weekly_report": 2, "balance_equation": 3,
     "chemistry_tutor": 3, "simulate_experiment": 2, "import_exam_paper": 1,
-    "assign_adaptive_practice": 1, "save_to_bank": 1,
+    "assign_adaptive_practice": 1, "save_to_bank": 1, "show_students": 1,
+    "show_diagnosis": 1,
 }
 
 
@@ -317,13 +318,14 @@ _COORDINATOR_SYS_PROMPT = """你是 ChemAI 调度员。分析用户消息，调�
 **只调工具，不说话！** 不要在调用前生成任何文字。
 
 [ROUTING]
-搜索/查资料 → route_to_search_expert
-出题/组卷/保存 → route_to_exam_expert
-诊断/障碍/练习 → route_to_diagnosis_expert
-讲解/实验/配平/报告 → route_to_tutor_expert
-题库管理 → route_to_bank_manager
+查学生/班级/障碍/诊断/练习 → route_to_diagnosis_expert
+搜索/查资料/真题 → route_to_search_expert
+出题/组卷/保存/考试 → route_to_exam_expert
+讲解/实验/配平/周报 → route_to_tutor_expert
+题库管理/删除题库 → route_to_bank_manager
 打开网页/看网站 → route_to_browser_expert
 
+**班级名/学生名一律走 diagnosis_expert，和关键词无关。**
 只有闲聊/打招呼时才不调工具直接回复。"""
 
 
