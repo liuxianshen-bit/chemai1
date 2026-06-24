@@ -3,33 +3,33 @@
 ## 1. 新增 show_students 工具
 > Spec: student-list-component
 
-- [ ] 1.1 在 `agent/tools.py` 中新增 `show_students(class_id, class_name, filter_barrier)` 函数
-- [ ] 1.2 查 DB：`SELECT student_id, name, barrier_type, exercises_completed FROM students WHERE class_id = :cid ORDER BY exercises_completed ASC`
-- [ ] 1.3 解析 barrier JSON，提取 dominant_barrier 和百分比
-- [ ] 1.4 返回 `_component: {component: "student-list", params: {students: [...], class_name: "..."}}`
-- [ ] 1.5 添加到 `TOOLS` 列表
+- [x] 1.1 在 `agent/tools.py` 中新增 `show_students(class_id, class_name, filter_barrier)` 函数
+- [x] 1.2 查 DB：`SELECT student_id, name, barrier_type, exercises_completed FROM students WHERE class_id = :cid ORDER BY exercises_completed ASC`
+- [x] 1.3 解析 barrier JSON，提取 dominant_barrier 和百分比
+- [x] 1.4 返回 `_component: {component: "student-list", params: {students: [...], class_name: "..."}}`
+- [x] 1.5 添加到 `TOOLS` 列表
 
 ## 2. 注册工具到 diagnosis_expert
 > Spec: student-list-component
 
-- [ ] 2.1 `agent/langgraph_agent.py` diagnosis_expert 工具列表添加 `"show_students"`
+- [x] 2.1 `agent/langgraph_agent.py` diagnosis_expert 工具列表添加 `"show_students"`
 - [ ] 2.2 验证：Agent 路由到 diagnosis_expert 后可调用 show_students
 
 ## 3. 修复现有工具不再跳转
 > Spec: remove-student-navigation
 
-- [ ] 3.1 `diagnose_barrier` 班级级：`_route: {navigate: True}` 改为 `_component: {component: "diagnosis", params: _data}`
-- [ ] 3.2 `weekly_report` 班级级：去掉 `_route`，仅返回数据（`student_name`、`report`、`exam_count`）
+- [x] 3.1 `diagnose_barrier` 班级级：`_route: {navigate: True}` 改为 `_component: {component: "diagnosis", params: _data}`
+- [x] 3.2 `weekly_report` 班级级：去掉 `_route`，仅返回数据（`student_name`、`report`、`exam_count`）
 - [ ] 3.3 验证：班级级诊断/周报不产生 navigate SSE 事件
 
 ## 4. 前端内联学生列表面板
 > Spec: student-list-component (前端部分)
 
-- [ ] 4.1 `agent.js` component switch 添加 `student-list` 分支 → `renderStudentList(params, bubble)`
-- [ ] 4.2 渲染学生卡片列表：每张卡片含姓名、学号、障碍标签+百分比、练习进度
-- [ ] 4.3 障碍颜色编码：高→红色、中→黄色、低→绿色
-- [ ] 4.4 卡片点击 → 选中该学生，更新 Agent 上下文 → 自动发送消息"诊断 [学生姓名]"
-- [ ] 4.5 超过 20 名学生时显示"查看全部"按钮 → 导航到 students.html（唯一保留的跳转）
+- [x] 4.1 `agent.js` component switch 添加 `student-list` 分支 → `renderStudentList(params, bubble)`
+- [x] 4.2 渲染学生卡片列表：每张卡片含姓名、学号、障碍标签+百分比、练习进度
+- [x] 4.3 障碍颜色编码：高→红色、中→黄色、低→绿色
+- [x] 4.4 卡片点击 → 选中该学生，更新 Agent 上下文 → 自动发送消息"诊断 [学生姓名]"
+- [x] 4.5 使用 `max-height: 400px; overflow-y: auto` 可滚动容器，不限 20 名（不跳转）
 
 ## 5. 测试
 

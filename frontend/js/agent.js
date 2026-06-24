@@ -440,6 +440,7 @@
             }
             if (evt.component === 'exam-workbench') renderExamWorkbench(evt.params || {}, bubble)
             else if (evt.component === 'diagnosis') renderDiagnosis(evt.params || {}, bubble)
+            else if (evt.component === 'student-list') renderStudentList(evt.params || {}, bubble)
             break
 
           case 'error':
@@ -1175,4 +1176,62 @@
   }
 
   window.ChemAI._diagToExam = function(btn){sendMessage('针对学习障碍出题练习')}
+
+  // ─── Inline Student List Panel ───
+  function renderStudentList(params, bubble) {
+    var students = params.students || []
+    var className = params.class_name || params.class_id || ''
+    var barrierLabels = {concept:'计算能力', reading:'审题障碍', expression:'表述障碍', unknown:'未诊断'}
+
+    function barrierColor(score) {
+      if (score >= 0.7) return '#b43c28'   // red
+      if (score >= 0.3) return '#d4a017'   // yellow
+      return '#2c6e49'                      // green
+    }
+
+    var html = '<style>'+
+      '.sl-search{width:100%;padding:8px 12px;border:1.5px solid #e0e0e0;border-radius:6px;font-size:13px;box-sizing:border-box;margin-bottom:8px;outline:none}'+
+      '.sl-search:focus{border-color:#b43c28}'+
+      '.sl-card{display:flex;align-items:center;gap:12px;padding:10px 12px;margin:4px 0;border:1.5px solid #eee;border-radius:8px;cursor:pointer;transition:all .15s;background:#fff}'+
+      '.sl-card:hover{border-color:#ccc;background:#fafafa}'+
+      '.sl-card.selected{border-color:#b43c28;background:rgba(180,60,40,.04)}'+
+      '.sl-barrier-tag{padding:2px 10px;border-radius:12px;font-size:11px;font-weight:600;font-family:\'JetBrains Mono\',monospace;white-space:nowrap}'+
+      '.sl-scroll{max-height:400px;overflow-y:auto}'+
+      '</style>'+
+      '<div class="inline-sl-panel" style="border:1px solid #eee;border-radius:8px;padding:12px;margin:8px 0">'+
+      '<div style="font-weight:700;margin-bottom:10px;font-size:15px;border-bottom:2px solid #b43c28;padding-bottom:8px">' + escHtml(className) + ' · ' + students.length + '名学生</div>'+
+      '<input class="sl-search" placeholder="搜索姓名或学号..." oninput="var v=this.value.toLowerCase();this.parentNode.querySelectorAll(\'.sl-card\').forEach(function(c){c.style.display=(c.textContent||\'\').toLowerCase().indexOf(v)===-1?\'none\':\'flex\'})">'+
+      '<div class="sl-scroll">'
+
+    var barrierBg = function(score) { var c=barrierColor(score); return 'background:'+c+'14;color:'+c+';border:1px solid '+c+'33' }
+
+    students.forEach(function(s) {
+      var label = barrierLabels[s.dominant_barrier] || s.dominant_barrier
+      var bg = barrierBg(s.barrier_score)
+      html += '<div class="sl-card" data-sid="' + escHtml(s.student_id) + '" data-sname="' + escHtml(s.name) + '">' +
+        '<div style="flex:1;min-width:0">' +
+        '<div style="font-weight:600;font-size:14px">' + escHtml(s.name) + '</div>' +
+        '<div style="font-size:11px;color:#999;font-family:\'JetBrains Mono\',monospace\">' + escHtml(s.student_id) + '</div>' +
+        '</div>' +
+        '<span class="sl-barrier-tag" style="' + bg + '">' + label + ' ' + Math.round(s.barrier_score * 100) + '%</span>' +
+        '<span style="font-size:11px;color:#999;white-space:nowrap">练习: ' + s.exercises_completed + '</span>' +
+        '</div>'
+    })
+
+    html += '</div></div>'
+
+    bubble.insertAdjacentHTML('beforeend', html)
+
+    // Click to select student → send diagnosis message
+    var panel = bubble.querySelector('.inline-sl-panel:last-child')
+    if (!panel) return
+    panel.querySelectorAll('.sl-card').forEach(function(card) {
+      card.addEventListener('click', function() {
+        panel.querySelectorAll('.sl-card.selected').forEach(function(c) { c.classList.remove('selected') })
+        card.classList.add('selected')
+        var name = card.dataset.sname
+        sendMessage('诊断 ' + name)
+      })
+    })
+  }
 })()

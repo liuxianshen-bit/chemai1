@@ -294,14 +294,9 @@ async def diagnose_barrier(
         }
         return json.dumps({
             **_data,
-            "_route": {
-                "navigate": True,
-                "page": "diagnosis",
-                "actions": [
-                    {"action": "selectClass", "payload": class_id},
-                    {"action": "showPlan", "payload": ""},
-                ],
-                "populate": {"target": "diagnosis", "data": _data},
+            "_component": {
+                "component": "diagnosis",
+                "params": _data,
             },
         }, ensure_ascii=False)
 
@@ -502,17 +497,10 @@ async def weekly_report(student_id: str = "", student_name: str = "", class_name
 
     await provider.close()
 
-    _is_class = bool(class_name) and not bool(student_id) and not bool(student_name)
     return json.dumps({
         "student_name": student_name_resolved,
         "report": result.content,
         "exam_count": exam_count,
-        "_route": {
-            "navigate": _is_class,
-            "page": "students" if _is_class else None,
-            "actions": [{"action": "searchStudent", "payload": class_name}, {"action": "openWeeklyReport", "payload": ""}] if _is_class else [],
-            "populate": {"target": "weeklyReport", "data": {"student_name": student_name_resolved, "report": result.content}} if _is_class else None,
-        },
     }, ensure_ascii=False)
 
 
@@ -925,6 +913,102 @@ async def delete_bank(set_id: str = "") -> str:
         db.close()
 
 
+# ── 16. show_students ──
+
+async def show_students(
+    class_id: str = "",
+    class_name: str = "",
+    filter_barrier: str = "",
+) -> str:
+    """学生列表 — 在聊天中展示班级学生名单和障碍概况
+
+    何时用：用户问"有哪些学生""找问题大的学生""班里谁最薄弱"
+    会发生什么：在聊天中渲染学生列表面板，按障碍严重度排序，支持搜索筛选
+    下一步：用户点击学生卡片 → 触发该学生的诊断
+    """
+    import sys, os
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+    from app.models.database import get_db
+    from sqlalchemy import text
+
+    session = next(get_db())
+
+    # Resolve class_name → class_id
+    if class_name and not class_id:
+        row = session.execute(
+            text("SELECT class_id FROM classes WHERE name LIKE :n"),
+            {"n": f"%{class_name}%"},
+        ).fetchone()
+        if not row:
+            session.close()
+            return json.dumps({"message": f"未找到班级 '{class_name}'", "_component": None}, ensure_ascii=False)
+        class_id = row[0]
+
+    if not class_id:
+        session.close()
+        return json.dumps({"message": "请提供班级信息", "_component": None}, ensure_ascii=False)
+
+    # Get class name
+    cls_row = session.execute(
+        text("SELECT name FROM classes WHERE class_id = :cid"), {"cid": class_id}
+    ).fetchone()
+    resolved_class_name = cls_row[0] if cls_row else class_id
+
+    # Query students with barrier data
+    rows = session.execute(
+        text("SELECT student_id, name, barrier_type, exercises_completed FROM students WHERE class_id = :cid ORDER BY exercises_completed ASC"),
+        {"cid": class_id},
+    ).fetchall()
+    session.close()
+
+    if not rows:
+        return json.dumps({"message": f"{resolved_class_name} 暂无学生", "_component": None}, ensure_ascii=False)
+
+    students = []
+    for r in rows:
+        barrier = json.loads(r[2]) if isinstance(r[2], str) else (r[2] or {})
+        if barrier:
+            dominant = max(barrier.items(), key=lambda x: x[1])
+            barrier_type = dominant[0]
+            barrier_score = dominant[1]
+        else:
+            barrier_type = "unknown"
+            barrier_score = 0
+
+        # Filter by barrier type if specified
+        if filter_barrier:
+            bt_map = {"计算": "concept", "概念": "concept", "审题": "reading", "阅读": "reading", "表述": "expression", "表达": "expression"}
+            target = bt_map.get(filter_barrier, filter_barrier)
+            if barrier_type != target:
+                continue
+
+        students.append({
+            "student_id": r[0],
+            "name": r[1],
+            "dominant_barrier": barrier_type,
+            "barrier_score": round(barrier_score, 2),
+            "exercises_completed": r[3] or 0,
+        })
+
+    if filter_barrier and not students:
+        return json.dumps({"message": f"{resolved_class_name} 没有 {filter_barrier} 障碍的学生", "_component": None}, ensure_ascii=False)
+
+    # Sort by barrier_score desc (worst first)
+    students.sort(key=lambda s: s["barrier_score"], reverse=True)
+
+    return json.dumps({
+        "message": f"{resolved_class_name} · {len(students)}名学生",
+        "_component": {
+            "component": "student-list",
+            "params": {
+                "class_name": resolved_class_name,
+                "class_id": class_id,
+                "students": students,
+            },
+        },
+    }, ensure_ascii=False)
+
+
 # ── Tool list for factory ──
 
 TOOLS = [
@@ -932,6 +1016,7 @@ TOOLS = [
     web_search,
     show_exam_workbench,
     show_diagnosis,
+    show_students,
     diagnose_barrier,
     chemistry_tutor,
     simulate_experiment,

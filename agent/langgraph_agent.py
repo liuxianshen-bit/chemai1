@@ -242,8 +242,9 @@ _SUB_AGENT_DEFS = {
         "approval": set(),
     },
     "diagnosis_expert": {
-        "tools": ["diagnose_barrier", "show_diagnosis", "assign_adaptive_practice"],
+        "tools": ["diagnose_barrier", "show_diagnosis", "show_students", "assign_adaptive_practice"],
         "prompt": ("诊断专家。不闲聊。直接调工具，输出含 student_id/name/barrier_type。"
+                   "用户问有哪些学生→调 show_students。"
                    "assign_adaptive_practice 需先 request_approval。"),
         "approval": {"assign_adaptive_practice"},
     },
