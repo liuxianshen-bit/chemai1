@@ -9,6 +9,7 @@
   var currentConvId = sessionStorage.getItem('chemai_active_cid') || null
   var agentContext = { class_id: '', class_name: '', exam_id: '', exam_name: '', student_id: '', student_name: '' }
   var _toolStartTime = 0
+  var _timerInterval = 0
 
   // ─── 历史对话管理 ───
   function getConversations() {
@@ -251,8 +252,14 @@
     var stTool = document.getElementById('status-tool')
     if (stTool) stTool.textContent = '分析中...'
     var stTime = document.getElementById('status-time')
-    if (stTime) stTime.textContent = ''
+    if (stTime) { stTime.textContent = '0.0s'; stTime.classList.add('ticking') }
     _toolStartTime = Date.now()
+    // Live ticking timer
+    clearInterval(_timerInterval)
+    _timerInterval = setInterval(function () {
+      var st = document.getElementById('status-time')
+      if (st) st.textContent = ((Date.now() - _toolStartTime) / 1000).toFixed(1) + 's'
+    }, 100)
 
     addMsg('user', msg)
     history.push({ role: 'user', content: msg })
@@ -268,6 +275,8 @@
       if (!resp.ok) throw new Error('HTTP ' + resp.status)
       return streamResponse(resp, bubble)
     }).catch(function (e) {
+      clearInterval(_timerInterval)
+      _timerInterval = 0
       bubble.innerHTML = '<span style="color:#b43c28">抱歉，请求失败: ' + e.message + '</span>'
       resetSendState()
     })
@@ -277,7 +286,7 @@
   async function streamResponse(resp, bubble) {
     var reader = resp.body.getReader()
     var decoder = new TextDecoder()
-    var buffer = '', reply = '', toolCards = []
+    var buffer = '', reply = '', _subPanel = null, _subAgentName = '', _subToolCount = 0, _routeCard = null
 
     while (true) {
       var r = await reader.read()
@@ -291,103 +300,152 @@
         if (!line.startsWith('data: ')) continue
         var payload = line.slice(6)
         if (payload === '[DONE]') break
+
+        // ── Legacy think markers (backward compat) ──
+        if (payload === '<think>' || payload === '</think>') continue
+
         try {
           var evt = JSON.parse(payload)
         } catch (e) { console.error('SSE event error:', e, payload); continue }
         if (evt.type === 'done') break
-          switch (evt.type) {
-            case 'phase':
-              var st = bubble.querySelector('.think-status')
-              var phaseLabels = {thinking:'分析问题...', executing:'正在执行...', reply:'正在回复...', planning:'生成计划中...'}
-              if (st) st.innerHTML = '<span class="dot"></span>' + (phaseLabels[evt.phase] || evt.phase)
-              break
-            case 'plan_summary':
-              bubble.innerHTML += addPlanCard(evt)
-              scrollBottom()
-              break
-            case 'plan_progress':
-              updatePlanCard(evt)
-              break
-            case 'step':
-              var st2 = bubble.querySelector('.think-status')
-              var labels = {search_exam_bank:'搜索真题', generate_questions:'AI出题', diagnose_barrier:'障碍诊断', chemistry_tutor:'智能辅导', simulate_experiment:'模拟实验', weekly_report:'生成周报', import_exam_paper:'导入试卷', assign_adaptive_practice:'布置练习', balance_equation:'配平审核', web_search:'联网搜索'}
-              var label = labels[evt.skill] || evt.skill
-              if (st2) st2.innerHTML = '<span class="dot"></span>第 ' + (evt.current || '?') + ' 步：' + label
-              break
-            case 'text':
-              if (!reply) bubble.textContent = ''
-              reply += evt.content
-              bubble.textContent = reply
-              scrollBottom()
-              break
-            case 'tool_call':
-              bubble.innerHTML = '<div class="think-status"><span class="dot"></span>调用工具: ' + evt.name + '</div>'
-              var card = addToolCard(evt.name, 'running')
-              toolCards.push(card)
-              // Update status bar
-              var stTool2 = document.getElementById('status-tool')
-              if (stTool2) stTool2.textContent = evt.name
-              break
-            case 'tool_result':
-              var lastCard = toolCards[toolCards.length - 1]
-              if (lastCard) updateToolCard(lastCard, evt)
-              break
-            case 'tool_error':
-              var lastErrCard = toolCards[toolCards.length - 1]
-              if (lastErrCard) updateToolCard(lastErrCard, { success: false, result: { error: evt.error }, name: evt.name })
-              else bubble.innerHTML = '<span style="color:#C53030">工具调用失败: ' + (evt.error || '未知错误') + '</span>'
-              break
-            case 'navigate':
-              var nav = {page: evt.page, params: evt.params || {}, data: {}, actions: []}
-              sessionStorage.setItem('chemai_navigate', JSON.stringify(nav))
-              break
-            case 'populate':
-              try {
-                var navData = JSON.parse(sessionStorage.getItem('chemai_navigate') || '{}')
-                if (!navData.data) navData.data = {}
-                navData.data[evt.target] = evt.data
-                sessionStorage.setItem('chemai_navigate', JSON.stringify(navData))
-              } catch(e) {}
-              break
-            case 'action':
-              try {
-                var navAct = JSON.parse(sessionStorage.getItem('chemai_navigate') || '{}')
-                if (!navAct.actions) navAct.actions = []
-                navAct.actions.push({action: evt.action, payload: evt.payload})
-                sessionStorage.setItem('chemai_navigate', JSON.stringify(navAct))
-              } catch(e) {}
-              break
-            case 'component':
-              sessionStorage.removeItem('chemai_navigate')
-              var rawText = bubble.textContent || ''
-              if (rawText.trim()) {
-                rawText = rawText.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/^- /gm, '· ').replace(/\n\n/g, '<br>')
-                bubble.textContent = ''; bubble.insertAdjacentHTML('afterbegin', '<div style="font-size:14px">'+rawText+'</div>')
-              }
-              if (evt.component === 'exam-workbench') renderExamWorkbench(evt.params || {}, bubble)
-              else if (evt.component === 'diagnosis') renderDiagnosis(evt.params || {}, bubble)
-              break
-            case 'error':
-              var errHtml = '<div style="color:#b43c28;padding:8px 0;font-size:13px">' +
-                '<span style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#999">' + (evt.code || 'ERROR') + '</span><br>' +
-                escHtml(evt.message || '未知错误') + '</div>'
-              if (evt.recoverable) {
-                errHtml += '<button class="btn btn-sm" onclick="ChemAI.retryLastMessage()" style="margin-top:6px;font-size:12px">重试</button>'
-              }
-              bubble.innerHTML = errHtml
-              resetSendState()
-              break
-          }
+
+        switch (evt.type) {
+          case 'phase':
+            var st = bubble.querySelector('.think-status')
+            var phaseLabels = {thinking:'分析中...', executing:'执行中...', reply:'回复中...', planning:'生成计划...'}
+            if (st) st.innerHTML = '<span class="dot"></span>' + (phaseLabels[evt.phase] || evt.phase)
+            break
+
+          // ── Route card ──
+          case 'route':
+            _routeCard = addRouteCard(evt)
+            break
+
+          // ── Sub-agent panel ──
+          case 'sub_agent_start':
+            _subAgentName = evt.agent
+            _subToolCount = 0
+            _subPanel = addSubAgentPanel(evt)
+            if (_routeCard) updateRouteCard(_routeCard, 'dispatched', evt)
+            break
+
+          case 'sub_agent_end':
+            if (_subPanel) closeSubAgentPanel(_subPanel, _subToolCount)
+            _subPanel = null
+            _subAgentName = ''
+            break
+
+          case 'subagent_text':
+            if (_subPanel) appendSubAgentText(_subPanel, evt.content)
+            scrollBottom()
+            break
+
+          // ── Tool cards ──
+          case 'tool_call':
+            if (_subPanel) {
+              _subToolCount++
+              addSubAgentTool(_subPanel, evt.name, 'running')
+            } else {
+              // Top-level tool (routing tools handled by route event, suppress tool_call)
+              if (evt.name && (evt.name + '').startsWith('route_to_')) break
+              addToolCardMsg(bubble, evt.name, 'running')
+            }
+            var stTool2 = document.getElementById('status-tool')
+            if (stTool2) stTool2.textContent = evt.name
+            break
+
+          case 'tool_result':
+            if (_subPanel) {
+              addSubAgentTool(_subPanel, evt.name, evt.success !== false ? 'done' : 'error')
+            } else {
+              break  // non-sub-agent tool results handled by tool_card updates
+            }
+            break
+
+          case 'tool_error':
+            if (_subPanel) {
+              addSubAgentTool(_subPanel, evt.name, 'error')
+            }
+            break
+
+          // ── Main dialog streaming ──
+          case 'text':
+            if (!reply) bubble.textContent = ''
+            reply += evt.content
+            bubble.textContent = reply
+            scrollBottom()
+            break
+
+          case 'plan_summary':
+            bubble.innerHTML += addPlanCard(evt)
+            scrollBottom()
+            break
+
+          case 'plan_progress':
+            updatePlanCard(evt)
+            break
+
+          case 'step':
+            var st3 = bubble.querySelector('.think-status')
+            var labels = {search_exam_bank:'搜索真题', generate_questions:'AI出题', diagnose_barrier:'障碍诊断', chemistry_tutor:'智能辅导', simulate_experiment:'模拟实验', weekly_report:'生成周报', import_exam_paper:'导入试卷', assign_adaptive_practice:'布置练习', balance_equation:'配平审核', web_search:'联网搜索'}
+            var label = labels[evt.skill] || evt.skill
+            if (st3) st3.innerHTML = '<span class="dot"></span>第 ' + (evt.current || '?') + ' 步：' + label
+            break
+
+          case 'navigate':
+            var nav = {page: evt.page, params: evt.params || {}, data: {}, actions: []}
+            sessionStorage.setItem('chemai_navigate', JSON.stringify(nav))
+            break
+
+          case 'populate':
+            try {
+              var navData = JSON.parse(sessionStorage.getItem('chemai_navigate') || '{}')
+              if (!navData.data) navData.data = {}
+              navData.data[evt.target] = evt.data
+              sessionStorage.setItem('chemai_navigate', JSON.stringify(navData))
+            } catch(e) {}
+            break
+
+          case 'action':
+            try {
+              var navAct = JSON.parse(sessionStorage.getItem('chemai_navigate') || '{}')
+              if (!navAct.actions) navAct.actions = []
+              navAct.actions.push({action: evt.action, payload: evt.payload})
+              sessionStorage.setItem('chemai_navigate', JSON.stringify(navAct))
+            } catch(e) {}
+            break
+
+          case 'component':
+            sessionStorage.removeItem('chemai_navigate')
+            var rawText = bubble.textContent || ''
+            if (rawText.trim()) {
+              rawText = rawText.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/^- /gm, '· ').replace(/\n\n/g, '<br>')
+              bubble.textContent = ''; bubble.insertAdjacentHTML('afterbegin', '<div style="font-size:14px">'+rawText+'</div>')
+            }
+            if (evt.component === 'exam-workbench') renderExamWorkbench(evt.params || {}, bubble)
+            else if (evt.component === 'diagnosis') renderDiagnosis(evt.params || {}, bubble)
+            break
+
+          case 'error':
+            var errHtml = '<div style="color:#b43c28;padding:8px 0;font-size:13px">' +
+              '<span style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#999">' + (evt.code || 'ERROR') + '</span><br>' +
+              escHtml(evt.message || '未知错误') + '</div>'
+            if (evt.recoverable) {
+              errHtml += '<button class="btn btn-sm" onclick="ChemAI.retryLastMessage()" style="margin-top:6px;font-size:12px">重试</button>'
+            }
+            bubble.innerHTML = errHtml
+            resetSendState()
+            break
+        }
       }
     }
 
-    // Remove thinking dots. If panel was rendered inline, skip reply text
-    // (the streaming text already showed the reply; panel is the UI).
+    // ── Cleanup ──
     var thinkEl = bubble.querySelector('.think-status')
     if (thinkEl) thinkEl.remove()
     var hasPanel = bubble.querySelector('.inline-exam-panel, .inline-diag-panel')
     if (reply && !hasPanel) {
-      bubble.insertAdjacentHTML('beforeend', renderMarkdown(reply))
+      bubble.innerHTML = renderMarkdown(reply)
       history.push({ role: 'assistant', content: reply })
       saveCurrentConv()
     }
@@ -397,7 +455,6 @@
       try {
         var nav = JSON.parse(navigateTo)
         if (nav.page) {
-          // Persist conversation_id before navigating away
           if (currentConvId) sessionStorage.setItem('chemai_active_cid', currentConvId)
           setTimeout(function() {
             window.location.href = '/pages/' + nav.page + '.html'
@@ -439,6 +496,116 @@
     container.appendChild(card)
     scrollBottom()
     return card
+  }
+
+  function addToolCardMsg(bubble, name, status) {
+    bubble.innerHTML = '<div class="think-status"><span class="dot"></span>调用工具: ' + name + '</div>'
+  }
+
+  // ── Route Card ──
+  function addRouteCard(evt) {
+    var container = document.getElementById('chat-messages')
+    var card = document.createElement('div')
+    card.className = 'route-card'
+    card.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 12px;margin:4px 0;border:1.5px solid #e0d5c1;border-radius:8px;background:linear-gradient(135deg,#fef9f0,#fdf5e6);font-size:13px;color:#8b7355'
+    card.innerHTML = '<span style="font-size:16px">🔀</span>' +
+      '<span style="font-weight:600;color:#6b5340">路由至 ' + escHtml(evt.display || evt.agent) + '</span>' +
+      '<span class="route-status" style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#b8a88a;margin-left:auto">分析意图中...</span>'
+    container.appendChild(card)
+    scrollBottom()
+    return card
+  }
+
+  function updateRouteCard(card, status, evt) {
+    var st = card.querySelector('.route-status')
+    if (!st) return
+    if (status === 'dispatched') {
+      st.textContent = '已分派 ✓'
+      st.style.color = '#2c6e49'
+      card.style.borderColor = '#c8e6c9'
+      card.style.background = 'linear-gradient(135deg,#f4faf4,#e8f5e9)'
+    }
+  }
+
+  // ── Sub-Agent Panel (streaming) ──
+  function addSubAgentPanel(evt) {
+    var container = document.getElementById('chat-messages')
+    var panel = document.createElement('div')
+    panel.className = 'sub-agent-panel'
+    panel.style.cssText = 'border:1.5px solid #e0e0e0;border-radius:8px;margin:4px 0;overflow:hidden;background:#fcfcfc'
+    var display = evt.display || evt.agent
+
+    // Get icon for sub-agent type
+    var icon = '🤖'
+    var iconMap = {search_expert:'🔍', exam_expert:'📝', diagnosis_expert:'🩺', tutor_expert:'📚', bank_manager:'🗄️', browser_expert:'🌐'}
+    icon = iconMap[evt.agent] || icon
+
+    panel.innerHTML =
+      '<div class="sa-header" style="padding:8px 12px;cursor:pointer;font-size:13px;color:#555;background:#fafafa;display:flex;align-items:center;gap:8px;user-select:none;border-bottom:1px solid #f0f0f0">' +
+      '<span class="sa-chevron" style="transition:transform .2s;font-size:10px;color:#aaa">▶</span>' +
+      '<span>' + icon + '</span>' +
+      '<span style="font-weight:600">' + escHtml(display) + '</span>' +
+      '<span class="sa-status" style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#b43c28;margin-left:auto">⏳ 执行中</span>' +
+      '</div>' +
+      '<div class="sa-body" style="display:block">' +
+      '<div class="sa-tools" style="padding:4px 12px"></div>' +
+      '<div class="sa-text" style="padding:6px 12px 10px;font-size:13px;line-height:1.65;color:#666;border-top:1px dashed #eee;display:none;white-space:pre-wrap;word-break:break-word"></div>' +
+      '</div>'
+    container.appendChild(panel)
+    scrollBottom()
+
+    panel.querySelector('.sa-header').addEventListener('click', function() {
+      var body = this.nextElementSibling
+      var chev = this.querySelector('.sa-chevron')
+      var expanded = body.style.display !== 'none'
+      body.style.display = expanded ? 'none' : 'block'
+      chev.style.transform = expanded ? 'rotate(0deg)' : 'rotate(90deg)'
+    })
+    return panel
+  }
+
+  function appendSubAgentText(panel, content) {
+    var textEl = panel.querySelector('.sa-text')
+    if (textEl) {
+      textEl.style.display = 'block'
+      textEl.textContent += content
+      panel.querySelector('.sa-body').scrollTop = panel.querySelector('.sa-body').scrollHeight
+    }
+  }
+
+  function addSubAgentTool(panel, name, status) {
+    var tools = panel.querySelector('.sa-tools')
+    if (!tools) return
+    var existing = tools.querySelector('[data-tool="' + name + '"]')
+    if (status === 'running') {
+      if (existing) return
+      var div = document.createElement('div')
+      div.setAttribute('data-tool', name)
+      div.style.cssText = 'font-size:11px;color:#888;padding:1px 0;font-family:JetBrains Mono,monospace'
+      div.textContent = '⏳ ' + name
+      tools.appendChild(div)
+    } else {
+      if (existing) {
+        existing.textContent = (status === 'error' ? '✗ ' : '✓ ') + name
+        existing.style.color = status === 'error' ? '#b43c28' : '#2c6e49'
+      }
+    }
+  }
+
+  function closeSubAgentPanel(panel, toolCount) {
+    var header = panel.querySelector('.sa-header')
+    var status = panel.querySelector('.sa-status')
+    if (header) {
+      var chev = header.querySelector('.sa-chevron')
+      if (chev) chev.style.transform = 'rotate(90deg)'
+    }
+    if (status) {
+      status.textContent = '✓ 完成 (' + toolCount + '工具)'
+      status.style.color = '#2c6e49'
+    }
+    // Collapse the panel
+    var body = panel.querySelector('.sa-body')
+    if (body) body.style.display = 'none'
   }
 
   function updateToolCard(card, evt) {
@@ -545,18 +712,19 @@
 
   function resetSendState() {
     isSending = false
+    clearInterval(_timerInterval)
+    _timerInterval = 0
     var sendBtn = document.getElementById('chat-send')
     var input = document.getElementById('chat-input')
     if (sendBtn) { sendBtn.disabled = false; sendBtn.style.opacity = '' }
     if (input) input.disabled = false
-    // Update status bar with elapsed time
-    var stBar2 = document.getElementById('agent-status')
-    if (stBar2 && _toolStartTime) {
-      var elapsed = ((Date.now() - _toolStartTime) / 1000).toFixed(1)
-      var stTime2 = document.getElementById('status-time')
-      if (stTime2) stTime2.textContent = elapsed + 's'
-      setTimeout(function () { if (stBar2) stBar2.style.display = 'none' }, 3000)
-    }
+    // Keep final time visible for 3s then hide status bar
+    var stTime = document.getElementById('status-time')
+    if (stTime) stTime.classList.remove('ticking')
+    var stBar = document.getElementById('agent-status')
+    setTimeout(function () {
+      if (stBar) stBar.style.display = 'none'
+    }, 3000)
     _toolStartTime = 0
   }
 

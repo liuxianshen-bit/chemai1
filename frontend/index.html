@@ -164,6 +164,20 @@ body{background:#f7f4ed;font-family:'IBM Plex Sans',sans-serif;color:#1a1a1a}
 .agent-status .status-icon{color:#b43c28;font-size:14px}
 .agent-status .status-time{color:#555}
 
+/* ─── Live ticking animation ─── */
+.agent-status .status-time.ticking{color:#b43c28;animation:timerPulse 2s ease-in-out infinite}
+@keyframes timerPulse{0%,100%{opacity:1}50%{opacity:.5}}
+
+/* ─── 路由卡 ─── */
+.route-card{animation:routeSlideIn .3s ease-out}
+@keyframes routeSlideIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+
+/* ─── 子Agent面板 ─── */
+.sub-agent-panel{animation:panelSlideIn .25s ease-out}
+@keyframes panelSlideIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+.sub-agent-panel .sa-header:hover{background:#f5f5f5 !important}
+.sub-agent-panel .sa-text{font-family:'JetBrains Mono','IBM Plex Sans',monospace}
+
 /* ─── 响应式 ─── */
 @media (max-width: 768px) {
   .sidebar{transform:translateX(-240px);transition:transform .25s cubic-bezier(.22,.61,.36,1)}
@@ -230,7 +244,7 @@ body{background:#f7f4ed;font-family:'IBM Plex Sans',sans-serif;color:#1a1a1a}
 </main>
 
 <script src="/app.js?v=6"></script>
-<script src="/js/agent-renderers.js?v=6"></script>
-<script src="/js/agent.js?v=6"></script>
+<script src="/js/agent-renderers.js?v=14"></script>
+<script src="/js/agent.js?v=14"></script>
 </body>
 </html>

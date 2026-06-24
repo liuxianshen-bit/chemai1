@@ -24,6 +24,9 @@ apscheduler==3.10.4
 # Chemistry
 rdkit==2024.3.1  # 化学结构处理
 
+# Browser automation
+playwright>=1.40
+
 # Testing
 pytest==8.0.0
 pytest-asyncio==0.23.4

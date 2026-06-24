@@ -1,80 +1,35 @@
-"""ChemAI LangGraph Agent — ReAct agent factory.
+"""ChemAI Multi-Agent StateGraph — Coordinator + Router + Sub-Agent architecture.
 
-Replaces pydantic-ai Agent with LangGraph ReAct agent:
-- LLM 自主决定 tool 调用顺序和次数 (not preset DAG)
-- interrupt() 嵌入 request_approval tool
-- Tool 集合固定 per persona YAML (保证 interrupt/resume 兼容)
-- Guardrails: recursion_limit, tool dedup, requires_approval enforcement, _route stripping
+Replaces monolithic ReAct agent with coordinator/router + 6 domain sub-agents.
+Each sub-agent is a StateGraph node with its own GuardState and 2-4 tools.
+
+Graph: START → coordinator → routing_tools → router → [sub-agent] → coordinator → END
+Routing tools execute through a real ToolNode — frontend sees tool_call/tool_result cards.
 """
 import json, os, logging
+from typing import Annotated
+from uuid import uuid4
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import interrupt
 
-# Shared checkpointer — module-level so state persists across HTTP requests.
-# If this were created inside create_chemai_agent(), each request would get
-# a fresh MemorySaver with no prior state → thread_id lookups always miss.
 _checkpointer = MemorySaver()
 from langchain_openai import ChatOpenAI
 from langchain_core.tools import tool as lc_tool, StructuredTool
 
 logger = logging.getLogger(__name__)
 
-# ── Guardrail config ──
 TOOL_APPROVAL_REQUIRED = {"assign_adaptive_practice", "import_exam_paper", "delete_bank"}
 RECURSION_LIMIT = 8
 
-# Per-tool call limits (防止 LLM 在同一轮里反复调同一工具浪费 token)
 TOOL_CALL_LIMITS: dict[str, int] = {
-    "search_exam_bank": 3,
-    "web_search": 2,
-    "show_exam_workbench": 3,
-    "diagnose_barrier": 2,
-    "weekly_report": 2,
-    "balance_equation": 3,
-    "chemistry_tutor": 3,
-    "simulate_experiment": 2,
-    "import_exam_paper": 1,
-    "assign_adaptive_practice": 1,
-    "save_to_bank": 1,
+    "search_exam_bank": 3, "web_search": 2, "show_exam_workbench": 3,
+    "diagnose_barrier": 2, "weekly_report": 2, "balance_equation": 3,
+    "chemistry_tutor": 3, "simulate_experiment": 2, "import_exam_paper": 1,
+    "assign_adaptive_practice": 1, "save_to_bank": 1,
 }
 
-# Per-tool required context fields. If any are missing from the tool call args,
-# the call is blocked before execution with a "请先向用户确认" message.
-# This makes "反问用户" a structural gate, not a prompt hope.
-TOOL_PREREQUISITES: dict[str, list[str]] = {
-    "show_exam_workbench": [],
-    "search_exam_bank": ["keyword"],
-    "diagnose_barrier": ["student_id_or_class_id"],
-    "weekly_report": ["student_id_or_class_id"],
-    "assign_adaptive_practice": ["student_id_or_class_id"],
-}
-
-# Keywords so generic they don't count as a specific request.
-# If search_exam_bank is called with only these as keyword, block and ask for specifics.
-# These are checked via substring containment — "找几个高考真题" contains "高考真题".
-VAGUE_KEYWORDS: list[str] = [
-    "高考真题", "真题", "化学题", "高考化学", "高中化学",
-    "高考", "找几个", "来几道", "题目", "搜题", "找题",
-    "出几道", "几道题", "出题",
-]
-
-def _is_keyword_too_vague(keyword: str) -> bool:
-    """Check if a search keyword is too generic to produce useful results."""
-    kw = keyword.strip()
-    if len(kw) <= 2:  # single character or empty after strip
-        return True
-    for vague in VAGUE_KEYWORDS:
-        if vague in kw:
-            return True
-    return False
-
-
-# ═══════════════════════════════════════════════════════════════════════
-# Guard state — per-agent-invocation, shared across all tools
-# ═══════════════════════════════════════════════════════════════════════
 
 class GuardState:
-    """Per-invocation guard state: dedup, approval tracking, _route storage, call limits."""
     def __init__(self):
         self.seen_calls: set[str] = set()
         self.call_counts: dict[str, int] = {}
@@ -90,94 +45,63 @@ class GuardState:
         return False
 
     def check_limit(self, name: str) -> str | None:
-        """Check per-tool call limit. Returns error message if exceeded, None if ok."""
         limit = TOOL_CALL_LIMITS.get(name)
         if limit is None:
             return None
         count = self.call_counts.get(name, 0) + 1
         self.call_counts[name] = count
         if count > limit:
-            return f"已调用 {name} {count} 次（上限 {limit} 次），请基于已有结果继续，不要重复调用。"
+            return f"已调用 {name} {count} 次（上限 {limit} 次），请基于已有结果继续。"
         return None
 
     def check_prerequisites(self, name: str, kwargs: dict) -> str | None:
-        """Check required context fields before tool execution.
-        Returns error message if prerequisites not met, None if OK.
-        """
-        prereqs = TOOL_PREREQUISITES.get(name, [])
-        for field in prereqs:
-            # Special case: "student_id_or_class_id" checks multiple params
+        prereqs = {
+            "show_exam_workbench": [],
+            "search_exam_bank": ["keyword"],
+            "diagnose_barrier": ["student_id_or_class_id"],
+            "weekly_report": ["student_id_or_class_id"],
+            "assign_adaptive_practice": ["student_id_or_class_id"],
+        }
+        for field in prereqs.get(name, []):
             if field == "student_id_or_class_id":
-                has_student = (kwargs.get("student_id", "") or "").strip()
-                has_name = (kwargs.get("student_name", "") or "").strip()
-                has_class = (kwargs.get("class_id", "") or "").strip()
-                has_class_name = (kwargs.get("class_name", "") or "").strip()
-                if not (has_student or has_name or has_class or has_class_name):
+                if not any((kwargs.get(k, "") or "").strip() for k in
+                           ("student_id", "student_name", "class_id", "class_name")):
                     return "缺少必要信息：请先向用户确认学生姓名/学号或班级。"
                 continue
-            # Special case: "keyword" field checks specificity (not just non-empty)
             if field == "keyword":
                 val = (kwargs.get("keyword", "") or "").strip()
-                if not val or _is_keyword_too_vague(val):
-                    return "搜索关键词太宽泛。请先向用户确认：需要哪个具体知识点的真题？哪一年的？什么难度？"
+                if not val or len(val) <= 2:
+                    return "搜索关键词太宽泛。请先向用户确认：需要哪个具体知识点的真题？"
                 continue
-            val = kwargs.get(field, "")
-            if not val or not str(val).strip():
+            if not (kwargs.get(field, "") or "").strip():
                 return f"缺少必要信息: {field}。请先向用户确认。"
         return None
 
 
 def _make_guarded_tool(fn, guard_state: GuardState, requires_approval: bool = False):
-    """Wrap a tool with guardrail enforcement, preserving LLM-facing schema.
-
-    Guardrails applied (per D8/D9):
-    0. Prerequisites: block tools missing required context fields (e.g., generate_questions without knowledge_points)
-    1. Call limit: block excessive repeated calls per tool type
-    2. Dedup: skip duplicate (same tool + same args) calls
-    3. Requires-approval: block destructive tools unless request_approval was called first
-    4. _route stripping: remove _route from tool result before it reaches LLM context
-    """
     base_tool = lc_tool(fn)
 
     async def _guarded(**kwargs) -> str:
         name = fn.__name__
-
-        # ── Prerequisite check (must be FIRST — block before any other check) ──
-        prereq_msg = guard_state.check_prerequisites(name, kwargs)
-        if prereq_msg:
-            return json.dumps({"error": prereq_msg, "missing_prerequisites": True}, ensure_ascii=False)
-
-        # ── Call limit check (防止同一工具反复调用浪费 token) ──
-        limit_msg = guard_state.check_limit(name)
-        if limit_msg:
-            return json.dumps({"error": limit_msg, "limit_exceeded": True}, ensure_ascii=False)
-
-        # ── Dedup check ──
+        if (msg := guard_state.check_prerequisites(name, kwargs)):
+            return json.dumps({"error": msg, "missing_prerequisites": True}, ensure_ascii=False)
+        if (msg := guard_state.check_limit(name)):
+            return json.dumps({"error": msg, "limit_exceeded": True}, ensure_ascii=False)
         if guard_state.check_dedup(name, kwargs):
             return json.dumps({"error": "检测到重复调用，已跳过", "dedup_skipped": True}, ensure_ascii=False)
-
-        # ── Requires-approval check ──
         if requires_approval and not guard_state.approved:
             return json.dumps({"error": "此操作需要老师确认，请先调用 request_approval",
                                "requires_approval_blocked": True}, ensure_ascii=False)
-
-        # ── Execute original tool ──
         result = await fn(**kwargs)
-
-        # ── Strip _route/_component from LLM context ──
-        stripped = False
         if isinstance(result, str):
             try:
                 data = json.loads(result)
                 if isinstance(data, dict):
                     if "_route" in data:
                         guard_state.last_route = data.pop("_route")
-                        stripped = True
                     if "_component" in data:
                         guard_state.last_component = data.pop("_component")
-                        stripped = True
-                    if stripped:
-                        return json.dumps(data, ensure_ascii=False)
+                    return json.dumps(data, ensure_ascii=False)
             except (json.JSONDecodeError, TypeError):
                 pass
         elif isinstance(result, dict):
@@ -185,68 +109,331 @@ def _make_guarded_tool(fn, guard_state: GuardState, requires_approval: bool = Fa
                 guard_state.last_route = result.pop("_route")
             if "_component" in result:
                 guard_state.last_component = result.pop("_component")
-
         return result
 
-    return StructuredTool(
-        name=base_tool.name,
-        description=base_tool.description,
-        args_schema=base_tool.args_schema,
-        coroutine=_guarded,
-    )
-
-
-def get_tools_for_persona(persona: str, guard_state: GuardState = None) -> list:
-    """Load persona YAML, return LangChain tools (fixed set per persona) with guardrails."""
-    from agent.agents import load_persona
-    from agent.tools import TOOLS
-
-    if guard_state is None:
-        guard_state = GuardState()
-
-    cfg = load_persona(persona)
-    available = set(cfg.get("available_skills", []))
-
-    _tool_by_name = {t.__name__: t for t in TOOLS}
-
-    tools = []
-    for name, fn in _tool_by_name.items():
-        if name in available:
-            wrapped = _make_guarded_tool(
-                fn, guard_state,
-                requires_approval=(name in TOOL_APPROVAL_REQUIRED),
-            )
-            tools.append(wrapped)
-
-    # Always add request_approval (with guard but marks approved on execution)
-    tools.append(_make_request_approval_tool(guard_state))
-
-    logger.info(f"[LangGraph] {persona}: {len(tools)} tools registered "
-                f"(persona: {len(tools)-1}, +request_approval)")
-    return tools
+    return StructuredTool(name=base_tool.name, description=base_tool.description,
+                          args_schema=base_tool.args_schema, coroutine=_guarded)
 
 
 def _make_request_approval_tool(guard_state: GuardState):
-    """Create the request_approval tool with interrupt() inside."""
-
     @lc_tool
     async def request_approval(message: str, context: str = "") -> str:
-        """向老师请求确认。生成内容后需要老师审核时调用。
-        只在真正需要人为判断时调，不要每步都问。
-        例如：出完题后请老师预览、导入试卷前确认来源、布置练习前确认班级。"""
+        """向老师请求确认。"""
         guard_state.approved = True
-        interrupt({
-            "type": "approval",
-            "message": message,
-            "context": context,
-        })
+        interrupt({"type": "approval", "message": message, "context": context})
         return "approved"
-
     return request_approval
 
 
+# ═══════════════════════════════════════════════════════════════════════
+# Multi-Agent State
+# ═══════════════════════════════════════════════════════════════════════
+
+from langgraph.graph import StateGraph, MessagesState, START, END
+from langgraph.prebuilt import create_react_agent, ToolNode
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+
+
+class MultiAgentState(MessagesState):
+    shared_context: dict
+    route_decision: dict | None
+    target_agent: str | None
+    agent_query: str | None
+    last_component: dict | None
+    last_route: dict | None
+    last_result_text: str | None
+    reroute: str | None
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Sub-Agent Factory
+# ═══════════════════════════════════════════════════════════════════════
+
+_SUB_AGENT_OUTPUT_CONTRACT = """
+输出格式：返回合法的 JSON 对象，至少包含 "result" 键。如果获取了学生/班级信息，在 JSON 顶层包含这些字段。"""
+
+
+def create_sub_agent_node(name: str, tool_names: list[str], system_prompt: str,
+                          approval_tools: set[str] | None = None):
+    from agent.tools import TOOLS
+    from agent.browser_tools import (
+        browse_navigate, browse_read, browse_click,
+        browse_input, browse_screenshot,
+    )
+    if approval_tools is None:
+        approval_tools = set()
+    guard_state = GuardState()
+    all_tools = list(TOOLS) + [browse_navigate, browse_read, browse_click,
+                                browse_input, browse_screenshot]
+    _tool_by_name = {t.__name__: t for t in all_tools}
+    approval = set(approval_tools) & set(TOOL_APPROVAL_REQUIRED)
+    tools = [_make_guarded_tool(_tool_by_name[tn], guard_state, tn in approval)
+             for tn in tool_names if tn in _tool_by_name]
+    tools.append(_make_request_approval_tool(guard_state))
+
+    agent = create_react_agent(model=get_langchain_model("deepseek"), tools=tools,
+                               name=name, prompt=system_prompt + "\n\n" + _SUB_AGENT_OUTPUT_CONTRACT)
+
+    async def node_fn(state: MultiAgentState) -> dict:
+        query = state.get("agent_query", "") or ""
+        ctx = state.get("shared_context", {}) or {}
+        full_query = f"[共享上下文]\n{json.dumps(ctx, ensure_ascii=False)}\n\n[用户请求]\n{query}" if ctx else query
+        try:
+            result = await agent.ainvoke(
+                {"messages": [HumanMessage(content=full_query)]},
+                {"configurable": {"thread_id": f"{name}-{uuid4()}"}, "recursion_limit": 7},
+            )
+            content = result["messages"][-1].content
+            component = guard_state.last_component
+            route = guard_state.last_route
+            extracted_ctx = {}
+
+            # Extract JSON from content — LLM may add trailing text after JSON
+            import re as _re
+            result_text = content
+            reroute = None
+            json_data = None
+            _m = _re.search(r'\{[^{}]*"result"\s*:\s*"[^"]*"[^{}]*\}', str(content))
+            if not _m:
+                _m = _re.search(r'\{.*\}', str(content), _re.DOTALL)
+            if _m:
+                try:
+                    json_data = json.loads(_m.group())
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            if json_data and isinstance(json_data, dict):
+                reroute = json_data.get("reroute")
+                result_text = json_data.get("result", result_text)
+                for k in ("student_id", "student_name", "class_id", "class_name",
+                           "barrier_type", "barrier_distribution"):
+                    if k in json_data:
+                        extracted_ctx[k] = json_data[k]
+
+            return {
+                "messages": [AIMessage(content=result_text)],
+                "shared_context": {**ctx, **extracted_ctx},
+                "last_component": component or (json_data or {}).get("_component"),
+                "last_route": route or (json_data or {}).get("_route"),
+                "last_result_text": result_text,
+                "reroute": reroute,
+            }
+        except Exception as e:
+            logger.error(f"[{name}] Sub-agent failed: {e}")
+            return {"messages": [AIMessage(content=json.dumps(
+                {"result": f"抱歉处理遇到问题: {str(e)[:200]}", "error": True},
+                ensure_ascii=False))], "shared_context": ctx}
+    return node_fn
+
+
+_agent_node_cache: dict[str, callable] = {}
+
+_SUB_AGENT_DEFS = {
+    "search_expert": {
+        "tools": ["search_exam_bank", "web_search"],
+        "prompt": ("搜索专家。不闲聊，直接调工具。搜不到直接告知。"),
+        "approval": set(),
+    },
+    "exam_expert": {
+        "tools": ["show_exam_workbench", "save_to_bank"],
+        "prompt": ("出题专家。不闲聊。出题意图→立即调 show_exam_workbench，调完返回JSON。"
+                   "不反问我、不自己出题。保存调 save_to_bank。"),
+        "approval": set(),
+    },
+    "diagnosis_expert": {
+        "tools": ["diagnose_barrier", "show_diagnosis", "assign_adaptive_practice"],
+        "prompt": ("诊断专家。不闲聊。直接调工具，输出含 student_id/name/barrier_type。"
+                   "assign_adaptive_practice 需先 request_approval。"),
+        "approval": {"assign_adaptive_practice"},
+    },
+    "tutor_expert": {
+        "tools": ["chemistry_tutor", "simulate_experiment", "balance_equation", "weekly_report"],
+        "prompt": ("辅导专家。禁止说\"好的\"\"我来\"\"让我\"等开场白。\n"
+                   "配平: 收到方程式后只调 balance_equation，调完立即返回。\n"
+                   "讲解/实验/报告: 调对应工具，简洁输出。"),
+        "approval": set(),
+    },
+    "bank_manager": {
+        "tools": ["list_banks", "delete_bank"],
+        "prompt": ("题库管理。不闲聊。delete_bank 需先 request_approval。"),
+        "approval": {"delete_bank"},
+    },
+    "browser_expert": {
+        "tools": ["browse_navigate", "browse_read", "browse_click",
+                  "browse_input", "browse_screenshot"],
+        "prompt": ("浏览器专家。不闲聊。navigate→read→返回结果。超时直接告知。"),
+        "approval": set(),
+    },
+}
+
+
+def _get_or_compile_agent_node(name: str) -> callable:
+    if name not in _agent_node_cache:
+        cfg = _SUB_AGENT_DEFS[name]
+        _agent_node_cache[name] = create_sub_agent_node(
+            name, cfg["tools"], cfg["prompt"], cfg["approval"])
+        logger.info(f"[MultiAgent] Compiled: {name}")
+    return _agent_node_cache[name]
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Routing Tools — real ToolNode execution → frontend sees tool cards
+# ═══════════════════════════════════════════════════════════════════════
+
+_ROUTING_TOOLS = {}
+
+def _make_routing_tool(agent_name: str, display: str):
+    @lc_tool
+    async def _route(query: str = "") -> str:
+        """Route to expert."""
+        return json.dumps({"agent": agent_name, "display": display, "query": query}, ensure_ascii=False)
+    _route.name = f"route_to_{agent_name}"
+    _route.description = f"将用户请求路由到{display}。"
+    _ROUTING_TOOLS[_route.name] = agent_name
+    return _route
+
+_route_to_search_expert = _make_routing_tool("search_expert", "搜索专家")
+_route_to_exam_expert = _make_routing_tool("exam_expert", "出题专家")
+_route_to_diagnosis_expert = _make_routing_tool("diagnosis_expert", "诊断专家")
+_route_to_tutor_expert = _make_routing_tool("tutor_expert", "辅导专家")
+_route_to_bank_manager = _make_routing_tool("bank_manager", "题库管理")
+_route_to_browser_expert = _make_routing_tool("browser_expert", "浏览器专家")
+
+_ROUTING_TOOL_LIST = [
+    _route_to_search_expert, _route_to_exam_expert, _route_to_diagnosis_expert,
+    _route_to_tutor_expert, _route_to_bank_manager, _route_to_browser_expert,
+]
+_routing_tool_node = ToolNode(_ROUTING_TOOL_LIST)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Coordinator + Router
+# ═══════════════════════════════════════════════════════════════════════
+
+_COORDINATOR_SYS_PROMPT = """你是 ChemAI 调度员。分析用户消息，调用路由工具。
+
+**只调工具，不说话！** 不要在调用前生成任何文字。
+
+[ROUTING]
+搜索/查资料 → route_to_search_expert
+出题/组卷/保存 → route_to_exam_expert
+诊断/障碍/练习 → route_to_diagnosis_expert
+讲解/实验/配平/报告 → route_to_tutor_expert
+题库管理 → route_to_bank_manager
+打开网页/看网站 → route_to_browser_expert
+
+只有闲聊/打招呼时才不调工具直接回复。"""
+
+
+def _coordinator_node(state: MultiAgentState) -> dict:
+    msgs = list(state.get("messages", []))
+
+    if state.get("reroute"):
+        return {"route_decision": {"agent": state["reroute"], "query": ""}, "reroute": None}
+
+    # Return from sub-agent? Generate clean response based on sub-agent result
+    if (len(msgs) >= 2 and isinstance(msgs[-1], AIMessage)
+            and not getattr(msgs[-1], 'tool_calls', None)):
+        model = get_langchain_model("deepseek")
+        ctx = state.get("shared_context", {})
+        ctx_str = ""
+        if ctx:
+            ctx_str = "已知信息: " + json.dumps(ctx, ensure_ascii=False) + "\n"
+        response = model.invoke(
+            [SystemMessage(content=(
+                "你是 ChemAI 高中化学助教。基于专家的处理结果回复用户。"
+                "只输出结果本身，不要加\"好的\"\"我来\"等开场白。"
+                "不要重复子Agent的思考过程，直接给答案。"
+            ))] + msgs
+        )
+        return {"route_decision": {"agent": "respond", "query": ""}, "messages": [response]}
+
+    model = get_langchain_model("deepseek")
+    model_with_tools = model.bind_tools(_ROUTING_TOOL_LIST)
+    response = model_with_tools.invoke([SystemMessage(content=_COORDINATOR_SYS_PROMPT)] + msgs)
+
+    tc_list = getattr(response, 'tool_calls', []) or []
+    if tc_list:
+        tc = tc_list[0]
+        agent_name = _ROUTING_TOOLS.get(tc.get("name", ""), "respond")
+        # Strip coordinator's text chatter — keep only tool_calls in the message
+        clean = AIMessage(content="", id=response.id)
+        clean.tool_calls = response.tool_calls
+        return {
+            "route_decision": {"agent": agent_name, "query": tc.get("args", {}).get("query", "")},
+            "messages": [clean],
+        }
+    return {"route_decision": {"agent": "respond", "query": ""}, "messages": [response]}
+
+
+def _router_node(state: MultiAgentState) -> dict:
+    decision = state.get("route_decision") or {}
+    agent = decision.get("agent", "respond")
+    if agent == "respond":
+        return {"target_agent": None, "route_decision": None}
+
+    # Extract query from routing tool's ToolMessage
+    query = ""
+    for m in reversed(state.get("messages", [])):
+        if getattr(m, 'name', '') and (m.name or "").startswith('route_to_'):
+            try:
+                data = json.loads(m.content) if isinstance(m.content, str) else m.content
+                query = data.get("query", "")
+            except:
+                pass
+            break
+
+    return {"target_agent": agent, "agent_query": query}
+
+
+def _route_after_routing(state: MultiAgentState) -> str:
+    # After routing tools: if tool calls were made → router. Otherwise END.
+    last = state.get("messages", [None])[-1]
+    if last and getattr(last, 'tool_calls', None):
+        return "routing_tools"
+    return "router"
+
+
+def _route_after_router(state: MultiAgentState) -> str:
+    return state.get("target_agent") or END
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Graph Assembly
+# ═══════════════════════════════════════════════════════════════════════
+
+def create_chemai_agent(persona: str = "tutor", provider: str = "deepseek",
+                        student_profile=None, intent_hints="", guard_state=None):
+    builder = StateGraph(MultiAgentState)
+
+    builder.add_node("coordinator", _coordinator_node)
+    builder.add_node("routing_tools", _routing_tool_node)
+    builder.add_node("router", _router_node)
+    for name in _SUB_AGENT_DEFS:
+        builder.add_node(name, _get_or_compile_agent_node(name))
+
+    builder.add_edge(START, "coordinator")
+    builder.add_conditional_edges("coordinator", _route_after_routing, {
+        "routing_tools": "routing_tools", "router": "router",
+    })
+    builder.add_edge("routing_tools", "router")
+
+    builder.add_conditional_edges("router", _route_after_router, {
+        name: name for name in _SUB_AGENT_DEFS
+    } | {END: END})
+
+    for name in _SUB_AGENT_DEFS:
+        builder.add_edge(name, "coordinator")
+
+    graph = builder.compile(checkpointer=_checkpointer)
+    logger.info("[MultiAgent] Graph compiled — 6 sub-agents ready")
+    return graph, None
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Shared utilities
+# ═══════════════════════════════════════════════════════════════════════
+
 def get_langchain_model(provider: str) -> ChatOpenAI:
-    """Create ChatOpenAI instance for the given provider."""
     api_keys = {
         "deepseek": os.getenv("DEEPSEEK_API_KEY", ""),
         "mimo": os.getenv("XIAOMI_API_KEY", ""),
@@ -260,260 +447,5 @@ def get_langchain_model(provider: str) -> ChatOpenAI:
         "dashscope": {"model": "qwen-turbo", "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1"},
     }
     cfg = configs.get(provider, configs["deepseek"])
-    return ChatOpenAI(
-        model=cfg["model"],
-        api_key=api_keys.get(provider, ""),
-        base_url=cfg["base_url"],
-        temperature=0.3,
-        max_tokens=4096,
-    )
-
-
-# ═══════════════════════════════════════════════════════════════════════
-# Prompt builders — four-layer structured context
-# ═══════════════════════════════════════════════════════════════════════
-
-def _build_product_context() -> str:
-    """[PRODUCT] section — same for all personas."""
-    return """[PRODUCT]
-你是 ChemAI，一个高中化学 AI 教学助手。你可以帮用户完成以下四类任务：
-
-1. **聊天辅导** — 在对话中讲解化学概念、引导解题思路、答疑解惑。适合学生提问。
-2. **考试工作台** — 搜索历年高考真题、根据知识点出题组卷、将题目保存到题库文件夹管理。适合老师准备考试。
-3. **学情诊断** — 分析单个学生或整个班级的学习障碍（概念理解/审题/表述），找出薄弱环节。适合老师了解学情。
-4. **学习报告** — 生成学生或班级的周报、学情报告，面向家长通俗易懂。
-
-用户可能是老师（管理班级、出卷、诊断）、学生（提问、练习）、或家长（了解学习情况）。
-**关键原则：如果用户没说清楚（学生是谁、哪个知识点、什么难度、几道题），请先反问，不要猜测。**"""
-
-
-def _build_role_context(persona: str) -> str:
-    """[ROLE] section — persona-specific framing from YAML."""
-    from agent.agents import load_persona
-
-    cfg = load_persona(persona)
-    yaml_prompt = cfg.get("system_prompt", "")
-
-    # Strip tool-mapping bullet lines (keep role framing, remove tool rules)
-    lines = yaml_prompt.split("\n")
-    kept = []
-    for line in lines:
-        stripped = line.strip()
-        # Skip lines that map user intent to specific tools
-        if any(kw in stripped for kw in ["→", "->", "调用工具", "工具推荐", "{tools}"]):
-            continue
-        # Skip persona YAML placeholder
-        if stripped == "{student_profile}":
-            continue
-        kept.append(line)
-    cleaned = "\n".join(kept).strip()
-
-    if not cleaned:
-        cleaned = "你是高中化学教学助手。"
-
-    return f"[ROLE]\n{cleaned}"
-
-
-def _build_tool_context(tools: list) -> str:
-    """[TOOLS] section — auto-assembled from StructuredTool.description."""
-    import inspect
-
-    lines = ["[TOOLS]"]
-    for t in tools:
-        desc = getattr(t, "description", "") or ""
-        if "何时用" not in desc:
-            continue  # skip internal guardrail tools like request_approval
-        lines.append(desc)
-        lines.append("")  # blank line between tools
-
-    return "\n".join(lines).rstrip()
-
-
-def _build_reasoning_anchor() -> str:
-    """[REASONING] section — 3-question self-check before every action."""
-    return """[REASONING]
-每次行动前，快速自问：
-1. 用户想要什么结果？（出题→立即调 show_exam_workbench / 答疑→对话 / 诊断→show_diagnosis / 搜题→search_exam_bank）
-2. 出题意图 → 直接调 show_exam_workbench，不要反问参数。面板里有完整配置控件，用户自己会调。
-3. 做完这一步后，用户还需要什么？（保存？跳转？继续出题？报告？）"""
-
-
-def build_persona_prompt(persona: str, student_profile: dict | None = None,
-                         intent_hints: str = "") -> str:
-    """Build system prompt: [PRODUCT] + [ROLE] + optional profile/hints + [REASONING] + [TOOLS].
-    The hardcoded behavior rules section is REMOVED — code guardrails (GuardState,
-    TOOL_CALL_LIMITS, check_prerequisites) enforce constraints at the architecture level.
-    """
-    from agent.langgraph_agent import get_tools_for_persona
-
-    sections = []
-
-    # ── Layer 1: Product context ──
-    sections.append(_build_product_context())
-
-    # ── Layer 2: Role context ──
-    sections.append(_build_role_context(persona))
-
-    # ── Optional: Student profile ──
-    if student_profile:
-        profile_str = json.dumps(student_profile, ensure_ascii=False)
-        sections.append(f"[PROFILE]\n{profile_str}")
-
-    # ── Optional: Classifier hints ──
-    if intent_hints:
-        sections.append(f"[HINTS]\n{intent_hints}")
-
-    # ── Layer 3: Reasoning anchor (before tools — guides selection) ──
-    sections.append(_build_reasoning_anchor())
-
-    # ── Layer 4: Tool context (last — recency bias for selection) ──
-    persona_tools = get_tools_for_persona(persona)
-    sections.append(_build_tool_context(persona_tools))
-
-    return "\n\n".join(sections).strip()
-
-
-def create_chemai_agent(persona: str = "tutor", provider: str = "deepseek",
-                        student_profile: dict | None = None,
-                        intent_hints: str = "",
-                        guard_state: GuardState = None) -> tuple["CompiledGraph", GuardState]:
-    """Create a ChemAI ReAct agent with router + check nodes.
-
-    Graph structure:
-        START → llm → router → check → tools → llm (loop)
-                        ↓        ↓        ↓ fail
-                       END    redirect   inject msg → llm
-
-    router: redirects search_exam_bank → navigate_to_exam_workbench
-            when user has already provided exam parameters
-    check:  blocks tool calls when prerequisites are missing
-    """
-    from langgraph.graph import StateGraph, MessagesState, START, END
-    from langgraph.prebuilt import ToolNode
-    from langchain_core.messages import SystemMessage, HumanMessage, ToolMessage, AIMessage
-
-    if guard_state is None:
-        guard_state = GuardState()
-    tools = get_tools_for_persona(persona, guard_state)
-    model = get_langchain_model(provider)
-    prompt = build_persona_prompt(persona, student_profile, intent_hints)
-    model_with_tools = model.bind_tools(tools)
-
-    # ── Helpers ──
-    def _user_text(state):
-        """Extract recent user message text (excluding injected block messages)."""
-        user_msgs = [m for m in state["messages"]
-                     if isinstance(m, HumanMessage)
-                     and not getattr(m, 'content', '').startswith("以下工具调用")
-                     and not getattr(m, 'content', '').startswith("检测到")]
-        return " ".join([m.content for m in user_msgs[-3:]])
-
-    def _has_exam_params(text):
-        """Check if user has given enough specificity for exam generation."""
-        has_kp = any(kp in text for kp in ["氧化还原", "电化学", "有机", "化学平衡", "盐类水解",
-            "元素周期", "物质结构", "化学反应", "离子反应", "元素化合物", "金属", "非金属",
-            "电解质", "水解", "电离", "原电池", "电解池", "晶体", "分子", "原子", "摩尔",
-            "方程式", "同分异构", "官能团", "取代", "加成", "消去", "酯化", "聚合",
-            "工业流程", "阿伏加德罗", "勒夏特列", "配平", "实验", "计算"])
-        has_types = any(t in text for t in ["选择题", "填空题", "计算题", "实验题", "推断题", "选择", "填空"])
-        return has_kp or has_types
-
-    # ── Node: llm ──
-    def _llm_node(state):
-        msgs = list(state["messages"])
-        if not any(getattr(m, 'type', '') == 'system' for m in msgs):
-            msgs = [SystemMessage(content=prompt)] + msgs
-        resp = model_with_tools.invoke(msgs)
-        return {"messages": [resp]}
-
-    # ── Node: router — redirect wrong tool choices ──
-    def _router_node(state):
-        last = state["messages"][-1]
-        tc_list = getattr(last, 'tool_calls', []) or []
-        if not tc_list:
-            return {}
-
-        search_calls = [tc for tc in tc_list if tc.get("name") == "search_exam_bank"]
-        if not search_calls:
-            return {}
-
-        text = _user_text(state)
-        if _has_exam_params(text):
-            # Strip tool_calls from the AIMessage and inject redirect instruction.
-            # Same ID → LangGraph replaces the original message in state.
-            # This avoids an extra LLM round-trip (no double response).
-            return {"messages": [
-                AIMessage(
-                    content="好的，您已提供了出题所需的参数。"
-                            "现在直接为您跳转到考试工作台自动生成题目。",
-                    id=last.id
-                )
-            ]}
-        return {}
-
-    # ── Node: check — pre-tool structural gate ──
-    def _check_node(state):
-        last = state["messages"][-1]
-        # Skip if already processed (AIMessage without tool_calls from replacement)
-        if isinstance(last, AIMessage) and not getattr(last, 'tool_calls', None):
-            return {}
-        tc_list = getattr(last, 'tool_calls', []) or []
-        if not tc_list:
-            return {}
-
-        issues = []
-        for tc in tc_list:
-            name = tc.get("name", "")
-            args = tc.get("args", {})
-            err = guard_state.check_prerequisites(name, args)
-            if err:
-                issues.append(f"- {name}: {err}")
-
-        if issues:
-            # Replace AIMessage: strip tool_calls, keep existing text + add block notice.
-            # Same ID → LangGraph replaces the original. No extra LLM round-trip.
-            existing_text = last.content or ""
-            block_text = "（以下工具调用被拦截：\n" + "\n".join(issues) + "\n请先向用户确认缺失的信息。）"
-            return {"messages": [
-                AIMessage(content=existing_text + "\n\n" + block_text, id=last.id)
-            ]}
-        return {}
-
-    # ── Node: tools ──
-    _tool_node = ToolNode(tools)
-
-    # ── Routing ──
-    def _route_after_llm(state):
-        last = state["messages"][-1]
-        if getattr(last, 'tool_calls', None):
-            return "router"
-        return END
-
-    def _route_after_router(state):
-        last = state["messages"][-1]
-        # If AIMessage has no tool_calls → it was replaced by router → END
-        if isinstance(last, AIMessage) and not getattr(last, 'tool_calls', None):
-            return END
-        return "check"
-
-    def _route_after_check(state):
-        last = state["messages"][-1]
-        # If AIMessage has no tool_calls → it was replaced by check → END
-        if isinstance(last, AIMessage) and not getattr(last, 'tool_calls', None):
-            return END
-        return "tools"
-
-    # ── Build ──
-    builder = StateGraph(MessagesState)
-    builder.add_node("llm", _llm_node)
-    builder.add_node("router", _router_node)
-    builder.add_node("check", _check_node)
-    builder.add_node("tools", _tool_node)
-
-    builder.add_edge(START, "llm")
-    builder.add_conditional_edges("llm", _route_after_llm, {"router": "router", END: END})
-    builder.add_conditional_edges("router", _route_after_router, {"llm": "llm", "check": "check", END: END})
-    builder.add_conditional_edges("check", _route_after_check, {"llm": "llm", "tools": "tools", END: END})
-    builder.add_edge("tools", "llm")
-
-    return builder.compile(checkpointer=_checkpointer), guard_state
+    return ChatOpenAI(model=cfg["model"], api_key=api_keys.get(provider, ""),
+                      base_url=cfg["base_url"], temperature=0.3, max_tokens=4096)
