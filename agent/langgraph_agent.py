@@ -332,9 +332,12 @@ def _coordinator_node(state: MultiAgentState) -> dict:
     if state.get("reroute"):
         return {"route_decision": {"agent": state["reroute"], "query": ""}, "reroute": None}
 
-    # Return from sub-agent? Generate clean response based on sub-agent result
+    # Return from sub-agent？Skip text if component panel is the response
     if (len(msgs) >= 2 and isinstance(msgs[-1], AIMessage)
             and not getattr(msgs[-1], 'tool_calls', None)):
+        last_component = state.get("last_component")
+        if last_component:
+            return {"route_decision": {"agent": "respond", "query": ""}, "messages": []}
         model = get_langchain_model("deepseek")
         ctx = state.get("shared_context", {})
         ctx_str = ""

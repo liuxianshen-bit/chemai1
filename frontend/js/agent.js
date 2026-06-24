@@ -279,6 +279,8 @@
     if (stTime) stTime.textContent = ''
 
     // 思考状态进气泡（计时器注入到这里）
+    addMsg('user', msg)
+    history.push({ role: 'user', content: msg })
     var bubble = addMsg('ai', '<div class="think-status"><span class="dot"></span>思考中...</div><div class="think-dots"><span></span><span></span><span></span></div>')
     ChemAI.startTimer(bubble.querySelector('.think-status'))
 
@@ -1035,7 +1037,7 @@
 
     function _renderQs(qs,container){
       qs.forEach(function(q,i){
-        var o=(q.options||[]).map(function(o,j){return '<div>'+String.fromCharCode(65+j)+'. '+escHtml(o)+'</div>'}).join('')
+        var o=(q.options||[]).map(function(o,j){return '<div>'+String.fromCharCode(65+j)+'. '+escHtml(String(o).replace(/^[A-F]\.\s*/,''))+'</div>'}).join('')
         container.insertAdjacentHTML('beforeend',
           '<div class="inline-exam-qcard" style="border:1px solid #eee;border-radius:6px;padding:10px;margin:8px 0;background:#fff">'+
           '<div><b>'+(container.querySelectorAll('.inline-exam-qcard').length+1)+'.</b> '+(typeof renderChemistry==='function'?renderChemistry(q.content||''):escHtml(q.content||''))+'</div>'+
