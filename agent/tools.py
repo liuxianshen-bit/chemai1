@@ -1021,8 +1021,21 @@ async def show_students(
     # Sort by barrier_score desc (worst first)
     students.sort(key=lambda s: s["barrier_score"], reverse=True)
 
+    # Build summary for LLM (so it knows the tool succeeded)
+    barrier_labels = {"concept": "计算能力", "reading": "审题障碍", "expression": "表述障碍", "unknown": "未诊断"}
+    top5 = students[:5]
+    top_summary = "、".join(
+        f"{s['name']}({barrier_labels.get(s['dominant_barrier'], s['dominant_barrier'])} {int(s['barrier_score']*100)}%)"
+        for s in top5
+    )
+
     return json.dumps({
-        "message": f"{resolved_class_name} · {len(students)}名学生",
+        "result": f"已找到{resolved_class_name} {len(students)}名学生，已在面板中展示。障碍最严重的前5名：{top_summary}。用户可在面板中搜索、点击学生卡片进行诊断。",
+        "student_count": len(students),
+        "top_barriers": [
+            {"name": s["name"], "barrier": barrier_labels.get(s["dominant_barrier"], s["dominant_barrier"]), "score": s["barrier_score"]}
+            for s in top5
+        ],
         "_component": {
             "component": "student-list",
             "params": {

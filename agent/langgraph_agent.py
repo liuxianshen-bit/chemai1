@@ -244,9 +244,12 @@ _SUB_AGENT_DEFS = {
     },
     "diagnosis_expert": {
         "tools": ["diagnose_barrier", "show_diagnosis", "show_students", "assign_adaptive_practice"],
-        "prompt": ("诊断专家。不闲聊。直接调工具，输出含 student_id/name/barrier_type。"
-                   "用户问有哪些学生→调 show_students。"
-                   "assign_adaptive_practice 需先 request_approval。"),
+        "prompt": ("诊断专家。不闲聊。直接调工具。\n"
+                   "规则：\n"
+                   "1. 用户问有哪些学生/找问题学生/班里谁薄弱 → 调 show_students 即可，调完不要再调其他工具\n"
+                   "2. 用户指定具体学生姓名或学号 → 调 diagnose_barrier\n"
+                   "3. show_students 成功后直接输出 result，不要再重复查询\n"
+                   "4. assign_adaptive_practice 需先 request_approval"),
         "approval": {"assign_adaptive_practice"},
     },
     "tutor_expert": {
