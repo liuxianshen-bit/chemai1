@@ -913,47 +913,17 @@ async def delete_bank(set_id: str = "") -> str:
         db.close()
 
 
-# ── 16. list_classes ──
-
-async def list_classes() -> str:
-    """班级列表 — 查询所有班级信息
-
-    何时用：用户问"有几个班""列出所有班级""有哪些班级"
-    会发生什么：返回班级列表（class_id、名称、年级、学生数）
-    下一步：用户指定某个班级后，可进一步查该班学生
-    """
-    import sys, os
-    sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-    from app.models.database import get_db
-    from sqlalchemy import text
-
-    session = next(get_db())
-    rows = session.execute(
-        text("SELECT class_id, name, grade, student_count FROM classes ORDER BY name")
-    ).fetchall()
-    session.close()
-
-    if not rows:
-        return json.dumps({"result": "暂无班级数据"}, ensure_ascii=False)
-
-    classes = [{"class_id": r[0], "name": r[1], "grade": r[2], "student_count": r[3] or 0} for r in rows]
-    total = len(classes)
-    summary = f"共{total}个班级：" + "、".join(f"{c['name']}({c['student_count']}人)" for c in classes)
-
-    return json.dumps({"result": summary, "classes": classes, "total": total}, ensure_ascii=False)
-
-
-# ── 17. show_students ──
+# ── 16. show_students ──
 
 async def show_students(
     class_id: str = "",
     class_name: str = "",
     filter_barrier: str = "",
 ) -> str:
-    """学生列表 — 在聊天中展示班级学生名单和障碍概况
+    """学生/班级列表 — 展示班级学生或全部班级
 
-    何时用：用户问"有哪些学生""找问题大的学生""班里谁最薄弱"
-    会发生什么：在聊天中渲染学生列表面板，按障碍严重度排序，支持搜索筛选
+    何时用：用户问"有几个班""有哪些学生""找问题大的学生""班里谁最薄弱"
+    会发生什么：未指定班级时列出所有班级；指定班级时渲染学生列表面板
     下一步：用户点击学生卡片 → 触发该学生的诊断
     """
     import sys, os
@@ -1000,8 +970,16 @@ async def show_students(
         class_id = row[0]
 
     if not class_id:
+        # No class specified → list all classes
+        rows = session.execute(
+            text("SELECT class_id, name, grade, student_count FROM classes ORDER BY name")
+        ).fetchall()
         session.close()
-        return json.dumps({"message": "请提供班级信息", "_component": None}, ensure_ascii=False)
+        if not rows:
+            return json.dumps({"result": "暂无班级数据"}, ensure_ascii=False)
+        classes = [{"class_id": r[0], "name": r[1], "grade": r[2], "student_count": r[3] or 0} for r in rows]
+        summary = "共" + str(len(classes)) + "个班级：" + "、".join(c["name"] + "(" + str(c["student_count"]) + "人)" for c in classes)
+        return json.dumps({"result": summary, "classes": classes, "total": len(classes)}, ensure_ascii=False)
 
     # Get class name
     cls_row = session.execute(
@@ -1084,7 +1062,6 @@ TOOLS = [
     web_search,
     show_exam_workbench,
     show_diagnosis,
-    list_classes,
     show_students,
     diagnose_barrier,
     chemistry_tutor,
