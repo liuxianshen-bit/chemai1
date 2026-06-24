@@ -1192,16 +1192,17 @@
     var html = '<style>'+
       '.sl-search{width:100%;padding:8px 12px;border:1.5px solid #e0e0e0;border-radius:6px;font-size:13px;box-sizing:border-box;margin-bottom:8px;outline:none}'+
       '.sl-search:focus{border-color:#b43c28}'+
-      '.sl-card{display:flex;align-items:center;gap:12px;padding:10px 12px;margin:4px 0;border:1.5px solid #eee;border-radius:8px;cursor:pointer;transition:all .15s;background:#fff}'+
+      '.sl-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}'+
+      '.sl-card{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1.5px solid #eee;border-radius:8px;cursor:pointer;transition:all .15s;background:#fff;font-size:13px}'+
       '.sl-card:hover{border-color:#ccc;background:#fafafa}'+
       '.sl-card.selected{border-color:#b43c28;background:rgba(180,60,40,.04)}'+
-      '.sl-barrier-tag{padding:2px 10px;border-radius:12px;font-size:11px;font-weight:600;font-family:\'JetBrains Mono\',monospace;white-space:nowrap}'+
-      '.sl-scroll{max-height:400px;overflow-y:auto}'+
+      '.sl-barrier-tag{padding:1px 8px;border-radius:12px;font-size:10px;font-weight:600;font-family:\'JetBrains Mono\',monospace;white-space:nowrap}'+
+      '.sl-scroll{max-height:360px;overflow-y:auto}'+
       '</style>'+
       '<div class="inline-sl-panel" style="border:1px solid #eee;border-radius:8px;padding:12px;margin:8px 0">'+
       '<div style="font-weight:700;margin-bottom:10px;font-size:15px;border-bottom:2px solid #b43c28;padding-bottom:8px">' + escHtml(className) + ' · ' + students.length + '名学生</div>'+
       '<input class="sl-search" placeholder="搜索姓名或学号..." oninput="var v=this.value.toLowerCase();this.parentNode.querySelectorAll(\'.sl-card\').forEach(function(c){c.style.display=(c.textContent||\'\').toLowerCase().indexOf(v)===-1?\'none\':\'flex\'})">'+
-      '<div class="sl-scroll">'
+      '<div class="sl-scroll sl-grid">'
 
     var barrierBg = function(score) { var c=barrierColor(score); return 'background:'+c+'14;color:'+c+';border:1px solid '+c+'33' }
 
@@ -1222,15 +1223,16 @@
 
     bubble.insertAdjacentHTML('beforeend', html)
 
-    // Click to select student → send diagnosis message
+    // Click to select student → send targeted diagnosis with student ID
     var panel = bubble.querySelector('.inline-sl-panel:last-child')
     if (!panel) return
     panel.querySelectorAll('.sl-card').forEach(function(card) {
       card.addEventListener('click', function() {
         panel.querySelectorAll('.sl-card.selected').forEach(function(c) { c.classList.remove('selected') })
         card.classList.add('selected')
+        var sid = card.dataset.sid
         var name = card.dataset.sname
-        sendMessage('诊断 ' + name)
+        sendMessage('诊断学生 ' + sid + ' ' + name)
       })
     })
   }

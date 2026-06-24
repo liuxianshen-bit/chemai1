@@ -246,10 +246,11 @@ _SUB_AGENT_DEFS = {
         "tools": ["diagnose_barrier", "show_diagnosis", "show_students", "assign_adaptive_practice"],
         "prompt": ("诊断专家。不闲聊。直接调工具。\n"
                    "规则：\n"
-                   "1. 用户问有哪些学生/找问题学生/班里谁薄弱 → 调 show_students 即可，调完不要再调其他工具\n"
-                   "2. 用户指定具体学生姓名或学号 → 调 diagnose_barrier\n"
-                   "3. show_students 成功后直接输出 result，不要再重复查询\n"
-                   "4. assign_adaptive_practice 需先 request_approval"),
+                   "1. 消息包含具体学号(纯数字)或\"诊断学生 XXX\" → 调 diagnose_barrier(student_id=学号)\n"
+                   "2. 用户问有哪些学生/找问题学生/班里谁薄弱 → 调 show_students，调完立即停止\n"
+                   "3. 用户说班级名+学生(如\"高一一班的学生\") → 调 show_students\n"
+                   "4. show_students 成功后不要再调任何工具，直接输出结果\n"
+                   "5. assign_adaptive_practice 需先 request_approval"),
         "approval": {"assign_adaptive_practice"},
     },
     "tutor_expert": {
