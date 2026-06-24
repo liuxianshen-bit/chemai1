@@ -11,31 +11,27 @@
   var _toolStartTime = 0
   var _timerInterval = 0
 
-  // ─── 共享计时器 ───
-  window.ChemAI.startTimer = function() {
-    var stBar = document.getElementById('agent-status')
-    var stTime = document.getElementById('status-time')
-    var stTool = document.getElementById('status-tool')
-    if (stBar) stBar.style.display = 'flex'
-    if (stTime) { stTime.textContent = '0.0s'; stTime.classList.add('ticking') }
-    if (stTool) stTool.textContent = '运行中...'
+  // ─── 共享计时器（渲染到传入的 DOM 容器内）───
+  window.ChemAI.startTimer = function(container) {
     _toolStartTime = Date.now()
     clearInterval(_timerInterval)
+
+    // Create inline timer element inside the given container
+    var el = document.createElement('span')
+    el.className = 'live-timer ticking'
+    el.style.cssText = 'font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#b43c28;margin-left:6px'
+    el.textContent = '0.0s'
+    if (container) container.appendChild(el)
+
     _timerInterval = setInterval(function() {
-      var st = document.getElementById('status-time')
-      if (st) st.textContent = ((Date.now() - _toolStartTime) / 1000).toFixed(1) + 's'
+      var sec = ((Date.now() - _toolStartTime) / 1000).toFixed(1)
+      el.textContent = sec + 's'
     }, 100)
   }
 
   window.ChemAI.stopTimer = function() {
     clearInterval(_timerInterval)
     _timerInterval = 0
-    var stTime = document.getElementById('status-time')
-    if (stTime) stTime.classList.remove('ticking')
-    var stBar = document.getElementById('agent-status')
-    if (stBar) {
-      setTimeout(function() { stBar.style.display = 'none' }, 3000)
-    }
     _toolStartTime = 0
   }
 
@@ -274,14 +270,17 @@
     if (sendBtn) { sendBtn.disabled = true; sendBtn.style.opacity = '.5' }
     if (input) input.disabled = true
 
-    // Show status bar + start live timer
-    ChemAI.startTimer()
+    // Show status bar (tool name only)
+    var stBar = document.getElementById('agent-status')
+    if (stBar) stBar.style.display = 'flex'
+    var stTool = document.getElementById('status-tool')
+    if (stTool) stTool.textContent = '分析中...'
+    var stTime = document.getElementById('status-time')
+    if (stTime) stTime.textContent = ''
 
-    addMsg('user', msg)
-    history.push({ role: 'user', content: msg })
-
-    // 思考状态进气泡
+    // 思考状态进气泡（计时器注入到这里）
     var bubble = addMsg('ai', '<div class="think-status"><span class="dot"></span>思考中...</div><div class="think-dots"><span></span><span></span><span></span></div>')
+    ChemAI.startTimer(bubble.querySelector('.think-status'))
 
     fetch('/api/agent/chat/langgraph/stream', {
       method: 'POST',
@@ -732,6 +731,8 @@
     var input = document.getElementById('chat-input')
     if (sendBtn) { sendBtn.disabled = false; sendBtn.style.opacity = '' }
     if (input) input.disabled = false
+    var stBar = document.getElementById('agent-status')
+    if (stBar) setTimeout(function() { stBar.style.display = 'none' }, 2000)
   }
 
   // ─── Markdown 渲染（自包含解析器 + KaTeX） ───
@@ -994,22 +995,20 @@
     panel.querySelector('.inline-exam-gen-btn').addEventListener('click',function(){
       var active=typeDefs.filter(function(t){return t.active}), st=panel.querySelector('.inline-exam-status'), qa=panel.querySelector('.inline-exam-questions')
       if(!active.length){st.textContent='请至少选择一种题型';return}
-      // Start shared timer
-      var stTool = document.getElementById('status-tool')
-      if (stTool) stTool.textContent = 'AI 出题中...'
-      ChemAI.startTimer()
       var diff=panel.querySelector('.inline-exam-diff').value
       var kps=(panel._kps||[]).filter(function(k){return k.active}).map(function(k){return k.name})
       if(!kps.length)kps=['高中化学综合']
       var fs=panel.querySelector('.inline-exam-folder'), fid=fs.value, fn=fs.selectedOptions&&fs.selectedOptions[0]?fs.selectedOptions[0].textContent.replace(/\s*\(\d+\)\s*$/,''):'自动创建'
       if(!fid){fid='auto-'+Date.now();fn='自动创建'}
       qa.style.display='block'; qa.innerHTML=''; qa._qs=[]; qa._fid=fid; qa._fn=fn
-      // Progress bar
+      // Progress bar with inline timer
       var typeLabels={single_choice:'选择题',fill_blank:'填空题',calculation:'计算题',experiment:'实验题',inference:'推断题'}
-      var progressHTML='<div style="margin:8px 0;padding:10px;background:#f9f9f9;border-radius:6px;font-size:13px"><b>⚡ AI 出题</b><br>'
+      var progressHTML='<div style="margin:8px 0;padding:10px;background:#f9f9f9;border-radius:6px;font-size:13px"><b>⚡ AI 出题</b><span class="live-timer ticking" style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#b43c28;margin-left:8px"></span><br>'
       active.forEach(function(t){ progressHTML+='<div class="exam-prog-'+t.val+'" style="margin:2px 0">⏳ '+typeLabels[t.val]+' ×'+t.qty+' 等待中...</div>' })
       progressHTML+='</div><div class="exam-qcards"></div>'
       qa.innerHTML=progressHTML; st.textContent=''
+      // Start timer inside progress div
+      ChemAI.startTimer(qa.querySelector('.live-timer'))
       var pending=active.length
       // Show skeleton loading while generating
       var skeletonHTML='<div style="padding:10px;font-size:13px;color:#888">正在提交出题请求...</div>'
