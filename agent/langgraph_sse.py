@@ -183,15 +183,17 @@ class LangGraphSSEAdapter:
                  result_text: str = None) -> list[str]:
         events = []
 
-        # ── No more sub-agent text emission ──
-        # Sub-agent result stays in think panel. Coordinator generates the clean answer.
-
-        # ── Component ──
+        # ── Component (inline panel) ──
         if component and component.get("component"):
             events.append(json.dumps({
                 "type": "component",
                 "component": component["component"],
                 "params": component.get("params", {}),
+            }, ensure_ascii=False))
+        # ── Text result (when no component, emit sub-agent's answer directly) ──
+        elif result_text:
+            events.append(json.dumps({
+                "type": "text", "content": result_text,
             }, ensure_ascii=False))
 
         # ── Route ──

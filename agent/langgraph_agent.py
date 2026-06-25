@@ -340,26 +340,11 @@ def _coordinator_node(state: MultiAgentState) -> dict:
     if state.get("reroute"):
         return {"route_decision": {"agent": state["reroute"], "query": ""}, "reroute": None}
 
-    # Return from sub-agent？Skip text if component panel is the response
+    # Return from sub-agent？Emit component if present, otherwise use sub-agent result directly
     if (len(msgs) >= 2 and isinstance(msgs[-1], AIMessage)
             and not getattr(msgs[-1], 'tool_calls', None)):
-        last_component = state.get("last_component")
-        if last_component:
-            return {"route_decision": {"agent": "respond", "query": ""}, "messages": []}
-        model = get_langchain_model("deepseek")
-        ctx = state.get("shared_context", {})
-        ctx_str = ""
-        if ctx:
-            ctx_str = "已知信息: " + json.dumps(ctx, ensure_ascii=False) + "\n"
-        response = model.invoke(
-            [SystemMessage(content=(
-                "你是 ChemAI 高中化学助教。子Agent已经在面板中展示了完整结果，"
-                "你只需要用1-2句话简要概括结论即可。"
-                "绝对不要重复子Agent已经列出的内容（如知识点列表、步骤、选项等）。"
-                "不要加\"好的\"\"我来\"等开场白。"
-            ))] + msgs
-        )
-        return {"route_decision": {"agent": "respond", "query": ""}, "messages": [response]}
+        # Sub-agent result text is already in last_result_text — pass through, no re-generation
+        return {"route_decision": {"agent": "respond", "query": ""}, "messages": []}
 
     model = get_langchain_model("deepseek")
     model_with_tools = model.bind_tools(_ROUTING_TOOL_LIST)
