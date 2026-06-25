@@ -334,6 +334,8 @@
 
           // ── Route card ──
           case 'route':
+            // Clear any coordinator chatter before route
+            bubble.textContent = ''; reply = ''
             _routeCard = addRouteCard(evt)
             break
 

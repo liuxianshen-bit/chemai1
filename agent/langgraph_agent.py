@@ -151,8 +151,9 @@ class MultiAgentState(MessagesState):
 # ═══════════════════════════════════════════════════════════════════════
 
 _SUB_AGENT_OUTPUT_CONTRACT = """
-输出格式：返回合法的 JSON 对象，至少包含 "result" 键。如果获取了学生/班级信息，在 JSON 顶层包含这些字段。
-**严禁生成任何额外文字。** 工具调用完成后立即输出 JSON，不要加任何解释、问候、列表、建议。"""
+输出格式：如果工具返回了 result 字段，直接输出该文本即可（不要包装成JSON）。
+如果工具返回的是原始数据（如学生列表、诊断数据），则用 JSON 包装：{"result": "简洁总结", ...}。
+严禁生成任何闲聊、解释、问候文字。"""
 
 
 def create_sub_agent_node(name: str, tool_names: list[str], system_prompt: str,
