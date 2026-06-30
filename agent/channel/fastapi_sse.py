@@ -26,6 +26,7 @@ class ChatRequest(BaseModel):
     provider: str = "deepseek"
     history: Optional[list[dict]] = None
     conversation_id: Optional[str] = None
+    version: str = "v1"  # v1=multi-agent, v2=single-agent
 
 
 def _extract_conversation_context(message_history: list | None, max_turns: int = 2) -> str:

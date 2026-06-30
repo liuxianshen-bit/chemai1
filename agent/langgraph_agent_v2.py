@@ -1,0 +1,103 @@
+"""ChemAI Single-Agent — one create_react_agent with all tools + GuardState.
+
+Replaces the multi-agent coordinator+router+6-sub-agent architecture.
+Single ReAct loop: LLM sees all tools, picks based on docstring descriptions.
+GuardState provides dedup, call limits, and approval gating — same as v1.
+"""
+
+import json
+import logging
+
+from langgraph.prebuilt import create_react_agent
+from langgraph.graph import START, END
+
+logger = logging.getLogger(__name__)
+
+# ── Reuse from v1 (same GuardState, same tool wrapping, same model) ──
+from agent.langgraph_agent import (
+    get_langchain_model,
+    GuardState,
+    _make_guarded_tool,
+    _make_request_approval_tool,
+    TOOL_CALL_LIMITS,
+    TOOL_APPROVAL_REQUIRED,
+    _get_checkpointer,
+    RECURSION_LIMIT as _V1_RECURSION_LIMIT,
+)
+
+# ── All tools ──
+from agent.tools import TOOLS
+from agent.browser_tools import (
+    browse_navigate,
+    browse_read,
+    browse_click,
+    browse_input,
+    browse_screenshot,
+)
+
+RECURSION_LIMIT = 12
+
+SYSTEM_PROMPT = """你是 ChemAI 化学教研助手。
+
+你必须调用一个工具。阅读每个工具的描述（何时用/会发生什么/下一步/NOT for）来决定用哪个。
+不确定时，选择最可能相关的工具并调用它。
+禁止在不调用工具的情况下直接生成回复。
+
+工具调用后：基于结果简洁回复用户。如果需要更多信息，继续调用工具。"""
+
+ALL_TOOLS = list(TOOLS) + [
+    browse_navigate, browse_read, browse_click, browse_input, browse_screenshot,
+]
+
+_TOOL_BY_NAME = {t.__name__: t for t in ALL_TOOLS}
+
+
+async def create_chemai_agent(
+    persona: str = "tutor",
+    provider: str = "deepseek",
+    student_profile=None,
+    intent_hints="",
+    guard_state=None,
+):
+    """Create a single ReAct agent with persona-filtered tools.
+
+    Returns (graph, guard_state). The guard_state is shared across all tool
+    calls within one invocation — it tracks dedup, call limits, and approval.
+    """
+    from agent.agents import load_persona
+
+    persona_config = load_persona(persona)
+    available_skills = persona_config.get("available_skills", [])
+
+    # Filter domain tools to persona's available_skills
+    persona_tool_names = set(available_skills)
+    domain_tools = [t for t in TOOLS if t.__name__ in persona_tool_names]
+
+    # Browser tools are always available (generic web interaction)
+    browser_tools = [
+        browse_navigate, browse_read, browse_click,
+        browse_input, browse_screenshot,
+    ]
+
+    gs = guard_state or GuardState()
+    approval_tools = set(TOOL_APPROVAL_REQUIRED) & persona_tool_names
+
+    tools = [
+        _make_guarded_tool(t, gs, t.__name__ in approval_tools)
+        for t in domain_tools + browser_tools
+    ]
+    tools.append(_make_request_approval_tool(gs))
+
+    model = get_langchain_model(provider)
+
+    agent = create_react_agent(
+        model=model,
+        tools=tools,
+        prompt=SYSTEM_PROMPT,
+    )
+
+    logger.info(
+        "[SingleAgent] Created — %d domain + %d browser tools, persona=%s",
+        len(domain_tools), len(browser_tools), persona,
+    )
+    return agent, gs

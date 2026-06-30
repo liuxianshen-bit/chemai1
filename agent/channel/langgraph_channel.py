@@ -21,16 +21,30 @@ _agent_cache: dict[str, object] = {}
 
 
 async def _get_or_create_agent(persona: str = "tutor", provider: str = "deepseek",
-                        student_profile=None, intent_hints=""):
-    """Get or create multi-agent coordinator. Returns (graph, None) —
-    last_component/last_route are read from graph state, not from guard_state."""
+                        student_profile=None, intent_hints="", version: str = "v1"):
+    """Get or create agent. Returns (graph, guard_state, adapter_class).
+
+    v1: multi-agent coordinator+router+6-sub-agents
+    v2: single ReAct agent with all tools
+    """
+    if version == "v2":
+        from agent.langgraph_agent_v2 import create_chemai_agent as create_v2
+        from agent.langgraph_sse_v2 import LangGraphSSEAdapterV2
+        agent, guard = await create_v2(
+            persona=persona, provider=provider,
+            student_profile=student_profile, intent_hints=intent_hints,
+        )
+        return agent, guard, LangGraphSSEAdapterV2
+
+    # v1: multi-agent
     from agent.langgraph_agent import create_chemai_agent
+    from agent.langgraph_sse import LangGraphSSEAdapter
 
     agent, _ = await create_chemai_agent(
         persona=persona, provider=provider,
         student_profile=student_profile, intent_hints=intent_hints,
     )
-    return agent, None
+    return agent, None, LangGraphSSEAdapter
 
 
 @router.post("/chat/langgraph/stream")
@@ -40,7 +54,6 @@ async def agent_chat_langgraph_stream(request: ChatRequest):
     load_dotenv()
 
     from agent.deps import ChemAIDeps
-    from agent.langgraph_sse import LangGraphSSEAdapter
     from langgraph.errors import GraphInterrupt
     from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart
 
@@ -97,12 +110,13 @@ async def agent_chat_langgraph_stream(request: ChatRequest):
     if tool_names:
         hints = f"推荐工具: {', '.join(tool_names[:5])}\n用户消息: {request.message}\n使用推荐工具或其他工具，自行判断。"
 
-    agent, _ = await _get_or_create_agent(
+    agent, _, AdapterClass = await _get_or_create_agent(
         request.persona, request.provider,
         student_profile=deps.student_profile, intent_hints=hints,
+        version=request.version,
     )
 
-    adapter = LangGraphSSEAdapter()
+    adapter = AdapterClass()
     full_reply = []
     config = {"configurable": {"thread_id": cid or "default"}, "recursion_limit": 12}
 
@@ -179,7 +193,6 @@ async def agent_chat_langgraph(request: ChatRequest):
     load_dotenv()
 
     from agent.deps import ChemAIDeps
-    from agent.langgraph_sse import LangGraphSSEAdapter
     from langgraph.errors import GraphInterrupt
 
     cid = request.conversation_id
@@ -209,13 +222,14 @@ async def agent_chat_langgraph(request: ChatRequest):
         pre_routed_agent2 = intent.target_agent
         suggested_tools2 = intent.tools
 
-    agent, _ = await _get_or_create_agent(
+    agent, _, AdapterClass = await _get_or_create_agent(
         request.persona, request.provider,
         student_profile=deps.student_profile, intent_hints=hints,
+        version=request.version,
     )
 
     config = {"configurable": {"thread_id": cid or "default"}, "recursion_limit": 12}
-    adapter = LangGraphSSEAdapter()
+    adapter = AdapterClass()
 
     try:
         result = await agent.ainvoke(
@@ -258,15 +272,15 @@ async def agent_chat_langgraph_resume(request: ChatRequest):
     from dotenv import load_dotenv
     load_dotenv()
 
-    from agent.langgraph_sse import LangGraphSSEAdapter
     from langgraph.types import Command
     from langgraph.errors import GraphInterrupt
 
     cid = request.conversation_id or "default"
     user_response = request.message or ""
 
-    agent, _ = await _get_or_create_agent(request.persona, request.provider)
-    adapter = LangGraphSSEAdapter()
+    agent, _, AdapterClass = await _get_or_create_agent(
+        request.persona, request.provider, version=request.version)
+    adapter = AdapterClass()
     config = {"configurable": {"thread_id": cid}, "recursion_limit": 12}
     full_reply = []
 

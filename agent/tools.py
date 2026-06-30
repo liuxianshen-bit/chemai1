@@ -16,9 +16,11 @@ async def search_exam_bank(
 ) -> str:
     """考试工作台 — 搜索历年高考化学真题
 
-    何时用：用户明确说"搜索真题""看看有什么题"时使用。如果用户说的是"出题""出卷""组卷"，应该直接调 show_exam_workbench，不要先搜真题
+    何时用：用户明确说"搜索真题""看看有什么题"时使用
     会发生什么：返回真题列表（含年份、来源、答案），在对话中展示
-    下一步：简洁展示搜索结果即可，不要追问过多后续选项。用户会主动告诉你下一步需求"""
+    下一步：简洁展示搜索结果即可，不要追问过多后续选项
+    NOT for 出题/出卷/组卷 — 直接调 show_exam_workbench
+    NOT for 上网查最新信息 — 用 web_search"""
     from app.services.exam_bank import exam_bank_service
 
     results = exam_bank_service.search_questions(
@@ -62,9 +64,10 @@ async def search_exam_bank(
 async def web_search(query: str = "") -> str:
     """联网搜索 — 查询最新化学信息、高考动态、教学资源
 
-    何时用：用户询问的信息超出训练数据范围（如"2025高考大纲"）、需要最新政策或新闻
+    何时用：用户询问的信息超出训练数据范围（如"2025高考大纲"）、需要最新政策或新闻、明确说"上网搜"
     会发生什么：返回联网搜索结果摘要，在对话中展示
-    下一步：基于搜索结果回答用户问题；如需出题 → generate_questions"""
+    下一步：基于搜索结果回答用户问题
+    NOT for 搜索本地题库里的历史真题 — 用 search_exam_bank"""
     import os as _os, httpx as _httpx, urllib.parse as _urlparse
 
     # Step 1: Fetch search results via HTTP (Bing)
@@ -262,7 +265,9 @@ async def diagnose_barrier(
 
     何时用：用户询问某个学生或班级的学习情况、错题原因、薄弱环节
     会发生什么：个体诊断返回学生障碍分布和主导障碍类型；班级诊断返回全班障碍分布统计
-    下一步：个体诊断 → 根据障碍类型推荐针对性练习（assign_adaptive_practice）；班级诊断 → 跳转诊断页面展示图表"""
+    下一步：个体诊断 → 根据障碍类型推荐针对性练习（assign_adaptive_practice）；班级诊断 → 跳转诊断页面展示图表
+    NOT for 在聊天中展示诊断图表 — 用 show_diagnosis
+    NOT for 生成周报/学习报告 — 用 weekly_report"""
     import sys, os
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
     from app.models.database import get_db
@@ -374,7 +379,9 @@ async def chemistry_tutor(
 
     何时用：用户提问化学概念、解题思路、知识点讲解、教研分析等非出题类问题
     会发生什么：教师→教研分析（考点分布、教学策略、学生常见误区）；学生→引导式教学
-    下一步：如用户仍有疑问 → 继续解答"""
+    下一步：如用户仍有疑问 → 继续解答
+    NOT for 实验步骤/现象 — 用 simulate_experiment
+    NOT for 检查方程式配平 — 用 balance_equation"""
     from agent.provider.deepseek import DeepSeekProvider
 
     provider = DeepSeekProvider()
@@ -424,7 +431,8 @@ async def simulate_experiment(experiment_name: str = "") -> str:
 
     何时用：用户想了解某个实验的操作步骤、现象、原理，或说"模拟XX实验"
     会发生什么：生成实验步骤、预测现象、写出方程式、解释原理，附带安全提醒
-    下一步：基于实验结果回答用户追问；如需配平实验方程式 → balance_equation"""
+    下一步：基于实验结果回答用户追问；如需配平实验方程式 → balance_equation
+    NOT for 一般化学概念讲解 — 用 chemistry_tutor"""
     import re
     from agent.provider.deepseek import DeepSeekProvider
 
@@ -471,7 +479,8 @@ async def balance_equation(equation: str = "") -> str:
 
     何时用：用户发来一个化学方程式要求检查配平，或出题后需要审核题目中的方程式
     会发生什么：检查等式两侧各元素的原子数量，返回配平状态和各元素计数
-    下一步：如配平正确 → 告知用户；如有问题 → 指出不平衡的元素和修正建议"""
+    下一步：如配平正确 → 告知用户；如有问题 → 指出不平衡的元素和修正建议
+    NOT for 化学原理讲解/概念解释 — 用 chemistry_tutor"""
     from app.services.chemical_balance import audit_chemical_equation
 
     result = audit_chemical_equation(equation)
@@ -485,7 +494,8 @@ async def weekly_report(student_id: str = "", student_name: str = "", class_name
 
     何时用：用户（通常为家长或老师）要求查看学习报告、本周学习情况
     会发生什么：个人报告包含学习内容、掌握情况、成长空间和家庭配合建议；班级报告包含整体统计
-    下一步：个人报告 → 对话中展示；班级报告 → 可跳转诊断页面查看图表"""
+    下一步：个人报告 → 对话中展示；班级报告 → 可跳转诊断页面查看图表
+    NOT for 查薄弱环节/学情分析/障碍分布 — 用 diagnose_barrier"""
     import sys, os
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
     from agent.provider.deepseek import DeepSeekProvider
@@ -590,7 +600,8 @@ async def assign_adaptive_practice(
 
     何时用：诊断完成后，老师要求给班级/学生布置针对性练习
     会发生什么：为每个学生生成符合其最近发展区的个性化化学题，自动分配
-    下一步：分配完成 → 告知老师分配结果；此工具需要先调 request_approval 确认"""
+    下一步：分配完成 → 告知老师分配结果；⚠ 此工具需要先调 request_approval 确认
+    """
     import sys, os
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -647,9 +658,10 @@ async def save_to_bank(
 ) -> str:
     """考试工作台 — 将生成的题目保存到题库
 
-    何时用：generate_questions 出完题且没有指定学生姓名时，必须调此工具保存
+    何时用：用户在考试工作台面板中出题完成后保存
     会发生什么：创建题库文件夹（自动命名），将题目存入数据库，可在考试工作台中管理和复用
-    下一步：保存后告知用户文件夹名，引导用户去考试工作台查看 → 页面跳转到 exam-v2 题库 tab"""
+    下一步：保存后告知用户文件夹名，引导用户去考试工作台查看 → 页面跳转到 exam-v2 题库 tab
+    NOT for 出题 — 先调 show_exam_workbench 让用户出题，出完再保存"""
     import sys, os
     from datetime import datetime
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -764,7 +776,7 @@ async def show_exam_workbench(
     不要再反问用户、不要先搜真题、不要确认参数——直接展示面板让用户在面板里配置。
     会发生什么：在聊天界面中渲染考试工作台面板，用户可直接在面板中配置参数、出题、预览、编辑、保存
     下一步：用户在面板中操作完成后，Agent 收到总结消息。question_types 格式如 "single_choice:5,fill_blank:2"
-    """
+    NOT for 先搜真题再问要不要出题 — 直接调此工具，不要调 search_exam_bank"""
     import logging
     _log = logging.getLogger(__name__)
 
@@ -810,6 +822,7 @@ async def show_diagnosis(student_id: str = "", student_name: str = "", class_id:
     何时用：用户要求查看学生或班级的诊断结果
     会发生什么：在聊天中渲染诊断面板，包含障碍分布图和关键指标
     下一步：用户可点击"针对出题"快捷按钮，跳转到出题面板
+    NOT for 只需要原始障碍数据不需要图表 — 用 diagnose_barrier
     """
     import logging
     _log = logging.getLogger(__name__)
@@ -843,6 +856,7 @@ async def list_banks() -> str:
     何时用：用户想查看有哪些题库文件夹，或需要知道题库名称和题目数量
     会发生什么：返回题库列表（set_id、名称、题目数量）
     下一步：用户可能要求删除某个题库（delete_bank）或查看某个题库的内容
+    NOT for 搜索题库里面的题目内容 — 用 search_exam_bank
     """
     import sys, os
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -870,8 +884,7 @@ async def delete_bank(set_id: str = "") -> str:
     何时用：用户明确要求删除某个题库文件夹
     会发生什么：删除题库文件夹和其中的题目关联（题目本身保留）
     下一步：告知用户删除结果
-
-    注意：此操作不可逆，需要先调 request_approval 确认
+    ⚠ 此操作不可逆，需要先调 request_approval 确认
     """
     import sys, os
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -920,6 +933,7 @@ async def show_students(
     何时用：用户问"有几个班""有哪些学生""找问题大的学生""班里谁最薄弱"
     会发生什么：未指定班级时列出所有班级；指定班级时渲染学生列表面板
     下一步：用户点击学生卡片 → 触发该学生的诊断
+    NOT for 查某个学生或班级的障碍数据 — 用 diagnose_barrier
     """
     import sys, os
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
