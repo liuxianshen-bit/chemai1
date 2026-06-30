@@ -29,14 +29,14 @@ The shared vocabulary for the ChemAI AI-assisted chemistry teaching tool. No imp
 - **Question Set / Bank (题库)**: A named collection of questions, typically AI-generated and saved for reuse. Has a set_id, name, and question count.
 - **Weekly Report (周报)**: A learning summary generated for a student or class, covering recent practice, progress, and suggestions.
 
-## Agent Routing Concepts
+## Agent Concepts
 
-- **Intent (意图)**: What the user wants. Two types: `chat` (needs tool execution) or `navigate` (pure page open).
-- **Sub-Agent (子专家)**: A domain-specific LLM agent with a focused tool set. Six exist: search_expert, exam_expert, diagnosis_expert, tutor_expert, bank_manager, browser_expert.
-- **Routing (路由)**: The decision of which sub-agent handles a user message. Currently a multi-step pipeline: Gateway → Coordinator → Router → Sub-Agent.
-- **Tool (工具)**: A callable function exposed to a sub-agent. Each tool has a docstring describing when to use it ("何时用"), what happens ("会发生什么"), and suggested next steps ("下一步").
-- **Route Hint (路由提示)**: Structured information passed from the Gateway to downstream nodes indicating the recommended sub-agent and tools. Currently underutilized — the Coordinator re-decides independently.
-- **Guard State (护栏状态)**: Per-invocation shared state tracking deduplication, call limits, and approval status for destructive tools.
+- **Intent (意图)**: What the user wants. Two types: `chat` (needs tool execution) or `navigate` (pure page open). Classified by the Gateway (LLM + keyword fallback).
+- **Single Agent (单Agent)**: A LangGraph ReAct agent (`create_react_agent`) with all persona-filtered tools visible. The LLM selects tools based on their docstring descriptions — no routing layers. (v2 architecture; v1 multi-agent kept as fallback.)
+- **Tool (工具)**: A callable function exposed to the Agent. Each tool has a docstring in "何时用 / 会发生什么 / 下一步 / NOT for" format. Tool descriptions are the sole interface for tool selection — the LLM reads them and decides which to call.
+- **Persona (角色)**: Determines which tools are available. Three personas: tutor (student-facing, 6 tools), teacher (8 tools including diagnosis), parent (2 tools: weekly_report, diagnose_barrier). Defined in `agent/personas/*.yaml`.
+- **Guard State (护栏状态)**: Per-invocation shared state tracking deduplication, call limits, and approval status for destructive tools. Wraps every tool via `_make_guarded_tool`.
+- **Gateway (网关)**: Pre-classifier that runs before the Agent. Outputs intent type (chat/navigate) and suggested tools. Navigate intents short-circuit the Agent entirely. Chat intents proceed to the ReAct loop with tool hints.
 
 ## OCR Pipeline Concepts
 

@@ -70,33 +70,37 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 ### Agent 层 (LangGraph)
 
-**新 Agent**: `agent/langgraph_agent.py` — LangGraph ReAct agent（替代 pydantic-ai 单轮调用）
+**v2 (推荐)**: `agent/langgraph_agent_v2.py` — 单 ReAct agent，所有工具直接可见，基于 docstring 选择工具。
 
 ```python
-from agent.langgraph_agent import create_chemai_agent, GuardState
+from agent.langgraph_agent_v2 import create_chemai_agent
 
-agent, guard_state = create_chemai_agent(persona="tutor", provider="deepseek")
+agent, guard_state = await create_chemai_agent(persona="tutor", provider="deepseek")
 result = await agent.ainvoke(
     {"messages": [{"role": "user", "content": "你好"}]},
-    config={"configurable": {"thread_id": "conv-123"}, "recursion_limit": 8},
+    config={"configurable": {"thread_id": "conv-123"}, "recursion_limit": 12},
 )
 ```
 
+**v1 (fallback)**: `agent/langgraph_agent.py` — 多 Agent 架构（Coordinator + Router + 6 子Agent），保留作为回退。
+
 **核心文件：**
-- `agent/langgraph_agent.py` — Agent 工厂 + GuardState 护栏（去重 / requires_approval / _route 剥离）
-- `agent/langgraph_sse.py` — astream_events → ChemAI SSE 事件格式适配器
-- `agent/channel/langgraph_channel.py` — FastAPI 端点：`/api/agent/chat/langgraph/stream`、`/chat/langgraph`、`/chat/langgraph/resume`、`/chat/langgraph/reset`
+- `agent/langgraph_agent_v2.py` — v2 单 Agent 工厂 + GuardState 护栏
+- `agent/langgraph_sse_v2.py` — v2 SSE 适配器（简化，无 sub_agent_depth）
+- `agent/langgraph_agent.py` — v1 多 Agent 工厂（保留）
+- `agent/langgraph_sse.py` — v1 SSE 适配器（保留）
+- `agent/channel/langgraph_channel.py` — FastAPI 端点，通过 `version` 参数切换 v1/v2
 
 **护栏 (D8/D9)：**
-- `recursion_limit=8` — ReAct loop 最大迭代，通过 config 传入
+- `recursion_limit=12` — ReAct loop 最大迭代（v2）
 - `GuardState` — per-invocation 共享状态：`seen_calls`（去重）、`approved`（requires_approval 检查）、`last_route`（_route 剥离后存储）
-- 破坏性工具（`assign_adaptive_practice`, `import_exam_paper`）需要先调 `request_approval` 获得授权
+- 破坏性工具（`assign_adaptive_practice`, `delete_bank`）需要先调 `request_approval` 获得授权
 - `_route` 字段在传给 LLM 前自动剥离
 
 **端点：**
 | 端点 | 方法 | 说明 |
 |------|------|------|
-| `/api/agent/chat/langgraph/stream` | POST | 流式 SSE |
+| `/api/agent/chat/langgraph/stream` | POST | 流式 SSE（`version: "v2"` 使用单Agent） |
 | `/api/agent/chat/langgraph` | POST | 非流式 JSON |
 | `/api/agent/chat/langgraph/resume` | POST | 中断恢复 |
 | `/api/agent/chat/langgraph/reset` | POST | 重置对话 |
@@ -104,7 +108,7 @@ result = await agent.ainvoke(
 **旧端点 (deprecated, 保留为 fallback)：**
 | 端点 | 说明 |
 |------|------|
-| `/api/agent/chat/stream` | pydantic-ai SSE（保留，计划 3 个月后下线） |
+| `/api/agent/chat/stream` | pydantic-ai SSE（保留） |
 | `/api/agent/chat` | pydantic-ai 非流式（保留） |
 
 ### 测试
