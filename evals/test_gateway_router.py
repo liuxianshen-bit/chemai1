@@ -31,7 +31,7 @@ CLASSIFIER_CASES = [
     ("打开考试工作台",       "打开考试工作台",       "tutor",   "navigate", [],          False, "exam-v2"),
     ("去首页",               "去首页",               "tutor",   "navigate", [],          False, None),
     ("打开诊断页面",         "打开诊断页面",         "teacher", "navigate", [],          False, "diagnosis"),
-    ("查看班级列表",         "查看班级列表",         "teacher", "navigate", [],          False, None),
+    ("查看班级列表",         "查看班级列表",         "teacher", "chat",    ["show_students", "diagnose_barrier"], False, None),  # 含"查看"走 chat
     ("打开学生管理",         "帮我打开学生管理页面", "teacher", "navigate", [],          False, "students"),
 
     # ── chat: 需要调 tool (不跳页) ──
@@ -42,7 +42,7 @@ CLASSIFIER_CASES = [
     ("实验模拟",             "模拟钠和水反应的实验",           "tutor",   "chat", ["simulate_experiment"], False, None),
     ("搜索真题",             "搜索盐类水解的历年高考真题",    "tutor",   "chat", ["search_exam_bank"],    False, None),
     ("配平方程式",           "帮我配平 Fe + O2 = Fe2O3",      "tutor",   "chat", ["balance_equation"],    False, None),
-    ("导入试卷",             "导入这份PDF试卷",               "teacher", "chat", ["import_exam_paper"],   False, None),
+    ("导入试卷",             "导入这份PDF试卷",               "teacher", "chat", ["show_exam_workbench"], False, None),  # import_exam_paper removed, replaced by OCR pipeline
 
     # ── chat: 班级级别 (需要跳页，但由 tool _route 决定，classifier 只管选 tool) ──
     ("班级诊断",             "高三1班的诊断情况",             "teacher", "chat", ["diagnose_barrier"],    False, None),

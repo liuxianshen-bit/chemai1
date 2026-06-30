@@ -12,6 +12,9 @@ ChemAI Agent Evals — trajectory-based (参考 agentevals / Rubric / pytest-age
 import json, sys, os, asyncio, time, yaml
 from pathlib import Path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+AGENT_VERSION = "v1"  # set by CLI --v2 flag
+
 from evals.conftest import EvalReport, parse_tool_result
 
 
@@ -208,11 +211,21 @@ def _last_idx(lst, val):
 # Agent Runner
 # ═══════════════════════════════════════════════════════════════════════
 
-async def run_langgraph_agent(msg: str, persona: str, thread_id: str = None) -> dict:
-    """跑一次 LangGraph ReAct agent, 返回轨迹。"""
-    from agent.langgraph_agent import create_chemai_agent
+async def run_langgraph_agent(msg: str, persona: str, thread_id: str = None,
+                              version: str = None) -> dict:
+    """跑一次 LangGraph ReAct agent, 返回轨迹。version='v2' 用单Agent架构。"""
     from dotenv import load_dotenv
     load_dotenv()
+
+    if version is None:
+        version = AGENT_VERSION
+
+    if version == "v2":
+        from agent.langgraph_agent_v2 import create_chemai_agent
+        recursion_limit = 12
+    else:
+        from agent.langgraph_agent import create_chemai_agent
+        recursion_limit = 8
 
     t0 = time.time()
     if thread_id is None:
@@ -220,7 +233,7 @@ async def run_langgraph_agent(msg: str, persona: str, thread_id: str = None) -> 
 
     try:
         agent, guard_state = await create_chemai_agent(persona=persona, provider="deepseek")
-        config = {"configurable": {"thread_id": thread_id}, "recursion_limit": 8}
+        config = {"configurable": {"thread_id": thread_id}, "recursion_limit": recursion_limit}
 
         # Run agent
         result = await agent.ainvoke(
@@ -547,8 +560,8 @@ def test_boundary_guardrails(report: EvalReport):
     # dedup detection
     report.add("boundary: tool_dedup exists", True, "D9 已定义")
 
-    # requires_approval
-    destructive = ["import_exam_paper", "assign_adaptive_practice"]
+    # requires_approval — v1 used import_exam_paper; v2 uses delete_bank
+    destructive = ["assign_adaptive_practice", "delete_bank"]
     for tool in destructive:
         report.add(f"boundary: {tool} requires_approval", True, "D8 已定义")
 
@@ -802,6 +815,7 @@ def run():
     parser.add_argument("--regression", action="store_true", help="Compare against saved baseline.json")
     parser.add_argument("--workflow", action="store_true", help="Run workflow integration scenarios (needs API)")
     parser.add_argument("--inline-panel", action="store_true", help="Run inline panel scenarios (needs API)")
+    parser.add_argument("--v2", action="store_true", help="Use v2 single-agent architecture (default: v1)")
     parser.add_argument("--all", action="store_true", help="Run everything")
 
     try:
@@ -811,6 +825,10 @@ def run():
 
     if args.all:
         args.golden = args.langgraph = args.boundary = args.workflow = args.inline_panel = True
+
+    global AGENT_VERSION
+    if args.v2:
+        AGENT_VERSION = "v2"
 
     report = EvalReport()
 
