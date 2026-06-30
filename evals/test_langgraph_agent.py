@@ -219,7 +219,7 @@ async def run_langgraph_agent(msg: str, persona: str, thread_id: str = None) -> 
         thread_id = f"eval-{persona}-{int(t0*1000)}"
 
     try:
-        agent, guard_state = create_chemai_agent(persona=persona, provider="deepseek")
+        agent, guard_state = await create_chemai_agent(persona=persona, provider="deepseek")
         config = {"configurable": {"thread_id": thread_id}, "recursion_limit": 8}
 
         # Run agent

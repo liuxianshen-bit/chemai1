@@ -23,6 +23,7 @@ async def search_exam_bank(
 
     results = exam_bank_service.search_questions(
         knowledge_point=keyword or None,
+        keyword=keyword or None,
         year=year if year else None,
         difficulty=difficulty or None,
         limit=limit,
@@ -41,10 +42,14 @@ async def search_exam_bank(
             {
                 "source": q.source,
                 "year": q.year,
-                "content": q.content[:200],
+                "question_type": q.question_type,
+                "content": q.content,
                 "answer": q.answer,
+                "analysis": (q.analysis or "")[:200],
                 "knowledge_points": q.knowledge_points,
                 "difficulty": q.difficulty,
+                "score": q.score,
+                "page_image": q.page_image,
             }
             for q in results
         ],
@@ -60,40 +65,94 @@ async def web_search(query: str = "") -> str:
     何时用：用户询问的信息超出训练数据范围（如"2025高考大纲"）、需要最新政策或新闻
     会发生什么：返回联网搜索结果摘要，在对话中展示
     下一步：基于搜索结果回答用户问题；如需出题 → generate_questions"""
-    import os, httpx
+    import os as _os, httpx as _httpx, urllib.parse as _urlparse
 
-    api_key = os.getenv("XIAOMI_API_KEY", "")
-    if not api_key:
-        return json.dumps({"error": "未配置 MiMo API Key"})
-
-    payload = {
-        "model": "mimo-v2.5",
-        "messages": [{"role": "user", "content": query}],
-        "enable_search": True,
-        "max_tokens": 4096,
-        "temperature": 0.3,
-    }
-
+    # Step 1: Fetch search results via HTTP (Bing)
+    search_text = ""
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            resp = await client.post(
-                "https://api.xiaomimimo.com/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                },
-                json=payload,
+        async with _httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+            resp = await client.get(
+                f"https://www.bing.com/search?q={_urlparse.quote(query)}",
+                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
             )
         if resp.status_code == 200:
-            data = resp.json()
-            return json.dumps({
-                "query": query,
-                "result": data["choices"][0]["message"]["content"],
-                "usage": data.get("usage", {}),
-            }, ensure_ascii=False)
-        return json.dumps({"error": f"HTTP {resp.status_code}", "detail": resp.text[:200]})
-    except Exception as e:
-        return json.dumps({"error": str(e)})
+            import re as _re
+            # Extract text from search result snippets
+            snippets = _re.findall(r'<p[^>]*class="[^"]*b_lineclamp[^"]*"[^>]*>(.*?)</p>', resp.text, _re.DOTALL)
+            if snippets:
+                search_text = "\n\n".join(
+                    _re.sub(r'<[^>]+>', '', s).strip()[:300]
+                    for s in snippets[:8]
+                )
+            # Fallback: try extracting all visible text
+            if not search_text:
+                body = _re.sub(r'<script[^>]*>.*?</script>', '', resp.text, flags=_re.DOTALL)
+                body = _re.sub(r'<style[^>]*>.*?</style>', '', body, flags=_re.DOTALL)
+                body = _re.sub(r'<[^>]+>', ' ', body)
+                body = _re.sub(r'\s+', ' ', body).strip()
+                search_text = body[:2000]
+    except Exception:
+        pass
+
+    # Step 2: If HTTP search failed, fallback to MiMo enable_search
+    if not search_text or len(search_text) < 50:
+        api_key = _os.getenv("XIAOMI_API_KEY", "")
+        if not api_key:
+            return json.dumps({"error": "搜索暂不可用"})
+        try:
+            async with _httpx.AsyncClient(timeout=60.0) as client:
+                resp = await client.post(
+                    "https://api.xiaomimimo.com/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                    json={
+                        "model": "mimo-v2.5",
+                        "messages": [{"role": "user", "content": query}],
+                        "enable_search": True, "max_tokens": 2048, "temperature": 0.3,
+                    },
+                )
+            if resp.status_code == 200:
+                data = resp.json()
+                search_text = data["choices"][0]["message"]["content"]
+        except Exception:
+            pass
+
+    if not search_text or len(search_text) < 20:
+        return json.dumps({"error": "未获取到搜索结果"})
+
+    # Step 3: Summarize with DeepSeek (no training cutoff issue)
+    ds_key = _os.getenv("DEEPSEEK_API_KEY", "")
+    if ds_key and len(search_text) > 50:
+        try:
+            async with _httpx.AsyncClient(timeout=60.0) as client:
+                resp = await client.post(
+                    "https://api.deepseek.com/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {ds_key}", "Content-Type": "application/json"},
+                    json={
+                        "model": "deepseek-chat",
+                        "messages": [
+                            {"role": "system", "content": "用简洁中文总结以下搜索结果，列出关键信息。不超过400字。"},
+                            {"role": "user", "content": f"搜索词: {query}\n\n搜索结果:\n{search_text[:3000]}"},
+                        ],
+                        "max_tokens": 1024, "temperature": 0.3,
+                    },
+                )
+            if resp.status_code == 200:
+                data = resp.json()
+                result = data["choices"][0]["message"]["content"]
+                return json.dumps({
+                    "_display": f"已完成搜索「{query[:30]}」",
+                    "query": query,
+                    "result": result,
+                }, ensure_ascii=False)
+        except Exception:
+            pass
+
+    # Fallback: return raw results
+    return json.dumps({
+        "_display": f"已搜索「{query[:30]}」",
+        "query": query,
+        "result": search_text[:2000],
+    }, ensure_ascii=False)
 
 
 # ── 3. generate_questions ──
@@ -309,17 +368,33 @@ async def diagnose_barrier(
 async def chemistry_tutor(
     question: str = "",
     student_level: str = "中等",
+    persona: str = "tutor",
 ) -> str:
-    """聊天辅导 — 引导式解答化学问题
+    """聊天辅导 — 根据角色提供教学辅导或教研分析
 
-    何时用：学生提问化学概念、解题思路、知识点讲解等非出题类问题
-    会发生什么：以引导式教学分步讲解，不直接给答案；根据学生水平调整讲解深度
-    下一步：如学生仍有疑问 → 继续解答；如需要出题练习 → generate_questions"""
+    何时用：用户提问化学概念、解题思路、知识点讲解、教研分析等非出题类问题
+    会发生什么：教师→教研分析（考点分布、教学策略、学生常见误区）；学生→引导式教学
+    下一步：如用户仍有疑问 → 继续解答"""
     from agent.provider.deepseek import DeepSeekProvider
 
     provider = DeepSeekProvider()
 
-    system_prompt = f"""你是高中化学AI助教。学生水平: {student_level}。
+    print(f"[DEBUG] chemistry_tutor called: persona={persona}, question={question[:50]}", flush=True)
+    if not persona or persona == "auto" or persona == "tutor":
+        try: from agent.langgraph_agent import _current_persona; persona = _current_persona
+        except: pass
+    if persona == "teacher":
+        system_prompt = """你是高中化学教研助手，正在协助一位化学教师备课和教研。
+
+回答原则：
+1. 专业深度：提供高考考点分布、命题趋势、评分标准等教研级信息
+2. 教学策略：给出课堂讲解思路、实验演示建议、习题设计方向
+3. 学生误区：列举该知识点的常见错误认知和纠正方法
+4. 效率优先：直接给出结构化分析，不要反问教师基础问题
+5. 教辅联动：如涉及具体题目可建议打开考试工作台出题
+6. 单次回复不超过800字"""
+    else:
+        system_prompt = f"""你是高中化学AI助教。学生水平: {student_level}。
 
 教学原则:
 1. 引导式教学: 不直接给答案，先问学生"你是怎么想的"
@@ -504,87 +579,7 @@ async def weekly_report(student_id: str = "", student_name: str = "", class_name
     }, ensure_ascii=False)
 
 
-# ── 9. import_exam_paper ──
-
-async def import_exam_paper(
-    pdf_path: str = "",
-    source: str = "未知来源",
-    year: int = 2025,
-    auto_approve: bool = False,
-) -> str:
-    """试卷导入 — 上传PDF试卷自动提取化学题目并入库
-
-    何时用：用户有PDF格式的试卷需要导入题库，或说"导入这份试卷"
-    会发生什么：调用MinerU OCR解析PDF，提取化学题目，审核方程式配平，自动入库
-    下一步：导入完成 → 告知用户导入数量和题库位置；需调 request_approval 确认"""
-    import os, re
-
-    if not pdf_path or not os.path.exists(pdf_path):
-        return json.dumps({"error": f"PDF文件不存在: {pdf_path}"})
-
-    # 1. 尝试调 MinerU
-    mineru_available = False
-    try:
-        from app.services.mineru_service import MinerUClient
-        client = MinerUClient()
-        raw_questions = await client.extract_questions(pdf_path)
-        mineru_available = True
-    except (ImportError, Exception):
-        raw_questions = [{
-            "number": "N/A",
-            "content": f"PDF解析需要 MinerU 服务。请安装 Docker 并启动 MinerU 容器。文件: {pdf_path}",
-            "options": [],
-            "answer": "",
-        }]
-
-    # 2. 化学审核
-    from app.services.chemical_balance import audit_chemical_equation
-
-    reviewed = []
-    passed = 0
-    for q in raw_questions:
-        audit = None
-        content = q.get("content", "") + q.get("question", "")
-        if any(kw in content for kw in ["→", "=", "反应", "方程式"]):
-            eq_match = re.search(r"([\d\w\(\)\+\s→=->]+)", content)
-            if eq_match:
-                audit = audit_chemical_equation(eq_match.group(1))
-
-        reviewed.append({
-            **q,
-            "audit_status": audit["overall_status"] if audit else "no_equation",
-            "audit_detail": audit if audit else None,
-        })
-        if audit is None or audit["overall_status"] == "passed":
-            passed += 1
-
-    # 3. 入库
-    saved = 0
-    if auto_approve:
-        try:
-            from app.services.exam_bank import exam_bank_service
-            saved = exam_bank_service.batch_import(reviewed, source, year)
-        except Exception as e:
-            return json.dumps({
-                "extracted": len(raw_questions),
-                "passed_audit": passed,
-                "saved": 0,
-                "error": f"入库失败: {str(e)}",
-                "mineru_used": mineru_available,
-            }, ensure_ascii=False)
-
-    return json.dumps({
-        "extracted": len(raw_questions),
-        "passed_audit": passed,
-        "saved": saved,
-        "auto_approved": auto_approve,
-        "needs_review": len(reviewed) - passed,
-        "questions": reviewed if not auto_approve else None,
-        "mineru_used": mineru_available,
-    }, ensure_ascii=False)
-
-
-# ── 10. assign_adaptive_practice ──
+# ── 9. assign_adaptive_practice ──
 
 async def assign_adaptive_practice(
     class_id: str = "",
@@ -1068,7 +1063,6 @@ TOOLS = [
     simulate_experiment,
     balance_equation,
     weekly_report,
-    import_exam_paper,
     assign_adaptive_practice,
     save_to_bank,
     list_banks,

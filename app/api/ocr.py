@@ -1,5 +1,5 @@
 """
-F1: OCR答题卡识别 API
+F1: 试卷/答题卡 OCR识别 API
 基于PRD v1.0完整版功能规格
 """
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Body
@@ -148,9 +148,9 @@ class ExamStatsResponse(BaseModel):
 @router.post("/recognize", response_model=OCRResponse)
 async def recognize_answer_sheet(file: UploadFile = File(...)):
     """
-    F1: 答题卡OCR识别
-    输入: 答题卡照片(JPG/PNG/PDF)
-    输出: 学生作答结构化数据
+    F1: 试卷/答题卡 OCR识别
+    输入: 试卷或答题卡照片(JPG/PNG/PDF)
+    输出: 识别文本及结构化数据
     """
     # 验证文件格式
     allowed_types = ["image/jpeg", "image/png", "application/pdf"]
@@ -263,7 +263,7 @@ async def recognize_answer_sheet_base64(request: OCRImageRequest):
 # 别名: /api/ocr (前端期望的路径)
 @router.post("", response_model=OCRResponse)
 async def recognize_answer_sheet_alias(file: UploadFile = File(...)):
-    """F1: 答题卡OCR识别 (别名路径)"""
+    """F1: 试卷识别 (别名路径)"""
     return await recognize_answer_sheet(file)
 
 
@@ -854,7 +854,7 @@ async def parse_document(request: DocumentParseRequest):
 
     支持:
     - PDF文档 → MinerU解析
-    - 图片/答题卡 → OCR优先，失败自动降级到视觉模型
+    - 图片/试卷/答题卡 → OCR优先，失败自动降级到视觉模型
     - 自动模式根据文件类型选择最佳解析方式
 
     请求体:
@@ -936,3 +936,170 @@ async def get_services_status():
 
     service = get_document_parse_service()
     return service.check_services_status()
+
+
+# ═══════════════════════════════════════════════════════════════════
+# OCR Pipeline — upload → preview → import / grade
+# ═══════════════════════════════════════════════════════════════════
+
+import uuid as _uuid
+
+ALLOWED_MIMES = {
+    "image/jpeg", "image/png", "image/bmp", "image/webp", "image/gif",
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+}
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+
+
+@router.post("/upload")
+async def ocr_upload(file: UploadFile = File(...)):
+    """上传文件 → 创建会话 → 预览"""
+    if file.content_type and file.content_type not in ALLOWED_MIMES and not (
+        file.filename and file.filename.lower().endswith(('.doc', '.docx'))
+    ):
+        raise HTTPException(400, f"不支持的文件格式: {file.content_type}")
+
+    file_data = await file.read()
+    if len(file_data) > MAX_FILE_SIZE:
+        raise HTTPException(400, f"文件超过 10MB 限制")
+
+    from app.models.database import get_db, UploadSession
+    from app.services.ocr_service import ocr_service
+
+    session_id = _uuid.uuid4().hex[:16]
+    db = next(get_db())
+    try:
+        db.add(UploadSession(
+            id=session_id,
+            file_data=file_data,
+            file_name=file.filename or "unknown",
+            mime_type=file.content_type or "application/octet-stream",
+            status="previewing",
+        ))
+        db.commit()
+    finally:
+        db.close()
+
+    # Preview
+    result = await ocr_service.recognize(file_data, file.content_type or "")
+
+    # Update session
+    db = next(get_db())
+    try:
+        from sqlalchemy import update as sql_update
+        db.execute(
+            sql_update(UploadSession)
+            .where(UploadSession.id == session_id)
+            .values(
+                status="ready",
+                preview_text=result.get("preview_text", ""),
+                formula_result=json.dumps(result.get("formula_result", []), ensure_ascii=False),
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    return {
+        "success": result.get("success", False),
+        "upload_id": session_id,
+        "preview_text": result.get("preview_text", "")[:500],
+        "formula_count": len(result.get("formula_result", [])),
+        "actions": [
+            {"id": "import", "label": "导入题库"},
+            {"id": "grade", "label": "批改判卷"},
+            {"id": "search", "label": "搜题解析"},
+        ],
+    }
+
+
+@router.get("/tasks/{upload_id}/status")
+async def ocr_task_status(upload_id: str):
+    """查询异步任务状态"""
+    from app.models.database import get_db, UploadSession
+
+    db = next(get_db())
+    try:
+        session = db.query(UploadSession).filter(UploadSession.id == upload_id).first()
+        if not session:
+            raise HTTPException(404, "任务不存在")
+
+        return {
+            "upload_id": upload_id,
+            "status": session.status,
+            "progress": {
+                "current": session.pages_completed or 0,
+                "total": session.page_count or 0,
+            },
+            "error": session.error_msg,
+            "degraded": session.degraded,
+            "result": json.loads(session.result_json) if session.result_json else None,
+        }
+    finally:
+        db.close()
+
+
+@router.post("/tasks/{upload_id}/import")
+async def ocr_task_import(upload_id: str):
+    """确认导入试卷 → 触发后台导入"""
+    from app.models.database import get_db, UploadSession
+
+    db = next(get_db())
+    try:
+        session = db.query(UploadSession).filter(UploadSession.id == upload_id).first()
+        if not session:
+            raise HTTPException(404, "任务不存在")
+        if session.status not in ("ready", "error"):
+            raise HTTPException(400, f"当前状态 {session.status} 不允许导入")
+    finally:
+        db.close()
+
+    # Trigger import in background
+    from app.services.ocr_service import ocr_service
+    import asyncio
+    asyncio.create_task(ocr_service.import_exam(upload_id))
+
+    return {"upload_id": upload_id, "status": "importing"}
+
+
+@router.post("/tasks/{upload_id}/grade")
+async def ocr_task_grade(upload_id: str, exam_id: str = "", class_id: str = ""):
+    """确认批改 → 触发后台判卷"""
+    from app.models.database import get_db, UploadSession
+
+    db = next(get_db())
+    try:
+        session = db.query(UploadSession).filter(UploadSession.id == upload_id).first()
+        if not session:
+            raise HTTPException(404, "任务不存在")
+        if session.status not in ("ready", "error"):
+            raise HTTPException(400, f"当前状态 {session.status} 不允许批改")
+        file_data = session.file_data
+    finally:
+        db.close()
+
+    from app.services.ocr_service import ocr_service
+    import asyncio
+    asyncio.create_task(ocr_service.grade(
+        file_data, exam_id=exam_id, class_id=class_id))
+
+    return {"upload_id": upload_id, "status": "grading"}
+
+
+@router.post("/tasks/{upload_id}/cancel")
+async def ocr_task_cancel(upload_id: str):
+    """取消任务"""
+    from app.models.database import get_db, UploadSession
+
+    db = next(get_db())
+    try:
+        session = db.query(UploadSession).filter(UploadSession.id == upload_id).first()
+        if not session:
+            raise HTTPException(404, "任务不存在")
+        session.status = "discarded"
+        db.commit()
+        return {"upload_id": upload_id, "status": "discarded"}
+    finally:
+        db.close()

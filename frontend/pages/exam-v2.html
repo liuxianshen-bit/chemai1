@@ -3,6 +3,9 @@
 <script src="https://cdn.tailwindcss.com?plugins=forms"></script>
 <script>tailwind.config={darkMode:"class",theme:{extend:{colors:{ink:"#1a1a1a",paper:"#faf7f0",paperWarm:"#f5efe0",inkLight:"#555",congoRed:"#b43c28",methylGreen:"#2c6e49"},fontFamily:{sans:["'Noto Sans SC'","'PingFang SC'","'Microsoft YaHei'","'Segoe UI'","system-ui","sans-serif"],mono:["'Cascadia Code'","'Consolas'","'Cascadia Code','Consolas','JetBrains Mono'","monospace"],serif:["'Noto Serif SC'","'SimSun'","'Georgia'","serif"]}}}}</script>
 <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
 <style>
 body{font-family:'PingFang SC','Microsoft YaHei','Segoe UI',system-ui,sans-serif;background:#f7f4ed;color:#1a1a1a;margin:0}
 /* 按钮系统 — 学术风格 */
@@ -200,6 +203,7 @@ select.input{-webkit-appearance:none;border-radius:0}
       </div>
       <template v-if="q._editing"><div class="edit-form"><textarea v-model="q.content" rows="3"></textarea><div style="display:flex;gap:6px"><input v-model="q.answer" placeholder="答案" style="flex:1"><input v-model="q._kpsStr" placeholder="知识点" style="flex:1"></div><div style="margin-top:6px"><button class="btn-save" style="margin-right:6px" @click="q._editing=false">完成</button><button class="btn btn-sm" @click="q._editing=false">取消</button></div></div></template>
       <template v-else>
+        <img v-if="q.page_image" :src="'/static/figures/' + encodeURIComponent(q.region||'') + '/' + q.year + '/' + q.page_image" style="max-width:100%;border-radius:6px;margin-bottom:8px;border:1px solid #eee">
         <div class="qcard-body" v-html="renderChem(q.content)"></div>
         <div v-if="q.options&&q.options.length" style="font-size:12px;color:#555;margin-top:4px"><span v-for="o in q.options" style="margin-right:10px">{{o}}</span></div>
         <div class="qcard-meta"><span class="tag" style="background:#e0f2f1;color:#2c6e49">答案: {{q.answer}}</span><span v-if="q.difficulty" class="tag" :class="'tag-'+q.difficulty">{{q.difficulty}}</span><span v-for="kp in (q.knowledge_points||[])" class="tag tag-medium">{{kp}}</span></div>
@@ -307,12 +311,12 @@ select.input{-webkit-appearance:none;border-radius:0}
           </div>
         </div>
       </div>
-      <div style="color:#999;font-size:12px;text-align:center;padding:20px">共 {{histTotalPapers||0}} 套试卷，{{histTotal||250}} 道真题</div>
+      <div style="color:#999;font-size:12px;text-align:center;padding:20px">共 {{histTotalPapers||0}} 套试卷，{{histTotal||0}} 道真题</div>
     </div>
 
     <!-- Paper detail / search results mode -->
     <div v-if="historyMode==='paper'||historyMode==='search'">
-      <div v-if="histResults.length===0&&historyMode==='search'" class="empty-state"><p>输入关键词搜索历年真题（共 {{histTotal||250}} 题）</p></div>
+      <div v-if="histResults.length===0&&historyMode==='search'" class="empty-state"><p>输入关键词搜索历年真题（共 {{histTotal||0}} 题）</p></div>
       <div v-for="(hq,i) in histResults" class="card" style="margin-bottom:6px;border-left:3px solid transparent" :style="{borderLeftColor:hq._sel?'#b43c28':'transparent'}" @click="hq._sel=!hq._sel">
         <div style="display:flex;align-items:flex-start;gap:10px">
           <input type="checkbox" :checked="hq._sel" style="margin-top:4px" @click.stop="hq._sel=!hq._sel">
@@ -375,7 +379,8 @@ select.input{-webkit-appearance:none;border-radius:0}
           <div v-for="(vq,vi) in modal._vbQuestions" class="card" style="padding:10px 14px;margin-bottom:4px;cursor:pointer;border-left:3px solid transparent;transition:.1s" :style="{borderLeftColor:vq._sel?'#b43c28':'transparent'}" @click="vq._sel=!vq._sel">
             <div style="display:flex;align-items:flex-start;justify-content:space-between">
               <div style="flex:1">
-                <div style="font-weight:600;font-size:13px;margin-bottom:2px">{{vi+1}}. <span v-html="renderChem(vq.content)"></span></div>
+                <img v-if="vq.page_image" :src="'/static/figures/'+encodeURIComponent(vq.region||'')+'/'+vq.year+'/'+vq.page_image" style="width:80px;height:55px;object-fit:cover;border-radius:4px;margin-bottom:6px;border:1px solid #eee;float:left;margin-right:10px">
+                <div style="font-weight:600;font-size:13px;margin-bottom:2px;overflow:hidden">{{vi+1}}. <span v-html="renderChem(vq.content)"></span></div>
                 <div v-if="vq.options&&vq.options.length&&(vq.options||[]).filter(Boolean).length" style="font-size:11px;color:#555;margin:2px 0"><span v-for="o in vq.options" style="margin-right:8px" v-html="renderChem(o)"></span></div>
                 <div style="margin-top:3px"><span v-for="kp in (vq.knowledge_points||[])" class="tag tag-medium">{{kp}}</span><span class="tag" style="background:#e0f2f1;color:#2c6e49;margin-left:4px">{{vq.difficulty||'medium'}}</span></div>
               </div>
@@ -469,7 +474,7 @@ data:function(){return{
   // Variant
   useVariant:false,variantQid:'',variantLabel:'',
   // History
-  histSearch:'',histYear:'',histResults:[],histTotal:250,historyMode:'dir',histPapers:[],histTotalPapers:0,
+  histSearch:'',histYear:'',histResults:[],histTotal:0,historyMode:'dir',histPapers:[],histTotalPapers:0,
   // Exams
   examName:'',examClass:'',examList:[],classes:[],
   // Modal
@@ -494,7 +499,7 @@ mounted:function(){
     if(d.success){
       self.histPapers=(d.data&&d.data.groups)||[]
       self.histTotalPapers=(d.data&&d.data.total_papers)||0
-      self.histTotal=(d.data&&d.data.total_questions)||250
+      self.histTotal=(d.data&&d.data.total_questions)||0
     }
   }).catch(function(){})
   // Agent page driver bridge
@@ -620,7 +625,7 @@ methods:{
     title=title||'提示'
     return this.modalShow({title:title,message:msg,type:'confirm',showCancel:false,confirmText:'知道啦'})
   },
-  renderChem:function(t){return window.renderChemistry?window.renderChemistry(t):(t||'')},
+  renderChem:function(t){if(!t)return'';try{var idx=0,blocks=[],h=t;h=h.replace(/\$\$([\s\S]*?)\$\$/g,function(m,e){var k='\uE000LATEX'+idx+'\uE001';blocks.push({key:k,tex:e,display:true});idx++;return k});h=h.replace(/\$(?!\$)([\s\S]*?)\$/g,function(m,e){var k='\uE000LATEX'+idx+'\uE001';blocks.push({key:k,tex:e,display:false});idx++;return k});h=h.replace(/\$/g,'<span>$</span>');h=marked.parse(h,{breaks:true,gfm:true});blocks.forEach(function(b){try{var ren=katex.renderToString(b.tex,{displayMode:b.display,throwOnError:false});h=h.replace(b.key,ren)}catch(_){h=h.replace(b.key,b.tex)}});return h}catch(e){return'<p>'+t+'</p>'}},
   // ── Variant ──
   // ── Variant browser ──
   openVariantBrowser:function(){
@@ -813,7 +818,7 @@ methods:{
       if(d.success){
         self.histPapers=(d.data&&d.data.groups)||[]
         self.histTotalPapers=(d.data&&d.data.total_papers)||0
-        self.histTotal=(d.data&&d.data.total_questions)||250
+        self.histTotal=(d.data&&d.data.total_questions)||0
       }
     })
   },
@@ -871,7 +876,7 @@ methods:{
     this.modalShow({title:'预览: '+e.name,type:'preview',showConfirm:false,cancelText:'关闭',previewLoading:true,previewQuestions:[]})
     api('/api/exam/'+e.record_id+'/questions').then(function(d){
       self.modal.previewLoading=false
-      self.modal.previewQuestions=d.questions||[]
+      self.modal.previewQuestions=(d.data&&d.data.questions)||d.questions||[]
     }).catch(function(){self.modal.previewLoading=false;self.modal.previewQuestions=[]})
   },
   manageExam:function(e){
@@ -882,7 +887,7 @@ methods:{
     this.modalShow({title:e.name,type:'manage',showConfirm:false,cancelText:'关闭',previewLoading:true,previewQuestions:[]})
     api('/api/exam/'+e.record_id+'/questions').then(function(d){
       self.modal.previewLoading=false
-      self.modal.previewQuestions=d.questions||[]
+      self.modal.previewQuestions=(d.data&&d.data.questions)||d.questions||[]
     }).catch(function(){self.modal.previewLoading=false;self.modal.previewQuestions=[]})
   },
   removeExamQuestion:function(qid,idx){

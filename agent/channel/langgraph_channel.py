@@ -20,13 +20,13 @@ from agent.memory import MemoryStack
 _agent_cache: dict[str, object] = {}
 
 
-def _get_or_create_agent(persona: str = "tutor", provider: str = "deepseek",
+async def _get_or_create_agent(persona: str = "tutor", provider: str = "deepseek",
                         student_profile=None, intent_hints=""):
     """Get or create multi-agent coordinator. Returns (graph, None) —
     last_component/last_route are read from graph state, not from guard_state."""
     from agent.langgraph_agent import create_chemai_agent
 
-    agent, _ = create_chemai_agent(
+    agent, _ = await create_chemai_agent(
         persona=persona, provider=provider,
         student_profile=student_profile, intent_hints=intent_hints,
     )
@@ -85,12 +85,19 @@ async def agent_chat_langgraph_stream(request: ChatRequest):
         return StreamingResponse(_nav_gen(), media_type="text/event-stream",
                                  headers={"Cache-Control": "no-cache", "Connection": "keep-alive"})
 
-    # Build hints from classifier
+    # Phase 3: extract pre-routed agent from Gateway classifier
+    pre_routed_agent = None
+    suggested_tools = None
+    if intent and intent.target_agent and intent.confidence == "high":
+        pre_routed_agent = intent.target_agent
+        suggested_tools = intent.tools
+
+    # Build hints for sub-agent (used regardless of routing)
     hints = ""
     if tool_names:
         hints = f"推荐工具: {', '.join(tool_names[:5])}\n用户消息: {request.message}\n使用推荐工具或其他工具，自行判断。"
 
-    agent, _ = _get_or_create_agent(
+    agent, _ = await _get_or_create_agent(
         request.persona, request.provider,
         student_profile=deps.student_profile, intent_hints=hints,
     )
@@ -106,7 +113,9 @@ async def agent_chat_langgraph_stream(request: ChatRequest):
 
             try:
                 async for event in agent.astream_events(
-                    {"messages": [{"role": "user", "content": request.message}]},
+                    {"messages": [{"role": "user", "content": request.message}],
+                     "pre_routed_agent": pre_routed_agent,
+                     "suggested_tools": suggested_tools or []},
                     config,
                     version="v2",
                 ):
@@ -125,13 +134,13 @@ async def agent_chat_langgraph_stream(request: ChatRequest):
                 return
 
             # Check for interrupt via state inspection (backup path)
-            state = agent.get_state(config)
+            state = await agent.aget_state(config)
             if state and state.next and "__interrupt__" in str(state.next):
                 yield f"data: {json.dumps({'type': 'phase', 'phase': 'awaiting_approval'}, ensure_ascii=False)}\n\n"
                 return
 
             # Finalize: route events + done (uses state values, not guard_state)
-            final_state = agent.get_state(config)
+            final_state = await agent.aget_state(config)
             state_values = final_state.values if final_state else {}
             for result in adapter.finalize(
                 route=state_values.get("last_route"),
@@ -193,7 +202,14 @@ async def agent_chat_langgraph(request: ChatRequest):
     if tool_names:
         hints = f"推荐工具: {', '.join(tool_names[:5])}\n用户消息: {request.message}\n使用推荐工具或其他工具，自行判断。"
 
-    agent, _ = _get_or_create_agent(
+    # Phase 3: pre-routed agent from Gateway
+    pre_routed_agent2 = None
+    suggested_tools2 = None
+    if intent and intent.target_agent and intent.confidence == "high":
+        pre_routed_agent2 = intent.target_agent
+        suggested_tools2 = intent.tools
+
+    agent, _ = await _get_or_create_agent(
         request.persona, request.provider,
         student_profile=deps.student_profile, intent_hints=hints,
     )
@@ -203,7 +219,9 @@ async def agent_chat_langgraph(request: ChatRequest):
 
     try:
         result = await agent.ainvoke(
-            {"messages": [{"role": "user", "content": request.message}]},
+            {"messages": [{"role": "user", "content": request.message}],
+             "pre_routed_agent": pre_routed_agent2,
+             "suggested_tools": suggested_tools2 or []},
             config,
         )
     except GraphInterrupt:
@@ -219,7 +237,7 @@ async def agent_chat_langgraph(request: ChatRequest):
             break
 
     # Route from state (not from guard_state — guard_state is per sub-agent)
-    final_state = agent.get_state(config)
+    final_state = await agent.aget_state(config)
     state_values = final_state.values if final_state else {}
     response = {"content": text}
     last_route = state_values.get("last_route") if state_values else None
@@ -247,7 +265,7 @@ async def agent_chat_langgraph_resume(request: ChatRequest):
     cid = request.conversation_id or "default"
     user_response = request.message or ""
 
-    agent, _ = _get_or_create_agent(request.persona, request.provider)
+    agent, _ = await _get_or_create_agent(request.persona, request.provider)
     adapter = LangGraphSSEAdapter()
     config = {"configurable": {"thread_id": cid}, "recursion_limit": 12}
     full_reply = []
@@ -274,7 +292,7 @@ async def agent_chat_langgraph_resume(request: ChatRequest):
                 yield f"data: {json.dumps({'type': 'phase', 'phase': 'awaiting_approval'}, ensure_ascii=False)}\n\n"
                 return
 
-            final_state = agent.get_state(config)
+            final_state = await agent.aget_state(config)
             state_values = final_state.values if final_state else {}
             for result in adapter.finalize(
                 route=state_values.get("last_route"),
@@ -307,3 +325,88 @@ async def agent_chat_langgraph_reset(conversation_id: str):
         del _conversations[conversation_id]
         return {"success": True, "message": "对话已重置"}
     return {"success": False, "message": "对话不存在"}
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Agent 文件上传
+# ═══════════════════════════════════════════════════════════════════
+
+import uuid as _uuid
+from fastapi import UploadFile, File, HTTPException
+
+ALLOWED_MIMES = {
+    "image/jpeg", "image/png", "image/bmp", "image/webp", "image/gif",
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+}
+MAX_FILE_SIZE = 10 * 1024 * 1024
+
+
+@router.post("/upload")
+async def agent_upload(file: UploadFile = File(...)):
+    """Agent 对话中上传文件 → 预览 → 返回操作建议"""
+    from dotenv import load_dotenv; load_dotenv()
+    mime = file.content_type or ""
+    if mime not in ALLOWED_MIMES:
+        if not (file.filename or "").lower().endswith(('.doc', '.docx', '.pdf', '.png', '.jpg', '.jpeg')):
+            raise HTTPException(400, f"不支持的文件格式: {mime}")
+
+    file_data = await file.read()
+    if len(file_data) > MAX_FILE_SIZE:
+        raise HTTPException(400, "文件超过 10MB 限制")
+
+    # Save session
+    from app.models.database import get_db, UploadSession
+    session_id = _uuid.uuid4().hex[:16]
+    db = next(get_db())
+    try:
+        db.add(UploadSession(
+            id=session_id,
+            file_data=file_data,
+            file_name=file.filename or "unknown",
+            mime_type=mime,
+            status="previewing",
+        ))
+        db.commit()
+    finally:
+        db.close()
+
+    # Preview
+    from app.services.ocr_service import ocr_service
+    import logging as _log
+    _log.getLogger(__name__).info(f'agent_upload: mime={mime}, size={len(file_data)}, fn={file.filename}')
+    result = await ocr_service.recognize(file_data, mime)
+
+    # Update session
+    db = next(get_db())
+    try:
+        from sqlalchemy import update as sql_update
+        db.execute(
+            sql_update(UploadSession)
+            .where(UploadSession.id == session_id)
+            .values(
+                status="ready",
+                preview_text=result.get("preview_text", ""),
+                formula_result=json.dumps(result.get("formula_result", []), ensure_ascii=False),
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    preview_text = (result.get("preview_text", "") or "")
+    if not preview_text and not result.get("success"):
+        err = result.get("error", "unknown")
+        logger.warning("agent_upload OCR failed: %s", err)
+    return {
+        "upload_id": session_id,
+        "file_name": file.filename or "unknown",
+        "preview_text": preview_text[:500] if preview_text else "",
+        "error": result.get("error") if not result.get("success") else None,
+        "actions": [
+            {"id": "import", "label": "导入题库"},
+            {"id": "grade", "label": "批改判卷"},
+            {"id": "search", "label": "搜题解析"},
+        ],
+    }

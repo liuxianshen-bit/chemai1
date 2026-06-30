@@ -36,6 +36,12 @@ class Settings(BaseSettings):
     # 智谱AI OCR配置
     ZHIPU_API_KEY: str = ""  # 需在环境变量设置
 
+    # 百度AI OCR配置（教育产品识别）
+    BAIDU_OCR_API_KEY: str = ""     # API Key
+    BAIDU_OCR_SECRET_KEY: str = ""  # Secret Key
+    BAIDU_OCR_TOKEN: str = ""       # 运行时缓存的 access token
+    BAIDU_OCR_TOKEN_EXPIRES: float = 0  # token 过期时间戳
+
     # Chroma向量数据库
     CHROMA_DB_PATH: str = "./data/chromadb"
 

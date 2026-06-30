@@ -249,6 +249,41 @@
   }
 
   // ─── 全局发送入口 ───
+  // ─── 文件上传 ───
+  window.handleFileUpload = function (event) {
+    var file = event.target.files[0]
+    if (!file) return
+    if (file.size > 10 * 1024 * 1024) { alert('文件不能超过 10MB'); return }
+
+    var fd = new FormData(); fd.append('file', file)
+    addMsg('user', '📎 上传文件: ' + file.name)
+
+    fetch('/api/agent/upload', { method: 'POST', body: fd })
+      .then(function(r) { return r.json() })
+      .then(function(d) {
+        var html = '<div class="upload-card" style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:12px;margin:8px 0">'
+        html += '<p style="font-weight:600;margin:0 0 8px">📄 ' + (d.file_name || '文件') + '</p>'
+        html += '<p style="font-size:13px;color:#555;margin:0 0 10px">' + (d.preview_text || '').substring(0, 200) + '</p>'
+        html += '<div style="display:flex;gap:6px">'
+        ;(d.actions || []).forEach(function(a) {
+          html += '<button onclick="confirmUploadAction(\'' + d.upload_id + '\',\'' + a.id + '\')" '
+          html += 'style="padding:4px 14px;border:1px solid #ccc;border-radius:4px;background:white;cursor:pointer;font-size:13px">' + a.label + '</button>'
+        })
+        html += '</div></div>'
+        addMsg('ai', html)
+        event.target.value = ''  // reset file input
+      })
+      .catch(function(e) {
+        addMsg('ai', '<span style="color:#b43c28">上传失败: ' + e.message + '</span>')
+      })
+  }
+
+  window.confirmUploadAction = function(uploadId, action) {
+    var actionLabels = { import: '导入题库', grade: '批改判卷', search: '搜题解析' }
+    var msg = actionLabels[action] + ' [upload_id=' + uploadId + ']'
+    sendMessage(msg)
+  }
+
   window.sendMessage = function (text) {
     if (isSending) return
     sessionStorage.removeItem('chemai_navigate')  // 清除旧版跳转残留
@@ -725,7 +760,7 @@
   }
 
   function scrollBottom() {
-    var el = document.getElementById('chat-messages')
+    var el = document.querySelector('.chat-area') || document.getElementById('chat-messages')
     if (el) { el.scrollTop = el.scrollHeight }
   }
 
@@ -913,14 +948,26 @@
       .replace(/`([^`]+)`/g, '<code>$1</code>')
   }
 
-  // 保留 renderChemistry 作为外部 API
+  // KaTeX + Markdown 渲染
   window.renderChemistry = function(text) {
     if (!text) return ''
-    if (typeof katex === 'undefined') return escHtml(text)
-    return text.replace(/\\ce\{([^}]+)\}/g, function(m, formula) {
-      try { return katex.renderToString(formula, {throwOnError:false, trust:true, strict:false}) }
-      catch(e) { return '<code>'+escHtml(formula)+'</code>' }
-    })
+    if (typeof katex === 'undefined' || typeof marked === 'undefined') return escHtml(text)
+    try {
+      var idx=0, blocks=[], h=text
+      // Protect paired $$...$$
+      h=h.replace(/\$\$([\s\S]*?)\$\$/g,function(m,e){var k='\uE000LATEX'+idx+'\uE001';blocks.push({key:k,tex:e,display:true});idx++;return k})
+      // Protect paired $...$
+      h=h.replace(/\$(?!\$)([\s\S]*?)\$/g,function(m,e){if(e.length<300){var k='\uE000LATEX'+idx+'\uE001';blocks.push({key:k,tex:e,display:false});idx++;return k}return m})
+      // Escape any remaining unpaired $ signs
+      h=h.replace(/\$/g,'<span>$</span>')
+      // Markdown → HTML
+      h=marked.parse(h,{breaks:true,gfm:true})
+      // Render LaTeX blocks
+      blocks.forEach(function(b){try{var ren=katex.renderToString(b.tex,{displayMode:b.display,throwOnError:false,trust:true,strict:false});h=h.replace(b.key,ren)}catch(_){h=h.replace(b.key,b.tex)}})
+      // Render \ce{} blocks
+      h=h.replace(/\\ce\{([^}]+)\}/g,function(m,f){try{return katex.renderToString(f,{throwOnError:false,trust:true,strict:false})}catch(_){return m}})
+      return h
+    } catch(e) { return text }
   }
 
   // ─── Inline Exam Workbench Panel (Full Interactive) ───
@@ -950,7 +997,7 @@
       '<div style="margin-bottom:12px"><div style="font-size:12px;color:#888;margin-bottom:4px">题型与数量</div><div class="inline-exam-types"></div></div>'+
       '<div style="margin-bottom:12px"><span style="font-size:12px;color:#888">难度</span> <select class="inline-exam-diff" style="padding:4px 8px;border:1px solid #ddd;border-radius:4px;font-size:13px"><option value="easy"'+(preDiff==='easy'?' selected':'')+'>容易</option><option value="medium"'+(preDiff==='medium'?' selected':'')+'>中等</option><option value="hard"'+(preDiff==='hard'?' selected':'')+'>偏难</option></select></div>'+
       '<div style="margin-bottom:12px;border-top:1px solid #eee;padding-top:10px"><div style="font-size:12px;color:#888;margin-bottom:4px">知识点 <span style="font-weight:400">（搜索并点击选中）</span></div><div class="inline-exam-kps-active" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px;min-height:20px"></div><input class="inline-exam-kp-search" placeholder="搜索知识点..." style="width:100%;padding:6px 10px;border:1px solid #ddd;border-radius:4px;font-size:13px;box-sizing:border-box;margin-bottom:6px"><div class="inline-exam-kps-list" style="display:flex;flex-wrap:wrap;gap:4px;max-height:100px;overflow-y:auto"></div></div>'+
-      '<div style="margin-bottom:12px;border-top:1px solid #eee;padding-top:10px"><label style="font-size:13px;cursor:pointer"><input type="checkbox" class="inline-exam-use-variant" style="margin-right:4px"'+(preVariant?' checked':'')+'>基于真题生成变种题</label><div class="inline-exam-variant-info" style="margin-top:4px;font-size:12px;color:#b43c28">'+(preVariant?'当前蓝本: '+escHtml(preVariant):'')+'</div><button class="inline-exam-btn sm inline-exam-variant-browse" style="margin-top:4px;display:'+(preVariant?'inline-block':'none')+'">浏览真题蓝本</button></div>'+
+      '<div style="margin-bottom:12px;border-top:1px solid #eee;padding-top:10px"><label style="font-size:13px;cursor:pointer"><input type="checkbox" class="inline-exam-use-variant" style="margin-right:4px"'+(preVariant?' checked':'')+'>基于真题生成变种题</label><div class="inline-exam-variant-info" style="margin-top:4px;font-size:12px;color:#b43c28">'+(preVariant?'当前蓝本: '+escHtml(preVariant):'')+'</div><div style="display:flex;gap:6px;align-items:center;margin-top:4px"><button class="inline-exam-btn sm inline-exam-variant-browse" style="display:'+(preVariant?'inline-block':'none')+'">浏览真题蓝本</button><button class="inline-exam-btn sm inline-exam-variant-clear" style="display:none;color:#999;border-color:#ddd">✕ 清除蓝本</button></div></div>'+
       '<div style="margin-bottom:12px;border-top:1px solid #eee;padding-top:10px"><div style="font-size:12px;color:#888;margin-bottom:4px">保存到</div><select class="inline-exam-folder" style="padding:4px 8px;border:1px solid #ddd;border-radius:4px;font-size:13px;min-width:200px"><option value="">自动创建</option></select><button class="inline-exam-btn sm inline-exam-new-folder" style="margin-left:6px">+ 新建</button></div>'+
       '<div class="inline-exam-actions" style="margin-bottom:10px"><button class="inline-exam-btn primary inline-exam-gen-btn">AI 出题</button></div>'+
       '<div class="inline-exam-questions" style="display:none"></div><div class="inline-exam-status" style="font-size:13px;color:#888"></div></div>'
@@ -962,6 +1009,7 @@
     if (!panel) return
 
     panel._preKps = preKps; panel._variantSource = preVariant; panel._variantQid = ''
+    if(preVariant) panel.querySelector('.inline-exam-variant-clear').style.display = 'inline-block'
 
     // Types
     var typesContainer = panel.querySelector('.inline-exam-types')
@@ -1077,18 +1125,45 @@
       })
     }
 
-    // Variant
+    // Variant — clear selection
+    panel.querySelector('.inline-exam-variant-clear').addEventListener('click',function(){
+      panel._variantQid = ''; panel._variantSource = ''
+      panel.querySelector('.inline-exam-variant-info').textContent = ''
+      panel.querySelector('.inline-exam-variant-clear').style.display = 'none'
+    })
+
+    // Variant — multi-select with toggle
+    panel._selQs = panel._selQs || []
     panel.querySelector('.inline-exam-use-variant').addEventListener('change',function(){panel.querySelector('.inline-exam-variant-browse').style.display=this.checked?'inline-block':'none'})
     panel.querySelector('.inline-exam-variant-browse').addEventListener('click',function(){
       var ov=document.createElement('div'); ov.className='inline-exam-vb-overlay'; ov.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.3);z-index:9999;display:flex;align-items:center;justify-content:center'
-      ov.innerHTML='<div style="background:#fff;border-radius:8px;padding:16px;max-width:600px;max-height:80vh;overflow-y:auto;width:90%"><div style="font-weight:700;margin-bottom:10px">选择真题蓝本</div><div class="ivb-content" style="font-size:13px">加载中...</div><button style="margin-top:10px;padding:4px 16px;border:1px solid #ddd;border-radius:4px;cursor:pointer;float:right">关闭</button></div>'
-      document.body.appendChild(ov); ov.querySelector('button').addEventListener('click',function(){document.body.removeChild(ov)}); ov.addEventListener('click',function(e){if(e.target===ov)document.body.removeChild(ov)})
+      ov.innerHTML='<div style="background:#fff;border-radius:8px;padding:16px;max-width:650px;max-height:85vh;display:flex;flex-direction:column;width:92%"><div style="font-weight:700;margin-bottom:6px">选择真题蓝本 <span class="ivb-sel-count" style="color:#b43c28;font-size:12px;font-weight:400"></span></div><div class="ivb-content" style="font-size:13px;flex:1;overflow-y:auto">加载中...</div><div style="margin-top:10px;display:flex;justify-content:flex-end;gap:8px"><button class="ivb-clear-btn" style="padding:4px 12px;border:1px solid #ddd;border-radius:4px;cursor:pointer;font-size:12px">清除选择</button><button class="ivb-close-btn" style="padding:4px 16px;border:1px solid #ddd;border-radius:4px;cursor:pointer;font-size:12px">取消</button><button class="ivb-confirm-btn" style="padding:4px 20px;background:#b43c28;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px">确认蓝本</button></div></div>'
+      document.body.appendChild(ov)
+      var selQs = []
+      function updateSelCount(){ var el=ov.querySelector('.ivb-sel-count'); el.textContent=selQs.length?'已选 '+selQs.length+' 题':'' }
+      ov.querySelector('.ivb-close-btn').addEventListener('click',function(){document.body.removeChild(ov)})
+      ov.addEventListener('click',function(e){if(e.target===ov)document.body.removeChild(ov)})
+      ov.querySelector('.ivb-clear-btn').addEventListener('click',function(){selQs=[];updateSelCount();ov.querySelectorAll('.ivb-q').forEach(function(e){e.classList.remove('ivb-q-sel');e.style.borderLeft='1px solid #eee';e.style.background=''})})
+      ov.querySelector('.ivb-confirm-btn').addEventListener('click',function(){
+        if(!selQs.length) return
+        panel._variantQid = selQs[0].qid
+        panel._variantSource = selQs.map(function(s){return s.label}).join('、')
+        panel.querySelector('.inline-exam-variant-info').textContent = '当前蓝本: ' + panel._variantSource
+        if(selQs.length>1) panel.querySelector('.inline-exam-variant-info').textContent += ' ('+selQs.length+'题)'
+        panel.querySelector('.inline-exam-variant-clear').style.display = selQs.length?'inline-block':'none'
+        document.body.removeChild(ov)
+      })
       fetch('/api/exam-bank/papers').then(function(r){return r.json()}).then(function(data){var groups=(data.data&&data.data.groups)||data.groups||[]; var ps=[]; groups.forEach(function(g){var r=g.region; (g.years||[]).forEach(function(y){ (y.papers||[]).forEach(function(p){ p.region=r; p.year=y.year; ps.push(p) }) }) }); var c=ov.querySelector('.ivb-content')
-        c.innerHTML='<div style="font-size:12px;color:#888;margin-bottom:8px">点击试卷浏览题目，再点击题目选为蓝本</div>'+ps.slice(0,50).map(function(p){return '<div class="ivb-paper" style="padding:6px 8px;margin:2px 0;border:1px solid #eee;border-radius:4px;cursor:pointer;font-size:12px" data-r="'+escHtml(p.region||'')+'" data-y="'+(p.year||'')+'">'+escHtml(p.source||p.name||'')+' · '+(p.year||'')+' ('+(p.question_count||p.total||'?')+'题)</div>'}).join('')
+        c.innerHTML='<div style="font-size:12px;color:#888;margin-bottom:8px">点击试卷浏览题目</div>'+ps.slice(0,50).map(function(p){return '<div class="ivb-paper" style="padding:6px 8px;margin:2px 0;border:1px solid #eee;border-radius:4px;cursor:pointer;font-size:12px" data-r="'+escHtml(p.region||'')+'" data-y="'+(p.year||'')+'">'+escHtml(p.source||p.name||'')+' · '+(p.year||'')+' ('+(p.question_count||p.total||'?')+'题)</div>'}).join('')
         c.querySelectorAll('.ivb-paper').forEach(function(el){el.addEventListener('click',function(){c.innerHTML='加载中...'
           fetch('/api/exam-bank/historical?region='+encodeURIComponent(el.dataset.r)+'&year='+encodeURIComponent(el.dataset.y)+'&page_size=30').then(function(r){return r.json()}).then(function(qd){var qs=(qd.data&&qd.data.questions)||qd.questions||[]
-            c.innerHTML='<div style="font-size:12px;color:#888;margin-bottom:8px">点击题目选为蓝本</div>'+qs.map(function(q,i){return '<div class="ivb-q" data-qid="'+(q.exam_id||q.question_id||'')+'" style="padding:6px 8px;margin:2px 0;border:1px solid #eee;border-radius:4px;cursor:pointer;font-size:12px"><b>#'+(i+1)+'</b> '+escHtml((q.content||'').substring(0,80))+'</div>'}).join('')
-            c.querySelectorAll('.ivb-q').forEach(function(qel){qel.addEventListener('click',function(){panel._variantQid=qel.dataset.qid;panel._variantSource=(el.dataset.r||'')+' · #'+(Array.from(qel.parentNode.children).indexOf(qel)+1);panel.querySelector('.inline-exam-variant-info').textContent='当前蓝本: '+panel._variantSource;document.body.removeChild(ov)})})
+            c.innerHTML='<div style="font-size:12px;color:#888;margin-bottom:8px">点击题目多选，再次点击取消</div>'+qs.map(function(q,i){var imgHtml=''; if(q.page_image){var pi=q.page_image; if(!pi.startsWith('/'))pi='/static/figures/'+encodeURIComponent(q.region||'')+'/'+(q.year||'')+'/'+pi; imgHtml='<img src=\"'+pi+'\" style=\"width:50px;height:35px;object-fit:cover;border-radius:3px;margin-right:6px;float:left;border:1px solid #eee\">'} var rendered=(typeof renderChemistry==='function'?renderChemistry(q.content||''):escHtml(q.content||'')); var stripped=rendered.replace(/<[^>]*>/g,'').substring(0,100); return '<div class=\"ivb-q\" data-qid=\"'+(q.exam_id||q.question_id||'')+'\" data-label=\"'+(el.dataset.r||'')+' #'+(i+1)+'\" style=\"padding:6px 8px;margin:2px 0;border:1px solid #eee;border-radius:4px;cursor:pointer;font-size:12px;overflow:hidden;transition:.15s\">'+imgHtml+'<b>#'+(i+1)+'</b> '+stripped+'<div style=\"clear:both\"></div></div>'}).join('')
+            c.querySelectorAll('.ivb-q').forEach(function(qel){qel.addEventListener('click',function(){
+              var qid=qel.dataset.qid,label=qel.dataset.label,idx=selQs.findIndex(function(s){return s.qid===qid})
+              if(idx>=0){ selQs.splice(idx,1); qel.classList.remove('ivb-q-sel'); qel.style.borderLeft='1px solid #eee'; qel.style.background='' }
+              else{ selQs.push({qid:qid,label:label}); qel.classList.add('ivb-q-sel'); qel.style.borderLeft='3px solid #b43c28'; qel.style.background='rgba(180,60,40,.04)' }
+              updateSelCount()
+            })})
           }).catch(function(){c.innerHTML='加载失败'})
         })})
       }).catch(function(){ov.querySelector('.ivb-content').innerHTML='加载失败'})

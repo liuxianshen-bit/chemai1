@@ -63,10 +63,6 @@ class ExamBankService:
                     self._load_from_file(os.path.join(dp, f), region, year)
                     loaded += 1
 
-        # 如果没有数据,加载样例
-        if not self.questions:
-            self._load_sample_data()
-
         print(f"[ExamBank] 从 {loaded} 个文件加载了 {len(self.questions)} 道真题")
 
     def _load_from_file(self, file_path: str, region: str, year: int):
@@ -147,8 +143,9 @@ class ExamBankService:
             results = [q for q in results if q.year == year]
 
         if knowledge_point:
+            kp_lower = knowledge_point.lower()
             results = [q for q in results
-                      if knowledge_point in q.knowledge_points]
+                      if any(kp_lower in (kp or "").lower() for kp in q.knowledge_points)]
 
         if difficulty:
             results = [q for q in results if q.difficulty == difficulty]

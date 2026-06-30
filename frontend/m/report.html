@@ -1,0 +1,131 @@
+<!DOCTYPE html><html lang="zh-CN"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>我的</title>
+<link href="https://fonts.googleapis.com/css2?family=Material+Icons" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+.material-icons{font-size:24px;line-height:1;vertical-align:middle}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{
+  font-family:-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;
+  background:#f7f4ed;color:#1a1a1a;
+  display:flex;flex-direction:column;
+  max-width:480px;margin:0 auto;min-height:100dvh;
+  -webkit-tap-highlight-color:transparent;
+}
+.profile{
+  padding:20px 16px 16px;
+  background:linear-gradient(180deg,#f5efe0 0%,#f7f4ed 100%);
+  border-bottom:1px solid rgba(180,60,40,.06);
+}
+.profile .avatar{
+  width:60px;height:60px;border-radius:50%;
+  background:linear-gradient(135deg,#b43c28,#8b2918);
+  color:#fff;display:flex;align-items:center;justify-content:center;
+  font-size:26px;font-weight:600;
+  font-family:Cormorant Garamond,Noto Serif SC,serif;
+}
+.stats{display:flex;margin-top:18px;gap:10px}
+.stat{
+  flex:1;text-align:center;padding:10px 6px;border-radius:8px;
+  background:rgba(255,255,255,.7);
+}
+.stat .v{font-size:24px;font-weight:700;color:#b43c28;font-family:Cormorant Garamond,serif}
+.stat .v span{font-size:11px;font-weight:400}
+.stat .l{font-size:11px;color:#888;margin-top:2px}
+.page{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:8px 14px}
+.menu-item{
+  padding:14px 16px;border-radius:10px;border:1px solid rgba(0,0,0,.06);
+  margin-bottom:8px;background:#fff;cursor:pointer;
+  display:flex;align-items:center;justify-content:space-between;
+}
+.menu-item .icon{font-size:22px;color:#b43c28;margin-right:12px}
+.menu-item .label{font-size:15px;font-weight:500}
+.menu-item .desc{font-size:11.5px;color:#888;margin-top:1px}
+.logout{
+  padding:14px;text-align:center;font-size:13px;color:#b43c28;
+  cursor:pointer;border-top:1px solid rgba(0,0,0,.06);
+}
+</style>
+</head><body>
+
+<div id="header"></div>
+<div id="content" class="page">
+  <div class="profile">
+    <div style="display:flex;align-items:center;gap:14px">
+      <div class="avatar" id="avatar-initial"></div>
+      <div>
+        <div id="profile-name" style="font-size:18px;font-weight:600"></div>
+        <div id="profile-class" style="font-size:12.5px;color:#888;margin-top:2px"></div>
+      </div>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="v">—</div><div class="l">练习完成</div></div>
+      <div class="stat"><div class="v">—</div><div class="l">待复习</div></div>
+      <div class="stat"><div class="v">—</div><div class="l">正确率</div></div>
+    </div>
+  </div>
+  <div class="menu-item" onclick="location.href='/m/report_detail.html'">
+    <div style="display:flex;align-items:center">
+      <span class="material-icons icon">trending_up</span>
+      <div><div class="label">学习报告</div><div class="desc">成绩趋势与知识点分析</div></div>
+    </div>
+    <span class="material-icons" style="color:#bbb;font-size:20px">chevron_right</span>
+  </div>
+  <div class="menu-item">
+    <div style="display:flex;align-items:center">
+      <span class="material-icons icon">book</span>
+      <div><div class="label">复习中心</div><div class="desc">艾宾浩斯间隔复习</div></div>
+    </div>
+    <span class="material-icons" style="color:#bbb;font-size:20px">chevron_right</span>
+  </div>
+  <div class="menu-item">
+    <div style="display:flex;align-items:center">
+      <span class="material-icons icon">assignment</span>
+      <div><div class="label">学习计划</div><div class="desc">教师布置的学习任务</div></div>
+    </div>
+    <span class="material-icons" style="color:#bbb;font-size:20px">chevron_right</span>
+  </div>
+  <div class="menu-item">
+    <div style="display:flex;align-items:center">
+      <span class="material-icons icon">settings</span>
+      <div><div class="label">个人设置</div><div class="desc">账号与通知管理</div></div>
+    </div>
+    <span class="material-icons" style="color:#bbb;font-size:20px">chevron_right</span>
+  </div>
+</div>
+
+<div class="logout" onclick="doLogout()">退出登录</div>
+
+<div id="tabbar"></div>
+
+<script src="/m/app.js"></script>
+<script>
+var u=requireAuth();if(!u)throw new Error('no auth')
+document.getElementById('header').appendChild(renderHeader('我的','Profile'))
+document.getElementById('tabbar').appendChild(renderTabBar('me'))
+
+document.getElementById('avatar-initial').textContent=(u.name||'学')[0]
+document.getElementById('profile-name').textContent=u.name||'学生'
+document.getElementById('profile-class').textContent=(u.class_name||u.class||'')+' · '+u.id
+
+// Load stats
+api('/api/practice/student/'+u.id+'/tasks?page_size=100').then(function(d){
+  if(!d.success)return
+  var tasks=(d.data&&d.data.tasks)||d.tasks||[]
+  var done=tasks.filter(function(t){return t.status==='completed'})
+  var wrongs=done.filter(function(t){return(t.wrong_count||t.incorrect_count)>0})
+  var avgScore=done.length?Math.round(done.reduce(function(s,t){return s+(t.score||0)/(t.total||1)},0)/done.length*100):0
+  var stats=document.querySelectorAll('.stat .v')
+  stats[0].innerHTML=done.length
+  stats[1].innerHTML=wrongs.length
+  stats[2].innerHTML=avgScore+'<span>%</span>'
+}).catch(function(){})
+
+function doLogout(){
+  sessionStorage.clear();localStorage.removeItem('token')
+  location.href='/m/login.html'
+}
+</script>
+</body></html>

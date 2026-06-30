@@ -642,7 +642,7 @@ def create_demo_exam_data(db):
     # 最终统计
     exam_1 = db.query(ExamRecord).filter(ExamRecord.record_id == "demo_exam_001").first()
     exam_2 = db.query(ExamRecord).filter(ExamRecord.record_id == "demo_exam_002").first()
-    print(f"\n  ✅ 演示数据创建完成!")
+    print(f"\n  演示数据创建完成!")
     print(f"  - 考试1: 高一(1)班 ｜ 34人 ｜ 平均正确率 {exam_1.avg_score}%")
     print(f"  - 考试2: 高一(2)班 ｜ 33人 ｜ 平均正确率 {exam_2.avg_score}%")
     print(f"  - 题目: {len(questions)} 道 × 2套 = {len(all_questions)} 道")

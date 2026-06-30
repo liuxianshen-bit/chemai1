@@ -1,10 +1,10 @@
 """
 统一文档解析服务
-自动选择 OCR、MinerU、视觉模型进行文档解析
+自动选择百度教育OCR、MinerU、视觉模型进行文档解析
 
 策略:
 - PDF文档 → MinerU优先
-- 图片/答题卡 → OCR优先，失败降级视觉模型
+- 图片/试卷/答题卡 → 百度教育OCR优先，失败降级视觉模型
 - 混合内容 → OCR + MinerU组合
 """
 import os
@@ -66,23 +66,25 @@ class DocumentParseService:
         """
         检测所有解析服务可用性
         """
-        zhipu_key = settings.ZHIPU_API_KEY or os.getenv("ZHIPU_API_KEY", "")
+        baidu_key = os.getenv("BAIDU_OCR_API_KEY", "")
+        baidu_secret = os.getenv("BAIDU_OCR_SECRET_KEY", "")
         mineru_available = self._is_mineru_actually_available()
+        vision_available = bool(os.getenv("ZHIPU_API_KEY", "") or os.getenv("XIAOMI_API_KEY", ""))
 
         return {
             "ocr": {
-                "available": bool(zhipu_key),
-                "provider": "zhipu",
-                "note": "智谱GLM-OCR" if zhipu_key else "未配置ZHIPU_API_KEY",
+                "available": bool(baidu_key and baidu_secret),
+                "provider": "baidu",
+                "note": "百度教育产品OCR" if (baidu_key and baidu_secret) else "未配置百度OCR密钥",
             },
             "mineru": {
                 "available": mineru_available,
                 "note": "MinerU CLI 就绪" if mineru_available else "MinerU 模型未下载，需先下载模型",
             },
             "vision": {
-                "available": bool(zhipu_key),
-                "provider": "zhipu-glm-4v",
-                "note": "智谱GLM-4V多模态" if zhipu_key else "未配置ZHIPU_API_KEY",
+                "available": vision_available,
+                "provider": "glm-4v/mimo",
+                "note": "多模态Vision降级" if vision_available else "未配置Vision模型",
             },
         }
 

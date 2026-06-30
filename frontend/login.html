@@ -235,7 +235,8 @@ body{
         if(document.getElementById('remember').checked){localStorage.setItem('chemai_remember',JSON.stringify({u:u,p:p}))}else{localStorage.removeItem('chemai_remember')}
         sessionStorage.setItem('chemai_user',JSON.stringify(ud));
         localStorage.setItem('token',data.token);
-        setTimeout(function(){window.location.href='/'},500);
+        var target='/';if(ud.role==='student'||ud.role==='parent')target='/m/index.html';
+        setTimeout(function(){window.location.href=target},500);
       }else{
         msg.className='msg error';msg.textContent=data.message||'用户名或密码错误';
       }

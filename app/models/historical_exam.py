@@ -41,6 +41,7 @@ class HistoricalQuestion(BaseModel):
     discrimination: float     # 区分度 0-1
     score: int                 # 分值
     chapter: str               # 章节
+    page_image: Optional[str] = None  # 试卷原图路径(如 figures/page_01.png)
     created_at: Optional[str] = None
 
 

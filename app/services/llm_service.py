@@ -111,6 +111,28 @@ class LLMService:
         """MiMo 联网搜索 — 适用于需要实时信息的查询"""
         return self.generate_text(query, temperature=0.3, max_tokens=max_tokens, provider="mimo", enable_search=True)
 
+    def ocr_image(self, image_bytes: bytes, mime_type: str = "image/png") -> Dict:
+        """Qwen-VL-OCR 图片文字提取（阿里百炼）"""
+        import base64
+        if not self.dashscope_key:
+            return {"success": False, "error": "DASHSCOPE_API_KEY not set"}
+
+        b64 = base64.b64encode(image_bytes).decode("utf-8")
+        payload = {
+            "model": "qwen-vl-ocr",
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{b64}"},
+                     "min_pixels": 28 * 28 * 4, "max_pixels": 28 * 28 * 5000},
+                    {"type": "text", "text": "Read all the text in the image. Output in markdown format."},
+                ]
+            }],
+            "temperature": 0.1,
+            "max_tokens": 4096,
+        }
+        return self._call_with_retry(self.DASHSCOPE_URL, self.dashscope_key, payload, timeout=60.0)
+
     def _mock_generate(self, prompt: str) -> Dict:
         return {"success": True, "content": "[MOCK] configure XIAOMI_API_KEY / DASHSCOPE_API_KEY / DEEPSEEK_API_KEY to enable.", "usage": {"input_tokens": len(prompt), "output_tokens": 50}, "request_id": "mock"}
 

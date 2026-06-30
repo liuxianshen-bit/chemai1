@@ -51,7 +51,7 @@ app.add_middleware(
 )
 
 # 无需认证的路径
-PUBLIC_PREFIXES = ["/api/auth/", "/api/agent/", "/api/classes", "/docs", "/redoc", "/openapi.json", "/health", "/api/knowledge/", "/api/exam-bank/", "/api/question/"]
+PUBLIC_PREFIXES = ["/api/auth/", "/api/agent/", "/api/ocr/", "/api/classes", "/docs", "/redoc", "/openapi.json", "/health", "/api/knowledge/", "/api/exam-bank/", "/api/question/"]
 PUBLIC_EXTENSIONS = {".html", ".js", ".css", ".png", ".ico", ".svg", ".woff2"}
 
 @app.middleware("http")
@@ -129,6 +129,17 @@ async def root():
         return _nocache_file(html_file)
     return RedirectResponse(url="/login.html")
 
+@app.get("/m")
+async def mobile_root():
+    return RedirectResponse(url="/m/index.html")
+
+
+# 真题题库图片静态文件
+from fastapi.staticfiles import StaticFiles
+import os as _os
+_figures_dir = _os.path.join(_os.path.dirname(__file__), "..", "data", "exam_questions")
+if _os.path.isdir(_figures_dir):
+    app.mount("/static/figures", StaticFiles(directory=_figures_dir), name="figures")
 
 @app.get("/health")
 async def health_check():
@@ -203,6 +214,13 @@ async def serve_pages(filename: str):
     fp = os.path.join(FRONTEND_DIR, "pages", filename)
     if os.path.isfile(fp):
         return FileResponse(fp)
+
+@app.get("/m/{filename}")
+async def serve_mobile(filename: str):
+    fp = os.path.join(FRONTEND_DIR, "m", filename)
+    if os.path.isfile(fp):
+        return _nocache_file(fp)
+    return RedirectResponse(url="/m/index.html")
     raise HTTPException(status_code=404)
 
 # HTML页面路由（兜底 — 必须放在所有精确路由之后）

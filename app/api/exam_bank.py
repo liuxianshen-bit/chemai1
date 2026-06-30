@@ -470,15 +470,20 @@ async def get_historical_questions(
             "questions": [
                 {
                     "exam_id": q.exam_id,
+                    "question_id": q.exam_id,
                     "source": q.source,
                     "year": q.year,
+                    "region": q.region,
                     "question_number": q.question_number,
+                    "question_type": q.question_type,
                     "content": q.content,
+                    "options": q.options,
                     "answer": q.answer,
                     "analysis": q.analysis or "",
                     "knowledge_points": q.knowledge_points,
                     "difficulty": q.difficulty or "medium",
-                    "discrimination": q.discrimination
+                    "discrimination": q.discrimination,
+                    "page_image": q.page_image,
                 }
                 for q in page_results
             ]

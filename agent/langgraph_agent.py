@@ -9,10 +9,19 @@ Routing tools execute through a real ToolNode — frontend sees tool_call/tool_r
 import json, os, logging
 from typing import Annotated
 from uuid import uuid4
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.types import interrupt
+import aiosqlite as _aiosqlite
 
-_checkpointer = MemorySaver()
+_checkpointer = None
+
+async def _get_checkpointer():
+    global _checkpointer
+    if _checkpointer is None:
+        conn = await _aiosqlite.connect("chemai_checkpoints.db")
+        _checkpointer = AsyncSqliteSaver(conn)
+        await _checkpointer.setup()
+    return _checkpointer
 from langchain_openai import ChatOpenAI
 from langchain_core.tools import tool as lc_tool, StructuredTool
 
@@ -144,6 +153,9 @@ class MultiAgentState(MessagesState):
     last_route: dict | None
     last_result_text: str | None
     reroute: str | None
+    # Phase 3: pre-routed by Gateway — Coordinator reads this instead of calling LLM
+    pre_routed_agent: str | None
+    suggested_tools: list | None
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -151,9 +163,11 @@ class MultiAgentState(MessagesState):
 # ═══════════════════════════════════════════════════════════════════════
 
 _SUB_AGENT_OUTPUT_CONTRACT = """
-输出格式：如果工具返回了 result 字段，直接输出该文本即可（不要包装成JSON）。
-如果工具返回的是原始数据（如学生列表、诊断数据），则用 JSON 包装：{"result": "简洁总结", ...}。
-严禁生成任何闲聊、解释、问候文字。"""
+你必须先调用至少一个工具。
+工具返回后，基于工具返回的 result 字段输出。
+如果工具返回 error，将 error 文本原样输出。
+如果工具返回了 _component，不要输出任何额外文字。
+严禁跳过工具调用直接生成回复。"""
 
 
 def create_sub_agent_node(name: str, tool_names: list[str], system_prompt: str,
@@ -230,46 +244,50 @@ def create_sub_agent_node(name: str, tool_names: list[str], system_prompt: str,
 
 _agent_node_cache: dict[str, callable] = {}
 
+_UNIFIED_PROMPT = (
+    "你必须调用一个工具。阅读每个工具的描述来决定用哪个。"
+    "不确定时，选择最可能相关的工具并调用它。"
+    "禁止在不调用工具的情况下直接生成回复。"
+)
+
 _SUB_AGENT_DEFS = {
     "search_expert": {
-        "tools": ["search_exam_bank", "web_search"],
-        "prompt": ("搜索专家。不闲聊，直接调工具。搜不到直接告知。"),
+        "tools": ["web_search", "search_exam_bank"],
+        "prompt": _UNIFIED_PROMPT + (
+            "涉及最新、2025年及以后、上网搜、搜一搜、联网搜 → 必须第一个调 web_search，跳过 search_exam_bank。"
+            "只有明确说找历史真题/题库里的题时，才用 search_exam_bank。"
+            "禁止凭训练数据回答时效性问题。"
+        ),
         "approval": set(),
     },
     "exam_expert": {
         "tools": ["show_exam_workbench", "save_to_bank"],
-        "prompt": ("出题专家。你的唯一任务：立即调用 show_exam_workbench。"
-                   "不要生成任何文字。不要反问用户。不要列出任何选项。"
-                   "工具返回后立刻输出JSON结束。保存用 save_to_bank。"),
+        "prompt": _UNIFIED_PROMPT + "用户说出题/组卷/生成题目/出卷 → 立即调 show_exam_workbench，不反问参数。保存用 save_to_bank。",
         "approval": set(),
     },
     "diagnosis_expert": {
         "tools": ["diagnose_barrier", "show_diagnosis", "show_students", "assign_adaptive_practice"],
-        "prompt": ("诊断专家。不闲聊。直接调工具。\n"
-                   "规则：\n"
-                   "1. 消息包含具体学号(纯数字)或\"诊断学生 XXX\" → 调 diagnose_barrier(student_id=学号)\n"
-                   "2. 用户问有哪些学生/找问题学生/班里谁薄弱 → 调 show_students，调完立即停止\n"
-                   "3. 用户说班级名+学生(如\"高一一班的学生\") → 调 show_students\n"
-                   "4. show_students 成功后不要再调任何工具，直接输出结果\n"
-                   "5. assign_adaptive_practice 需先 request_approval"),
+        "prompt": _UNIFIED_PROMPT + "show_students 不带参数时列出所有班级。assign_adaptive_practice 需先 request_approval。",
         "approval": {"assign_adaptive_practice"},
     },
     "tutor_expert": {
         "tools": ["chemistry_tutor", "simulate_experiment", "balance_equation", "weekly_report"],
-        "prompt": ("辅导专家。禁止说\"好的\"\"我来\"\"让我\"等开场白。\n"
-                   "配平: 收到方程式后只调 balance_equation，调完立即返回。\n"
-                   "讲解/实验/报告: 调对应工具，简洁输出。"),
+        "prompt": "__DYNAMIC__",
         "approval": set(),
     },
     "bank_manager": {
         "tools": ["list_banks", "delete_bank"],
-        "prompt": ("题库管理。不闲聊。delete_bank 需先 request_approval。"),
+        "prompt": _UNIFIED_PROMPT + "delete_bank 需先 request_approval。",
         "approval": {"delete_bank"},
     },
     "browser_expert": {
-        "tools": ["browse_navigate", "browse_read", "browse_click",
+        "tools": ["web_search", "browse_navigate", "browse_read", "browse_click",
                   "browse_input", "browse_screenshot"],
-        "prompt": ("浏览器专家。不闲聊。navigate→read→返回结果。超时直接告知。"),
+        "prompt": _UNIFIED_PROMPT + (
+            "收到搜索请求时，先调 web_search 获取结果。"
+            "只在需要访问具体 URL 时才用 browse_navigate。"
+            "超时或页面不可访问时直接告知，不要反复重试。"
+        ),
         "approval": set(),
     },
 }
@@ -278,9 +296,19 @@ _SUB_AGENT_DEFS = {
 def _get_or_compile_agent_node(name: str) -> callable:
     if name not in _agent_node_cache:
         cfg = _SUB_AGENT_DEFS[name]
+        prompt = cfg["prompt"]
+        if prompt == "__DYNAMIC__":
+            p = _current_persona
+            prompt = _UNIFIED_PROMPT + (
+                "当前用户是化学教师（教研场景），不是学生。"
+                "直接给出考点分析、教学策略、常见误区，不要反问老师基础概念。"
+                "调 chemistry_tutor 时传 persona=\"teacher\"。"
+                if p == "teacher" else
+                "引导式教学，不直接给答案，先问学生怎么想的。调 chemistry_tutor 时传 persona=\"student\"。"
+            )
         _agent_node_cache[name] = create_sub_agent_node(
-            name, cfg["tools"], cfg["prompt"], cfg["approval"])
-        logger.info(f"[MultiAgent] Compiled: {name}")
+            name, cfg["tools"], prompt, cfg["approval"])
+        print(f"[DEBUG] Compiled sub-agent: {name} persona={_current_persona} prompt_first_80={prompt[:80]}", flush=True)
     return _agent_node_cache[name]
 
 
@@ -340,12 +368,26 @@ def _coordinator_node(state: MultiAgentState) -> dict:
     if state.get("reroute"):
         return {"route_decision": {"agent": state["reroute"], "query": ""}, "reroute": None}
 
-    # Return from sub-agent？Emit component if present, otherwise use sub-agent result directly
+    # Return from sub-agent？Pass through, no re-generation
     if (len(msgs) >= 2 and isinstance(msgs[-1], AIMessage)
             and not getattr(msgs[-1], 'tool_calls', None)):
-        # Sub-agent result text is already in last_result_text — pass through, no re-generation
         return {"route_decision": {"agent": "respond", "query": ""}, "messages": []}
 
+    # Phase 3: use pre-routed agent from Gateway if available (high confidence)
+    pre_routed = state.get("pre_routed_agent") or state.get("shared_context", {}).get("pre_routed_agent")
+    if pre_routed:
+        user_msg = ""
+        for m in reversed(msgs):
+            content = getattr(m, "content", "")
+            if isinstance(content, str) and content.strip():
+                user_msg = content
+                break
+        return {
+            "route_decision": {"agent": pre_routed, "query": user_msg},
+            "messages": [],
+        }
+
+    # Fallback: LLM-based routing (for low-confidence or un-routed messages)
     model = get_langchain_model("deepseek")
     model_with_tools = model.bind_tools(_ROUTING_TOOL_LIST)
     response = model_with_tools.invoke([SystemMessage(content=_COORDINATOR_SYS_PROMPT)] + msgs)
@@ -354,7 +396,6 @@ def _coordinator_node(state: MultiAgentState) -> dict:
     if tc_list:
         tc = tc_list[0]
         agent_name = _ROUTING_TOOLS.get(tc.get("name", ""), "respond")
-        # Strip coordinator's text chatter — keep only tool_calls in the message
         clean = AIMessage(content="", id=response.id)
         clean.tool_calls = response.tool_calls
         return {
@@ -400,8 +441,13 @@ def _route_after_router(state: MultiAgentState) -> str:
 # Graph Assembly
 # ═══════════════════════════════════════════════════════════════════════
 
-def create_chemai_agent(persona: str = "tutor", provider: str = "deepseek",
+_current_persona = "tutor"
+
+async def create_chemai_agent(persona: str = "tutor", provider: str = "deepseek",
                         student_profile=None, intent_hints="", guard_state=None):
+    global _current_persona
+    _current_persona = persona or "tutor"
+    _agent_node_cache.clear()  # Force recompile with latest tools/prompts
     builder = StateGraph(MultiAgentState)
 
     builder.add_node("coordinator", _coordinator_node)
@@ -423,7 +469,8 @@ def create_chemai_agent(persona: str = "tutor", provider: str = "deepseek",
     for name in _SUB_AGENT_DEFS:
         builder.add_edge(name, "coordinator")
 
-    graph = builder.compile(checkpointer=_checkpointer)
+    cp = await _get_checkpointer()
+    graph = builder.compile(checkpointer=cp)
     logger.info("[MultiAgent] Graph compiled — 6 sub-agents ready")
     return graph, None
 

@@ -98,7 +98,7 @@ async def call_tool_by_name(
 
 # ==================== 工具实现 ====================
 
-@tool(name="ocr_recognize", description="识别答题卡/试卷图片")
+@tool(name="ocr_recognize", description="识别试卷/答题卡/教材图片（百度教育OCR）")
 async def ocr_recognize(image_data: str, paper_type: str = "auto") -> Dict:
     """
     识别图片中的答题内容

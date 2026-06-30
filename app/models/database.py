@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import List, Optional
 from sqlalchemy import (
     Column, String, Integer, Float, Boolean,
-    DateTime, Text, JSON, ForeignKey, Enum, create_engine
+    DateTime, Text, JSON, ForeignKey, Enum, create_engine, LargeBinary
 )
 from sqlalchemy.orm import relationship, declarative_base, sessionmaker
 from enum import Enum as PyEnum
@@ -442,6 +442,45 @@ class ParentNotification(Base):
     # 关系
     parent = relationship("Parent", back_populates="notifications")
     student = relationship("Student")
+
+
+class UploadSession(Base):
+    """OCR 上传会话状态机"""
+    __tablename__ = "upload_sessions"
+
+    id = Column(String(64), primary_key=True)
+    file_data = Column("file_data", LargeBinary, nullable=True)
+    file_name = Column(String(512), nullable=True)
+    mime_type = Column(String(128), nullable=True)
+    status = Column(String(32), default="uploaded", index=True)
+    preview_text = Column(Text, nullable=True)
+    formula_result = Column(Text, nullable=True)
+    detected_type = Column(String(32), nullable=True)
+    baidu_task_id = Column(String(128), nullable=True)
+    page_count = Column(Integer, default=0)
+    pages_completed = Column(Integer, default=0)
+    result_json = Column(Text, nullable=True)
+    error_msg = Column(Text, nullable=True)
+    degraded = Column(Boolean, default=False)
+    version = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class StudentSubmission(Base):
+    """学生作答记录 — 关联考试和班级"""
+    __tablename__ = "student_submissions"
+
+    submission_id = Column(String(64), primary_key=True)
+    exam_id = Column(String(64), ForeignKey("exam_records.record_id"), nullable=True)
+    class_id = Column(String(64), nullable=True, index=True)
+    student_name = Column(String(128), nullable=True)
+    original_image = Column(String(512), nullable=True)
+    graded_image = Column(String(512), nullable=True)
+    answers_json = Column(Text, nullable=True)
+    total_score = Column(Integer, default=0)
+    submitted_at = Column(DateTime, default=datetime.utcnow)
+    graded_at = Column(DateTime, nullable=True)
 
 
 # 数据库初始化函数

@@ -58,6 +58,29 @@ Provider 选择：
 JSON："""
 
 # Full tool catalog with descriptions for prompt injection
+# Tool → target agent mapping (used by keyword router, Phase 3)
+_TOOL_TO_AGENT = {
+    "search_exam_bank": "search_expert",
+    "web_search": "search_expert",
+    "show_exam_workbench": "exam_expert",
+    "generate_questions": "exam_expert",
+    "save_to_bank": "exam_expert",
+    "diagnose_barrier": "diagnosis_expert",
+    "show_diagnosis": "diagnosis_expert",
+    "show_students": "diagnosis_expert",
+    "assign_adaptive_practice": "diagnosis_expert",
+    "chemistry_tutor": "tutor_expert",
+    "simulate_experiment": "tutor_expert",
+    "balance_equation": "tutor_expert",
+    "weekly_report": "tutor_expert",
+    "list_banks": "bank_manager",
+    "delete_bank": "bank_manager",
+    "browse_navigate": "browser_expert",
+    "browse_read": "browser_expert",
+    "browse_click": "browser_expert",
+    "browse_input": "browser_expert",
+    "browse_screenshot": "browser_expert",
+}
 _ALL_TOOL_DESCRIPTIONS = {
     "search_exam_bank": "搜索历年高考化学真题",
     "generate_questions": "AI生成化学题目",
@@ -67,8 +90,12 @@ _ALL_TOOL_DESCRIPTIONS = {
     "chemistry_tutor": "引导式化学辅导答疑",
     "simulate_experiment": "模拟化学实验，生成实验报告",
     "weekly_report": "生成学生本周化学学习周报",
-    "import_exam_paper": "从PDF导入试卷并审核入库",
     "assign_adaptive_practice": "根据学生障碍布置自适应练习",
+    "show_exam_workbench": "打开考试工作台面板",
+    "show_students": "展示班级学生列表",
+    "show_diagnosis": "在聊天中展示诊断结果图表",
+    "list_banks": "列出所有题库文件夹",
+    "delete_bank": "删除题库文件夹",
 }
 
 
@@ -132,6 +159,8 @@ class IntentResult:
     page: Optional[str] = None    # exam-v2 | diagnosis | students | teacher | None
     tools: Optional[list] = None  # None = all tools, [] = no tools
     provider: str = "deepseek"
+    target_agent: Optional[str] = None   # Phase 3: pre-routed sub-agent name
+    confidence: str = "low"              # high | low — for confidence-graded dispatch
 
 
 class IntentClassifier:
@@ -191,15 +220,15 @@ class IntentClassifier:
     def _keyword_fallback(self, text: str) -> IntentResult:
         """Keyword-based fallback when LLM parsing fails.
 
-        Enhanced v2: now recommends specific tools instead of leaving tools=None.
+        Enhanced v3: specific multi-char keywords, no single-char matches.
+        Returns tool recommendations; sub-agent selects the right tool.
         """
         provider = "deepseek"
-        tools = None
 
         if any(kw in text for kw in ["图片", "照片", "图像", "识别", "OCR", "上传"]):
             provider = "mimo"
 
-        # Pure page navigation (no tools) — only explicit open/go-to phrases
+        # Pure page navigation — only explicit open/go-to phrases
         if any(kw in text for kw in ["打开考试工作台", "打开学生管理", "打开诊断页面", "去首页"]):
             page = None
             if any(kw in text for kw in ["考试"]):
@@ -213,26 +242,83 @@ class IntentClassifier:
             if page:
                 return IntentResult(type="navigate", page=page, tools=[], provider=provider)
 
-        # Keyword-based tool recommendation
+        # Keyword-based tool recommendation (no single-char keywords)
         tools = []
-        if any(kw in text for kw in ["出题", "出", "生成", "练习", "组卷", "题目", "题", "考试", "组考"]):
+        # Question generation: "出"+"题" or "组"+"卷" or explicit compounds
+        _has_qword = any(kw in text for kw in ["题", "题目", "卷子", "卷", "试卷"])
+        _has_gen = any(kw in text for kw in ["出", "生成", "组", "来几道", "给几道"])
+        if _has_qword and _has_gen:
+            tools.append("show_exam_workbench")
             tools.append("generate_questions")
-        if any(kw in text for kw in ["诊断", "学习障碍", "学情分析", "错题", "障碍"]):
+        elif any(kw in text for kw in ["出题", "组卷", "出卷", "组考", "生成题目", "生成练习", "套卷"]):
+            tools.append("show_exam_workbench")
+            tools.append("generate_questions")
+        if any(kw in text for kw in ["班", "班级", "学生"]):
+            tools.append("show_students")
             tools.append("diagnose_barrier")
-        if any(kw in text for kw in ["周报", "学习报告", "本周"]):
+        if any(kw in text for kw in ["诊断", "学习障碍", "学情分析", "错题", "障碍", "薄弱", "弱点"]):
+            if "diagnose_barrier" not in tools:
+                tools.append("diagnose_barrier")
+        if any(kw in text for kw in ["周报", "学习报告", "本周", "学习情况"]):
             tools.append("weekly_report")
-        if any(kw in text for kw in ["搜索", "真题", "高考"]):
+        if any(kw in text for kw in ["搜索", "真题", "查一下", "查最新", "高考大纲", "考试大纲"]):
             tools.append("search_exam_bank")
-        if any(kw in text for kw in ["实验", "模拟"]):
+        if any(kw in text for kw in ["网上", "上网", "联网", "搜一搜", "搜一下", "搜搜"]):
+            tools.append("web_search")
+        if any(kw in text for kw in ["模拟"]):
             tools.append("simulate_experiment")
         if any(kw in text for kw in ["配平", "方程式"]):
             tools.append("balance_equation")
         if any(kw in text for kw in ["导入", "PDF", "试卷上传"]):
-            tools.append("import_exam_paper")
-        if any(kw in text for kw in ["自适应", "练习布置"]):
+            tools.append("show_exam_workbench")
+        if any(kw in text for kw in ["自适应", "布置练习", "针对性练习"]):
             tools.append("assign_adaptive_practice")
+        if any(kw in text for kw in ["什么是", "什么意思", "怎么做", "原理", "为什么", "怎么理解",
+                                      "讲解", "解释一下", "帮我讲", "怎么算"]):
+            tools.append("chemistry_tutor")
+        if any(kw in text for kw in ["题库文件夹", "列出题库", "我的题库", "保存到题库", "存到题库"]):
+            tools.append("list_banks")
+        if any(kw in text for kw in ["删除题库", "删掉题库"]):
+            tools.append("delete_bank")
 
         if not tools:
             tools = None  # No keyword match → let Agent use all tools
 
-        return IntentResult(type="chat", tools=tools, provider=provider)
+        result = IntentResult(type="chat", tools=tools, provider=provider)
+        result = self._route_agent(result)
+        return result
+
+    def _route_agent(self, intent: IntentResult) -> IntentResult:
+        """Map suggested tools to target sub-agent with confidence grading (Phase 3).
+
+        High confidence: all tools agree on one agent, or 2+ tools from same agent.
+        Low confidence: single tool matched, or tools point to different agents.
+        No tools (None): don't set agent — LLM fallback needed.
+        """
+        if intent.tools is None:
+            return intent  # No keyword match — needs LLM
+
+        agents = {}
+        for t in intent.tools:
+            agent = _TOOL_TO_AGENT.get(t)
+            if agent:
+                agents[agent] = agents.get(agent, 0) + 1
+
+        if not agents:
+            return intent  # Tools without agent mapping
+
+        # Confidence grading
+        unique_agents = len(agents)
+        max_count = max(agents.values()) if agents else 0
+        total_tools = len(intent.tools)
+
+        if unique_agents == 1:
+            intent.target_agent = list(agents.keys())[0]
+            intent.confidence = "high" if max_count >= 2 else "low"
+        elif max_count >= 2 and max_count >= total_tools * 0.6:
+            # Majority vote: most tools point to same agent
+            intent.target_agent = max(agents, key=agents.get)
+            intent.confidence = "low"
+        # else: tools disagree → leave agent=None, let LLM decide
+
+        return intent

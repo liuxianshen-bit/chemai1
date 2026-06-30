@@ -130,7 +130,7 @@ python evals/run_evals.py
 | 缺口 | 严重度 | 描述 |
 |------|--------|------|
 | search-exam-bank 不读 SQLite | **high** | `search_exam_bank` 只读 JSON 文件，Agent 保存到题库的题目无法被搜索到 |
-| batch_import 方法缺失 | **high** | `import_exam_paper` 调用了不存在的 `ExamBankService.batch_import()` |
+| ~~batch_import 方法缺失~~ | ✅ fixed | 已删除旧 `import_exam_paper` 工具，由 Baidu OCR pipeline 替代 |
 | 不自动保存题目 | medium | `generate_questions` 不自动保存，依赖 LLM 记得调 `save_to_bank` |
 | LLM 跳过 approval | medium | 即使明确要求确认，LLM 仍有概率不调 `request_approval` |
 | _route 不持久化 | low | _route 数据通过 SSE 传递，前端未打开时丢失 |
