@@ -337,7 +337,7 @@
   async function streamResponse(resp, bubble) {
     var reader = resp.body.getReader()
     var decoder = new TextDecoder()
-    var buffer = '', reply = '', _subPanel = null, _subAgentName = '', _subToolCount = 0, _routeCard = null
+    var buffer = '', reply = '', _subPanel = null, _subAgentName = '', _subToolCount = 0, _routeCard = null, _topToolCards = []
 
     while (true) {
       var r = await reader.read()
@@ -401,7 +401,9 @@
             } else {
               // Top-level tool (routing tools handled by route event, suppress tool_call)
               if (evt.name && (evt.name + '').startsWith('route_to_')) break
-              addToolCardMsg(bubble, evt.name, 'running')
+              var card = addToolCard(evt.name)
+              card._toolName = evt.name
+              _topToolCards.push(card)
             }
             var stTool2 = document.getElementById('status-tool')
             if (stTool2) stTool2.textContent = evt.name
@@ -411,7 +413,11 @@
             if (_subPanel) {
               addSubAgentTool(_subPanel, evt.name, evt.success !== false ? 'done' : 'error')
             } else {
-              break  // non-sub-agent tool results handled by tool_card updates
+              var pending = _topToolCards.filter(function(c) { return c._toolName === evt.name && !c._filled })
+              if (pending.length) {
+                updateToolCard(pending[0], evt)
+                pending[0]._filled = true
+              }
             }
             break
 
@@ -503,6 +509,11 @@
       history.push({ role: 'assistant', content: reply })
       saveCurrentConv()
     }
+    // Remove empty coordinator bubble when sub-agent handled everything
+    if (!reply && !hasPanel && !bubble.textContent.trim() &&
+        (bubble.nextElementSibling || bubble.previousElementSibling)) {
+      bubble.remove()
+    }
     // Check if agent wants to navigate to another page
     var navigateTo = sessionStorage.getItem('chemai_navigate')
     if (navigateTo) {
@@ -541,12 +552,21 @@
   function addToolCard(name, status) {
     var container = document.getElementById('chat-messages')
     var card = document.createElement('div')
-    card.className = 'tool-card'
+    card.className = 'tool-card running'
     card.innerHTML = '<div class="tool-card-header">' +
+      '<span class="chevron" style="font-size:10px;color:#aaa">▶</span>' +
       '<span style="color:#b43c28">⚗</span>' +
-      '<span style="font-weight:500">' + name + '</span>' +
-      '<span style="color:#999;font-size:10px">运行中...</span>' +
-      '</div><div class="tool-card-body"></div>'
+      '<span style="font-weight:500">' + escHtml(name) + '</span>' +
+      '<span style="color:#e6a817;font-size:10px;margin-left:auto">运行中...</span>' +
+      '</div><div class="tool-card-body collapsible-body"><div class="collapsible-inner"></div></div>'
+    card.onclick = function(e) {
+      if (e.target.closest('.collapsible-inner a') || e.target.closest('.collapsible-inner button')) return
+      var body = card.querySelector('.tool-card-body')
+      var chev = card.querySelector('.chevron')
+      var expanded = body.classList.contains('open')
+      body.classList.toggle('open', !expanded)
+      chev.style.transform = expanded ? 'rotate(0deg)' : 'rotate(90deg)'
+    }
     container.appendChild(card)
     scrollBottom()
     return card
@@ -586,7 +606,7 @@
     var container = document.getElementById('chat-messages')
     var panel = document.createElement('div')
     panel.className = 'sub-agent-panel'
-    panel.style.cssText = 'border:1.5px solid #e0e0e0;border-radius:8px;margin:4px 0;overflow:hidden;background:#fcfcfc'
+    panel.style.cssText = 'border:1.5px solid #e0e0e0;border-radius:8px;margin:4px 0;background:#fcfcfc'
     var display = evt.display || evt.agent
 
     // Get icon for sub-agent type
@@ -601,9 +621,11 @@
       '<span style="font-weight:600">' + escHtml(display) + '</span>' +
       '<span class="sa-status" style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#b43c28;margin-left:auto">⏳ 执行中</span>' +
       '</div>' +
-      '<div class="sa-body" style="display:block">' +
+      '<div class="sa-body collapsible-body open">' +
+      '<div class="collapsible-inner">' +
       '<div class="sa-tools" style="padding:4px 12px"></div>' +
       '<div class="sa-text" style="padding:6px 12px 10px;font-size:13px;line-height:1.65;color:#666;border-top:1px dashed #eee;display:none;white-space:pre-wrap;word-break:break-word"></div>' +
+      '</div>' +
       '</div>'
     container.appendChild(panel)
     scrollBottom()
@@ -611,8 +633,8 @@
     panel.querySelector('.sa-header').addEventListener('click', function() {
       var body = this.nextElementSibling
       var chev = this.querySelector('.sa-chevron')
-      var expanded = body.style.display !== 'none'
-      body.style.display = expanded ? 'none' : 'block'
+      var expanded = body.classList.contains('open')
+      body.classList.toggle('open', !expanded)
       chev.style.transform = expanded ? 'rotate(0deg)' : 'rotate(90deg)'
     })
     return panel
@@ -659,14 +681,17 @@
     }
     // Collapse the panel
     var body = panel.querySelector('.sa-body')
-    if (body) body.style.display = 'none'
+    if (body) body.classList.remove('open')
   }
 
   function updateToolCard(card, evt) {
+    var ok = evt.success !== false
+    card.classList.remove('running')
+    card.classList.add(ok ? 'done' : 'error')
     var status = card.querySelector('.tool-card-header span:last-child')
-    status.textContent = evt.success !== false ? '完成' : '失败'
-    status.style.color = evt.success !== false ? '#2c6e49' : '#b43c28'
-    var body = card.querySelector('.tool-card-body')
+    status.textContent = ok ? '完成' : '失败'
+    status.style.color = ok ? '#2c6e49' : '#b43c28'
+    var inner = card.querySelector('.collapsible-inner')
     var toolName = evt.name || evt.tool
 
     // Auto-parse JSON string results into objects for renderers
@@ -677,13 +702,20 @@
 
     try {
       var rendered = window.ChemRender ? window.ChemRender(toolName, data) : '<pre>'+JSON.stringify(data,null,2)+'</pre>'
-      body.innerHTML = rendered
+      inner.innerHTML = rendered
     } catch(e) {
       console.error('[updateToolCard] render error:', e)
-      body.innerHTML = '<pre style="color:#C53030;font-size:11px">渲染失败: ' + escHtml(String(e.message || e)) + '</pre>'
+      inner.innerHTML = '<pre style="color:#C53030;font-size:11px">渲染失败: ' + escHtml(String(e.message || e)) + '</pre>'
     }
+    // Expand briefly then auto-collapse
+    var body = card.querySelector('.tool-card-body')
+    var chev = card.querySelector('.chevron')
     body.classList.add('open')
-    card.onclick = function () { body.classList.toggle('open') }
+    if (chev) chev.style.transform = 'rotate(90deg)'
+    setTimeout(function() {
+      body.classList.remove('open')
+      if (chev) chev.style.transform = 'rotate(0deg)'
+    }, 3000)
   }
 
   // ─── Plan Card ───
@@ -697,7 +729,9 @@
       '<div class="plan-card-header" style="font-family:\'Cormorant Garamond\',Georgia,serif;font-size:16px;font-weight:600;margin-bottom:10px">' +
         '📋 ' + escHtml(plan.goal || '执行计划') +
         '<span style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#999;margin-left:8px">' + plan.total_steps + ' 步</span>' +
-      '</div>'
+      '</div>' +
+      '<div class="plan-card-body">' +
+      '<div class="plan-card-body-inner">'
     plan.steps.forEach(function(s, i) {
       html += '<div class="plan-step" id="plan-step-' + i + '" style="display:flex;align-items:center;gap:10px;padding:6px 0;font-size:13px">' +
         '<span class="plan-step-num" style="width:24px;height:24px;border-radius:50%;border:1.5px solid rgba(0,0,0,.15);display:flex;align-items:center;justify-content:center;font-family:\'JetBrains Mono\',monospace;font-size:11px;flex-shrink:0">' + s.step + '</span>' +
@@ -705,7 +739,8 @@
         '<span class="plan-step-status" style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#999">等待中</span>' +
         '</div>'
     })
-    html += '<div class="plan-card-summary" style="display:none;font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#2c6e49;padding:4px 0"></div>'
+    html += '</div></div>' +
+      '<div class="plan-card-summary" style="display:none;font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#2c6e49;padding:4px 0"></div>'
     html += '</div>'
     return html
   }
@@ -741,11 +776,9 @@
         var total = _planSteps.length
         summary.textContent = done + '/' + total + ' 步骤已完成'
         summary.style.display = ''
-        card.querySelectorAll('.plan-step').forEach(function(el) { el.style.display = 'none' })
+        card.classList.add('collapsed')
         card.onclick = function() {
-          var collapsed = card.querySelector('.plan-card-summary').style.display !== 'none'
-          card.querySelectorAll('.plan-step').forEach(function(el) { el.style.display = collapsed ? '' : 'none' })
-          card.querySelector('.plan-card-summary').style.display = collapsed ? 'none' : ''
+          card.classList.toggle('collapsed')
         }
       }, 2000)
     }
