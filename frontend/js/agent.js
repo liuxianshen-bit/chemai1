@@ -1118,16 +1118,31 @@
       qa.innerHTML=progressHTML; st.textContent=''
       ChemAI.startTimer(qa.querySelector('.live-timer'))
 
-      // Build a normal chat message with structured params for Agent
-      var parts = ['请出题：' + kps.join('、'),
-        '难度：' + diff,
-        '题型数量：' + active.map(function(t){return typeLabels[t.val] + '×' + t.qty}).join('、 ')]
-      if (panel._variantQid) {
-        parts.push('蓝本题ID：' + panel._variantQid)
-        parts.push('蓝本题：' + (panel._variantSource || ''))
-      }
-      var msg = parts.join('。')
-      sendMessage(msg)
+      // Generate questions via direct API (not through Agent — panel is UI, Agent is trigger)
+      var pending = active.length
+      active.forEach(function(t){
+        var progEl = qa.querySelector('.exam-prog-'+t.val)
+        if (progEl) progEl.textContent = '⏳ ' + typeLabels[t.val] + ' ×' + t.qty + ' 已提交'
+        var t0 = Date.now()
+        var body = {knowledge_points: kps, difficulty: diff, quantity: t.qty, question_types: [t.val]}
+        if (panel._variantSource) { body.variant_source = panel._variantSource; body.variant_qid = panel._variantQid }
+        fetch('/api/question/generate', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)})
+          .then(function(r){return r.json()}).then(function(d){
+            if (progEl) progEl.textContent = '🔄 ' + typeLabels[t.val] + ' ×' + t.qty + ' AI组织题目中...(' + Math.round((Date.now()-t0)/1000) + 's)'
+            var qs = d.questions || []
+            qs.forEach(function(q){q._typeLabel = t.val; q._saved = false})
+            qa._qs = qa._qs.concat(qs)
+            if (qa.querySelector('.exam-qcards').textContent.includes('正在提交')) qa.querySelector('.exam-qcards').innerHTML = ''
+            _renderQs(qs, qa.querySelector('.exam-qcards'))
+            if (progEl) progEl.textContent = '✅ ' + typeLabels[t.val] + ' ×' + qs.length + ' 完成 (' + Math.round((Date.now()-t0)/1000) + 's)'
+            pending--
+            if (pending === 0) { ChemAI.stopTimer(); _renderQsFooter(qa) }
+          }).catch(function(){
+            if (progEl) progEl.textContent = '❌ ' + typeLabels[t.val] + ' 失败'
+            pending--
+            if (pending === 0) { ChemAI.stopTimer(); _renderQsFooter(qa) }
+          })
+      })
     })
 
     function _renderQs(qs,container){
