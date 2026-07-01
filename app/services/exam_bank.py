@@ -128,16 +128,20 @@ class ExamBankService:
         knowledge_point: Optional[str] = None,
         difficulty: Optional[str] = None,
         keyword: Optional[str] = None,
+        region: Optional[str] = None,
         limit: int = 1000
     ) -> List[HistoricalQuestion]:
         """
         查询真题
-        支持按来源/年份/知识点/难度/关键词筛选
+        支持按来源/地区/年份/知识点/难度/关键词筛选
         """
         results = self.questions
 
         if source:
             results = [q for q in results if source in q.source]
+
+        if region:
+            results = [q for q in results if q.region == region]
 
         if year:
             results = [q for q in results if q.year == year]

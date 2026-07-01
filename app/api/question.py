@@ -478,11 +478,13 @@ async def get_historical_questions(
     year: Optional[int] = None,
     difficulty: Optional[str] = None,
     knowledge_point: Optional[str] = None,
-    keyword: Optional[str] = None
+    keyword: Optional[str] = None,
+    region: Optional[str] = None,
+    page_size: Optional[int] = None,
 ):
     """
     历年真题库查询
-    支持按来源/年份/难度/知识点/关键词筛选
+    支持按来源/地区/年份/难度/知识点/关键词筛选
     """
     # 使用题库服务查询
     from app.services.exam_bank import exam_bank_service
@@ -492,8 +494,12 @@ async def get_historical_questions(
         year=year,
         knowledge_point=knowledge_point,
         difficulty=difficulty,
-        keyword=keyword
+        keyword=keyword,
+        region=region,
     )
+
+    if page_size and page_size > 0:
+        results = results[:page_size]
 
     return {
         "total": len(results),
@@ -506,6 +512,7 @@ async def get_historical_questions(
                 "exam_id": q.exam_id,
                 "source": q.source,
                 "year": q.year,
+                "region": q.region,
                 "question_number": q.question_number,
                 "content": q.content,
                 "options": q.options,
@@ -513,9 +520,10 @@ async def get_historical_questions(
                 "knowledge_points": q.knowledge_points,
                 "difficulty": q.difficulty,
                 "discrimination": q.discrimination,
-                "chapter": q.chapter
+                "chapter": q.chapter,
+                "page_image": q.page_image,
             }
-            for q in results  # 返回全部结果（不限制）
+            for q in results
         ]
     }
 
