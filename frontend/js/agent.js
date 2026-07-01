@@ -1116,27 +1116,16 @@
       qa.innerHTML=progressHTML; st.textContent=''
       ChemAI.startTimer(qa.querySelector('.live-timer'))
 
-      // Build resume message with structured params for Agent
-      var resumeBody = {
-        message: 'EXAM_GENERATE',
-        kps: kps.join(','),
-        diff: diff,
-        types: typeStr,
-        qty: totalQty,
-        fid: fid,
-        fn: fn
+      // Build a normal chat message with structured params for Agent
+      var parts = ['请出题：' + kps.join('、'),
+        '难度：' + diff,
+        '题型数量：' + active.map(function(t){return typeLabels[t.val] + '×' + t.qty}).join('、 ')]
+      if (panel._variantQid) {
+        parts.push('蓝本题ID：' + panel._variantQid)
+        parts.push('蓝本题：' + (panel._variantSource || ''))
       }
-      if (panel._variantSource) { resumeBody.variant_qid = panel._variantQid; resumeBody.variant_source = panel._variantSource }
-      if (currentConvId) resumeBody.conversation_id = currentConvId
-
-      fetch('/api/agent/chat/langgraph/resume', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({message: JSON.stringify(resumeBody), conversation_id: currentConvId})
-      }).catch(function(){
-        st.textContent='出题请求失败，请重试'
-        ChemAI.stopTimer()
-      })
+      var msg = parts.join('。')
+      sendMessage(msg)
     })
 
     function _renderQs(qs,container){
