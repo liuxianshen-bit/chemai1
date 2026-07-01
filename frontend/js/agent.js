@@ -399,11 +399,9 @@
               _subToolCount++
               addSubAgentTool(_subPanel, evt.name, 'running')
             } else {
-              // Top-level tool (routing tools handled by route event, suppress tool_call)
               if (evt.name && (evt.name + '').startsWith('route_to_')) break
               var card = addToolCard(evt.name)
-              card._toolName = evt.name
-              _topToolCards.push(card)
+              if (card) { card._toolName = evt.name; _topToolCards.push(card) }
             }
             var stTool2 = document.getElementById('status-tool')
             if (stTool2) stTool2.textContent = evt.name
@@ -414,10 +412,7 @@
               addSubAgentTool(_subPanel, evt.name, evt.success !== false ? 'done' : 'error')
             } else {
               var pending = _topToolCards.filter(function(c) { return c._toolName === evt.name && !c._filled })
-              if (pending.length) {
-                updateToolCard(pending[0], evt)
-                pending[0]._filled = true
-              }
+              if (pending.length) { updateToolCard(pending[0], evt); pending[0]._filled = true }
             }
             break
 
@@ -506,16 +501,8 @@
     var hasPanel = bubble.querySelector('.inline-exam-panel, .inline-diag-panel')
     if (reply && !hasPanel) {
       bubble.innerHTML = renderMarkdown(reply)
-    }
-    // Always save conversation history, even when inline panel is shown
-    if (reply || hasPanel) {
-      history.push({ role: 'assistant', content: reply || '[面板交互]' })
+      history.push({ role: 'assistant', content: reply })
       saveCurrentConv()
-    }
-    // Remove empty coordinator bubble when sub-agent handled everything
-    if (!reply && !hasPanel && !bubble.textContent.trim() &&
-        (bubble.nextElementSibling || bubble.previousElementSibling)) {
-      bubble.remove()
     }
     // Check if agent wants to navigate to another page
     var navigateTo = sessionStorage.getItem('chemai_navigate')
@@ -557,7 +544,7 @@
     var card = document.createElement('div')
     card.className = 'tool-card running'
     card.innerHTML = '<div class="tool-card-header">' +
-      '<span class="chevron" style="font-size:10px;color:#aaa">▶</span>' +
+      '<span class="chevron" style="font-size:10px;color:#aaa;display:inline-block;transition:transform .2s">▶</span>' +
       '<span style="color:#b43c28">⚗</span>' +
       '<span style="font-weight:500">' + escHtml(name) + '</span>' +
       '<span style="color:#e6a817;font-size:10px;margin-left:auto">运行中...</span>' +
@@ -566,9 +553,10 @@
       if (e.target.closest('.collapsible-inner a') || e.target.closest('.collapsible-inner button')) return
       var body = card.querySelector('.tool-card-body')
       var chev = card.querySelector('.chevron')
+      if (!body) return
       var expanded = body.classList.contains('open')
       body.classList.toggle('open', !expanded)
-      chev.style.transform = expanded ? 'rotate(0deg)' : 'rotate(90deg)'
+      if (chev) chev.style.transform = expanded ? 'rotate(0deg)' : 'rotate(90deg)'
     }
     container.appendChild(card)
     scrollBottom()
@@ -609,7 +597,7 @@
     var container = document.getElementById('chat-messages')
     var panel = document.createElement('div')
     panel.className = 'sub-agent-panel'
-    panel.style.cssText = 'border:1.5px solid #e0e0e0;border-radius:8px;margin:4px 0;background:#fcfcfc'
+    panel.style.cssText = 'border:1.5px solid #e0e0e0;border-radius:8px;margin:4px 0;overflow:hidden;background:#fcfcfc'
     var display = evt.display || evt.agent
 
     // Get icon for sub-agent type
@@ -624,11 +612,9 @@
       '<span style="font-weight:600">' + escHtml(display) + '</span>' +
       '<span class="sa-status" style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#b43c28;margin-left:auto">⏳ 执行中</span>' +
       '</div>' +
-      '<div class="sa-body collapsible-body open">' +
-      '<div class="collapsible-inner">' +
+      '<div class="sa-body" style="display:block">' +
       '<div class="sa-tools" style="padding:4px 12px"></div>' +
       '<div class="sa-text" style="padding:6px 12px 10px;font-size:13px;line-height:1.65;color:#666;border-top:1px dashed #eee;display:none;white-space:pre-wrap;word-break:break-word"></div>' +
-      '</div>' +
       '</div>'
     container.appendChild(panel)
     scrollBottom()
@@ -636,8 +622,8 @@
     panel.querySelector('.sa-header').addEventListener('click', function() {
       var body = this.nextElementSibling
       var chev = this.querySelector('.sa-chevron')
-      var expanded = body.classList.contains('open')
-      body.classList.toggle('open', !expanded)
+      var expanded = body.style.display !== 'none'
+      body.style.display = expanded ? 'none' : 'block'
       chev.style.transform = expanded ? 'rotate(0deg)' : 'rotate(90deg)'
     })
     return panel
@@ -684,7 +670,7 @@
     }
     // Collapse the panel
     var body = panel.querySelector('.sa-body')
-    if (body) body.classList.remove('open')
+    if (body) body.style.display = 'none'
   }
 
   function updateToolCard(card, evt) {
@@ -692,12 +678,14 @@
     card.classList.remove('running')
     card.classList.add(ok ? 'done' : 'error')
     var status = card.querySelector('.tool-card-header span:last-child')
-    status.textContent = ok ? '完成' : '失败'
-    status.style.color = ok ? '#2c6e49' : '#b43c28'
+    if (status) {
+      status.textContent = ok ? '完成' : '失败'
+      status.style.color = ok ? '#2c6e49' : '#b43c28'
+    }
     var inner = card.querySelector('.collapsible-inner')
+    if (!inner) return
     var toolName = evt.name || evt.tool
 
-    // Auto-parse JSON string results into objects for renderers
     var data = evt.result
     if (typeof data === 'string') {
       try { data = JSON.parse(data) } catch(e) { /* keep as string */ }
@@ -707,18 +695,16 @@
       var rendered = window.ChemRender ? window.ChemRender(toolName, data) : '<pre>'+JSON.stringify(data,null,2)+'</pre>'
       inner.innerHTML = rendered
     } catch(e) {
-      console.error('[updateToolCard] render error:', e)
       inner.innerHTML = '<pre style="color:#C53030;font-size:11px">渲染失败: ' + escHtml(String(e.message || e)) + '</pre>'
     }
-    // Expand briefly then auto-collapse
     var body = card.querySelector('.tool-card-body')
     var chev = card.querySelector('.chevron')
-    body.classList.add('open')
+    if (body) body.classList.add('open')
     if (chev) chev.style.transform = 'rotate(90deg)'
     setTimeout(function() {
-      body.classList.remove('open')
+      if (body) body.classList.remove('open')
       if (chev) chev.style.transform = 'rotate(0deg)'
-    }, 3000)
+    }, 4000)
   }
 
   // ─── Plan Card ───
@@ -732,9 +718,7 @@
       '<div class="plan-card-header" style="font-family:\'Cormorant Garamond\',Georgia,serif;font-size:16px;font-weight:600;margin-bottom:10px">' +
         '📋 ' + escHtml(plan.goal || '执行计划') +
         '<span style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#999;margin-left:8px">' + plan.total_steps + ' 步</span>' +
-      '</div>' +
-      '<div class="plan-card-body">' +
-      '<div class="plan-card-body-inner">'
+      '</div>'
     plan.steps.forEach(function(s, i) {
       html += '<div class="plan-step" id="plan-step-' + i + '" style="display:flex;align-items:center;gap:10px;padding:6px 0;font-size:13px">' +
         '<span class="plan-step-num" style="width:24px;height:24px;border-radius:50%;border:1.5px solid rgba(0,0,0,.15);display:flex;align-items:center;justify-content:center;font-family:\'JetBrains Mono\',monospace;font-size:11px;flex-shrink:0">' + s.step + '</span>' +
@@ -742,8 +726,7 @@
         '<span class="plan-step-status" style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#999">等待中</span>' +
         '</div>'
     })
-    html += '</div></div>' +
-      '<div class="plan-card-summary" style="display:none;font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#2c6e49;padding:4px 0"></div>'
+    html += '<div class="plan-card-summary" style="display:none;font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#2c6e49;padding:4px 0"></div>'
     html += '</div>'
     return html
   }
@@ -779,9 +762,11 @@
         var total = _planSteps.length
         summary.textContent = done + '/' + total + ' 步骤已完成'
         summary.style.display = ''
-        card.classList.add('collapsed')
+        card.querySelectorAll('.plan-step').forEach(function(el) { el.style.display = 'none' })
         card.onclick = function() {
-          card.classList.toggle('collapsed')
+          var collapsed = card.querySelector('.plan-card-summary').style.display !== 'none'
+          card.querySelectorAll('.plan-step').forEach(function(el) { el.style.display = collapsed ? '' : 'none' })
+          card.querySelector('.plan-card-summary').style.display = collapsed ? 'none' : ''
         }
       }, 2000)
     }
@@ -990,48 +975,17 @@
     if (typeof katex === 'undefined' || typeof marked === 'undefined') return escHtml(text)
     try {
       var idx=0, blocks=[], h=text
-
-      // Step 0: Wrap bare \\mathrm{...} etc. in $$...$$ placeholders
-      // OCR chemistry content has these without $ delimiters.
-      // Match balanced braces after \\mathrm, \\texttt etc.
-      var bareRe = /\\(mathrm|texttt|text|textit|textbf)\s*\{/g
-      var newH = '', lastEnd = 0, m
-      while ((m = bareRe.exec(h)) !== null) {
-        newH += h.substring(lastEnd, m.index)
-        var cmd = m[1], pos = m.index + m[0].length - 1 // at opening {
-        var depth = 1, i = pos + 1
-        while (i < h.length && depth > 0) {
-          if (h[i] === '{') depth++
-          else if (h[i] === '}') depth--
-          i++
-        }
-        if (depth === 0) {
-          var full = h.substring(m.index, i)
-          var key = '\uE000BARE' + idx + '\uE001'
-          blocks.push({key: key, tex: full, display: false})
-          newH += key
-          idx++
-          lastEnd = i
-          bareRe.lastIndex = i
-        } else {
-          newH += m[0]
-          lastEnd = m.index + m[0].length
-        }
-      }
-      newH += h.substring(lastEnd)
-      h = newH
-
-      // Step 1: Protect paired $$...$$ (display math)
+      // Protect paired $$...$$
       h=h.replace(/\$\$([\s\S]*?)\$\$/g,function(m,e){var k='\uE000LATEX'+idx+'\uE001';blocks.push({key:k,tex:e,display:true});idx++;return k})
-      // Step 2: Protect paired $...$ (inline math)
+      // Protect paired $...$
       h=h.replace(/\$(?!\$)([\s\S]*?)\$/g,function(m,e){if(e.length<300){var k='\uE000LATEX'+idx+'\uE001';blocks.push({key:k,tex:e,display:false});idx++;return k}return m})
-      // Step 3: Escape any remaining unpaired $ signs
+      // Escape any remaining unpaired $ signs
       h=h.replace(/\$/g,'<span>$</span>')
-      // Step 4: Markdown → HTML
+      // Markdown → HTML
       h=marked.parse(h,{breaks:true,gfm:true})
-      // Step 5: Render LaTeX blocks
+      // Render LaTeX blocks
       blocks.forEach(function(b){try{var ren=katex.renderToString(b.tex,{displayMode:b.display,throwOnError:false,trust:true,strict:false});h=h.replace(b.key,ren)}catch(_){h=h.replace(b.key,b.tex)}})
-      // Step 6: Render \\ce{} blocks
+      // Render \ce{} blocks
       h=h.replace(/\\ce\{([^}]+)\}/g,function(m,f){try{return katex.renderToString(f,{throwOnError:false,trust:true,strict:false})}catch(_){return m}})
       return h
     } catch(e) { return text }
@@ -1224,7 +1178,7 @@
         c.innerHTML='<div style="font-size:12px;color:#888;margin-bottom:8px">点击试卷浏览题目</div>'+ps.slice(0,50).map(function(p){return '<div class="ivb-paper" style="padding:6px 8px;margin:2px 0;border:1px solid #eee;border-radius:4px;cursor:pointer;font-size:12px" data-r="'+escHtml(p.region||'')+'" data-y="'+(p.year||'')+'">'+escHtml(p.source||p.name||'')+' · '+(p.year||'')+' ('+(p.question_count||p.total||'?')+'题)</div>'}).join('')
         c.querySelectorAll('.ivb-paper').forEach(function(el){el.addEventListener('click',function(){c.innerHTML='加载中...'
           fetch('/api/exam-bank/historical?region='+encodeURIComponent(el.dataset.r)+'&year='+encodeURIComponent(el.dataset.y)+'&page_size=30').then(function(r){return r.json()}).then(function(qd){var qs=(qd.data&&qd.data.questions)||qd.questions||[]
-            c.innerHTML='<div style="font-size:12px;color:#888;margin-bottom:8px">点击题目多选，再次点击取消</div>'+qs.map(function(q,i){var imgHtml=''; if(q.page_image){var pi=q.page_image; if(!pi.startsWith('/'))pi='/static/figures/'+encodeURIComponent(q.region||'')+'/'+(q.year||'')+'/'+pi; imgHtml='<img src=\"'+pi+'\" style=\"width:50px;height:35px;object-fit:cover;border-radius:3px;margin-right:6px;float:left;border:1px solid #eee\">'} var rendered=(typeof renderChemistry==='function'?renderChemistry(q.content||''):escHtml(q.content||'')); var clean=rendered.replace(/<[^>]*>/g,'').substring(0,80); return '<div class=\"ivb-q\" data-qid=\"'+(q.exam_id||q.question_id||'')+'\" data-label=\"'+(el.dataset.r||'')+' #'+(i+1)+'\" style=\"padding:6px 8px;margin:2px 0;border:1px solid #eee;border-radius:4px;cursor:pointer;font-size:12px;overflow:hidden;transition:.15s\">'+imgHtml+'<b>#'+(i+1)+'</b> <span style=\"line-height:1.5\">'+rendered.substring(0,200)+'</span><div style=\"clear:both\"></div></div>'}).join('')
+            c.innerHTML='<div style="font-size:12px;color:#888;margin-bottom:8px">点击题目多选，再次点击取消</div>'+qs.map(function(q,i){var imgHtml=''; if(q.page_image){var pi=q.page_image; if(!pi.startsWith('/'))pi='/static/figures/'+encodeURIComponent(q.region||'')+'/'+(q.year||'')+'/'+pi; imgHtml='<img src=\"'+pi+'\" style=\"width:50px;height:35px;object-fit:cover;border-radius:3px;margin-right:6px;float:left;border:1px solid #eee\">'} var rendered=(typeof renderChemistry==='function'?renderChemistry(q.content||''):escHtml(q.content||'')); var stripped=rendered.replace(/<[^>]*>/g,'').substring(0,100); return '<div class=\"ivb-q\" data-qid=\"'+(q.exam_id||q.question_id||'')+'\" data-label=\"'+(el.dataset.r||'')+' #'+(i+1)+'\" style=\"padding:6px 8px;margin:2px 0;border:1px solid #eee;border-radius:4px;cursor:pointer;font-size:12px;overflow:hidden;transition:.15s\">'+imgHtml+'<b>#'+(i+1)+'</b> '+stripped+'<div style=\"clear:both\"></div></div>'}).join('')
             c.querySelectorAll('.ivb-q').forEach(function(qel){qel.addEventListener('click',function(){
               var qid=qel.dataset.qid,label=qel.dataset.label,idx=selQs.findIndex(function(s){return s.qid===qid})
               if(idx>=0){ selQs.splice(idx,1); qel.classList.remove('ivb-q-sel'); qel.style.borderLeft='1px solid #eee'; qel.style.background='' }
