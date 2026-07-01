@@ -1006,6 +1006,31 @@
     var preVariant = params.variant_source || ''
     var preFolder = params.set_name || ''
 
+    // Update mode: if panel already exists and params carry questions, update in-place
+    var existingPanel = bubble.querySelector('.inline-exam-panel')
+    if (existingPanel) {
+      var qa = existingPanel.querySelector('.inline-exam-questions')
+      if (!qa) return
+      // Update question list from params
+      var questions = params.questions || []
+      if (questions.length) {
+        qa.style.display = 'block'
+        qa._qs = questions
+        qa._fid = preFolder || qa._fid || 'auto-' + Date.now()
+        qa._fn = preFolder || qa._fn || '自动创建'
+        qa.innerHTML = '<div class="exam-qcards"></div>'
+        _renderQs(qa._qs, qa.querySelector('.exam-qcards'))
+        _renderQsFooter(qa)
+      }
+      // Update status
+      var st = existingPanel.querySelector('.inline-exam-status')
+      if (st) st.textContent = questions.length ? '已生成 ' + questions.length + ' 道题目' : ''
+      // Stop any running timer
+      var timer = existingPanel.querySelector('.live-timer')
+      if (timer && timer.classList.contains('ticking')) ChemAI.stopTimer()
+      return
+    }
+
     var html = '<style>'+
       '.inline-exam-btn{display:inline-block;padding:6px 14px;border:1px solid #ddd;border-radius:6px;font-size:12px;cursor:pointer;background:#fff;color:#555;transition:all .15s;margin:2px}'+
       '.inline-exam-btn:hover{background:#f5f5f5;border-color:#bbb}'+
@@ -1071,7 +1096,7 @@
       var sel=panel.querySelector('.inline-exam-folder'); sets.forEach(function(s){sel.innerHTML+='<option value="'+s.set_id+'">'+escHtml(s.name)+' ('+(s.question_count||0)+')</option>'})
     }).catch(function(){})
 
-    // Generate — streaming per-type with progress
+    // Generate — via Agent resume (not direct API call)
     panel.querySelector('.inline-exam-gen-btn').addEventListener('click',function(){
       var active=typeDefs.filter(function(t){return t.active}), st=panel.querySelector('.inline-exam-status'), qa=panel.querySelector('.inline-exam-questions')
       if(!active.length){st.textContent='请至少选择一种题型';return}
@@ -1081,37 +1106,36 @@
       var fs=panel.querySelector('.inline-exam-folder'), fid=fs.value, fn=fs.selectedOptions&&fs.selectedOptions[0]?fs.selectedOptions[0].textContent.replace(/\s*\(\d+\)\s*$/,''):'自动创建'
       if(!fid){fid='auto-'+Date.now();fn='自动创建'}
       qa.style.display='block'; qa.innerHTML=''; qa._qs=[]; qa._fid=fid; qa._fn=fn
-      // Progress bar with inline timer
+
       var typeLabels={single_choice:'选择题',fill_blank:'填空题',calculation:'计算题',experiment:'实验题',inference:'推断题'}
+      var typeStr=active.map(function(t){return t.val+':'+t.qty}).join(',')
+      var totalQty=active.reduce(function(s,t){return s+t.qty},0)
       var progressHTML='<div style="margin:8px 0;padding:10px;background:#f9f9f9;border-radius:6px;font-size:13px"><b>⚡ AI 出题</b><span class="live-timer ticking" style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#b43c28;margin-left:8px"></span><br>'
-      active.forEach(function(t){ progressHTML+='<div class="exam-prog-'+t.val+'" style="margin:2px 0">⏳ '+typeLabels[t.val]+' ×'+t.qty+' 等待中...</div>' })
+      active.forEach(function(t){ progressHTML+='<div class="exam-prog-'+t.val+'" style="margin:2px 0">⏳ '+typeLabels[t.val]+' ×'+t.qty+' 等待 Agent...</div>' })
       progressHTML+='</div><div class="exam-qcards"></div>'
       qa.innerHTML=progressHTML; st.textContent=''
-      // Start timer inside progress div
       ChemAI.startTimer(qa.querySelector('.live-timer'))
-      var pending=active.length
-      // Show skeleton loading while generating
-      var skeletonHTML='<div style="padding:10px;font-size:13px;color:#888">正在提交出题请求...</div>'
-      qa.querySelector('.exam-qcards').innerHTML=skeletonHTML
-      active.forEach(function(t){
-        var progEl=qa.querySelector('.exam-prog-'+t.val)
-        if(progEl)progEl.textContent='⏳ '+typeLabels[t.val]+' ×'+t.qty+' 已提交'
-        var t0=Date.now()
-        var body = {knowledge_points:kps, difficulty:diff, quantity:t.qty, question_types:[t.val]}
-        if (panel._variantSource) { body.variant_source = panel._variantSource; body.variant_qid = panel._variantQid }
-        fetch('/api/question/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
-          .then(function(r){return r.json()}).then(function(d){
-            if(progEl)progEl.textContent='🔄 '+typeLabels[t.val]+' ×'+t.qty+' AI组织题目中...('+Math.round((Date.now()-t0)/1000)+'s)'
-            var qs=d.questions||[]; qs.forEach(function(q){q._typeLabel=t.val;q._saved=false}); qa._qs=qa._qs.concat(qs)
-            // Clear skeleton on first result
-            if(qa.querySelector('.exam-qcards').textContent.includes('正在提交'))qa.querySelector('.exam-qcards').innerHTML=''
-            _renderQs(qs,qa.querySelector('.exam-qcards'))
-            if(progEl)progEl.textContent='✅ '+typeLabels[t.val]+' ×'+qs.length+' 完成 ('+Math.round((Date.now()-t0)/1000)+'s)'
-            pending--; if(pending===0){ ChemAI.stopTimer(); _renderQsFooter(qa) }
-          }).catch(function(){
-            if(progEl)progEl.textContent='❌ '+typeLabels[t.val]+' 失败'
-            pending--; if(pending===0){ ChemAI.stopTimer(); _renderQsFooter(qa) }
-          })
+
+      // Build resume message with structured params for Agent
+      var resumeBody = {
+        message: 'EXAM_GENERATE',
+        kps: kps.join(','),
+        diff: diff,
+        types: typeStr,
+        qty: totalQty,
+        fid: fid,
+        fn: fn
+      }
+      if (panel._variantSource) { resumeBody.variant_qid = panel._variantQid; resumeBody.variant_source = panel._variantSource }
+      if (currentConvId) resumeBody.conversation_id = currentConvId
+
+      fetch('/api/agent/chat/langgraph/resume', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({message: JSON.stringify(resumeBody), conversation_id: currentConvId})
+      }).catch(function(){
+        st.textContent='出题请求失败，请重试'
+        ChemAI.stopTimer()
       })
     })
 

@@ -110,7 +110,7 @@ async def agent_chat_langgraph_stream(request: ChatRequest):
     if tool_names:
         hints = f"推荐工具: {', '.join(tool_names[:5])}\n用户消息: {request.message}\n使用推荐工具或其他工具，自行判断。"
 
-    agent, _, AdapterClass = await _get_or_create_agent(
+    agent, guard_state, AdapterClass = await _get_or_create_agent(
         request.persona, request.provider,
         student_profile=deps.student_profile, intent_hints=hints,
         version=request.version,
@@ -143,22 +143,16 @@ async def agent_chat_langgraph_stream(request: ChatRequest):
                         yield f"data: {result}\n\n"
 
             except GraphInterrupt:
-                # Interrupt detected via exception — graph paused, waiting for resume
                 yield f"data: {json.dumps({'type': 'phase', 'phase': 'awaiting_approval'}, ensure_ascii=False)}\n\n"
                 return
 
-            # Check for interrupt via state inspection (backup path)
-            state = await agent.aget_state(config)
-            if state and state.next and "__interrupt__" in str(state.next):
-                yield f"data: {json.dumps({'type': 'phase', 'phase': 'awaiting_approval'}, ensure_ascii=False)}\n\n"
-                return
-
-            # Finalize: route events + done (uses state values, not guard_state)
+            # Finalize: use guard_state for v2, graph state for v1
             final_state = await agent.aget_state(config)
             state_values = final_state.values if final_state else {}
+            gs = guard_state
             for result in adapter.finalize(
-                route=state_values.get("last_route"),
-                component=state_values.get("last_component"),
+                route=state_values.get("last_route") or (gs.last_route if gs else None),
+                component=state_values.get("last_component") or (gs.last_component if gs else None),
                 result_text=state_values.get("last_result_text"),
             ):
                 if result == "[DONE]":
@@ -222,7 +216,7 @@ async def agent_chat_langgraph(request: ChatRequest):
         pre_routed_agent2 = intent.target_agent
         suggested_tools2 = intent.tools
 
-    agent, _, AdapterClass = await _get_or_create_agent(
+    agent, guard_state2, AdapterClass = await _get_or_create_agent(
         request.persona, request.provider,
         student_profile=deps.student_profile, intent_hints=hints,
         version=request.version,
@@ -250,11 +244,16 @@ async def agent_chat_langgraph(request: ChatRequest):
             text = content
             break
 
-    # Route from state (not from guard_state — guard_state is per sub-agent)
+    # Route from graph state (v1) or guard_state (v2)
     final_state = await agent.aget_state(config)
     state_values = final_state.values if final_state else {}
     response = {"content": text}
     last_route = state_values.get("last_route") if state_values else None
+    last_component = state_values.get("last_component") if state_values else None
+    if not last_route and guard_state2:
+        last_route = guard_state2.last_route
+    if not last_component and guard_state2:
+        last_component = guard_state2.last_component
     if last_route and last_route.get("navigate"):
         route = last_route
         response["navigate"] = {"page": route.get("page"), "params": route.get("params", {})}
@@ -262,6 +261,8 @@ async def agent_chat_langgraph(request: ChatRequest):
             response.setdefault("populate", []).append(route["populate"])
         for act in route.get("actions", []):
             response.setdefault("actions", []).append(act)
+    if last_component:
+        response["component"] = last_component
 
     return response
 

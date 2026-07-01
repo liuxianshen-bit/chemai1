@@ -164,94 +164,125 @@ async def generate_questions(
     knowledge_points: str = "",
     difficulty: str = "medium",
     quantity: int = 5,
-    student_name: str = "",
+    question_types: str = "",
+    variant_qid: str = "",
+    variant_source: str = "",
 ) -> str:
-    """[DEPRECATED for agent use] 考试工作台 — 生成高中化学选择题
+    """AI出题 — 根据参数直接生成题目
 
-    Agent 不应再调用此工具。请使用 navigate_to_exam_workbench 代替——
-    通过对话收集参数后跳转考试工作台，由页面端完成题目生成。
-    此函数保留供考试工作台页面直接调用。"""
-    import re
-    from agent.provider.deepseek import DeepSeekProvider
-    from app.services.chemical_balance import audit_chemical_equation
+    何时用：用户明确说了知识点+题型+数量（如"出5道氧化还原选择题"），参数齐全直接出题
+    会发生什么：调用 LLM 生成题目（选择题带选项，填空题用___标记，计算题含分步解答），
+              运行方程式审核，返回题目列表并在对话中展示考试工作台面板
+    下一步：用户可要求修改题目、保存到题库（save_to_bank）或重出
+    NOT for 参数不全 — 用 show_exam_workbench 打开面板让用户补全
+    question_types 格式："single_choice:3,fill_blank:2,calculation:1"
+    """
+    import re, sys, os
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+    # Parse knowledge points
     kps = [k.strip() for k in knowledge_points.split(",") if k.strip()]
+    if not kps:
+        kps = ["高中化学综合"]
 
-    provider = DeepSeekProvider()
-
-    system_prompt = """你是资深高中化学教师。根据知识点生成高质量的化学选择题。
-
-要求:
-1. 题目科学性100%正确，化学方程式必须配平
-2. 4个选项，有区分度
-3. 注明正确答案和解析
-4. 适当设置陷阱选项
-
-返回纯JSON（不要markdown代码块）:
-{
-  "questions": [
-    {
-      "content": "题目正文",
-      "options": ["A. ...", "B. ...", "C. ...", "D. ..."],
-      "answer": "A",
-      "explanation": "解析",
-      "knowledge_points": ["知识点1"],
-      "difficulty": "medium",
-      "has_equation": false
+    # Parse question types: "single_choice:3,fill_blank:2" → [{val, qty}, ...]
+    type_map_reverse = {
+        "single_choice": "choice", "fill_blank": "fill",
+        "calculation": "calc", "experiment": "experiment", "inference": "inference",
     }
-  ]
-}"""
+    types = []
+    total_qty = quantity
+    if question_types:
+        for item in question_types.split(","):
+            parts = item.strip().split(":")
+            if len(parts) == 2:
+                val, qty = parts[0].strip(), int(parts[1].strip())
+                types.append({"val": val, "qty": qty})
+        total_qty = sum(t["qty"] for t in types)
 
-    prompt = f"请生成{quantity}道{difficulty}难度的高中化学题。知识点: {', '.join(kps) if kps else '高中化学综合'}"
+    # Map to llm_service format
+    llm_types = [type_map_reverse.get(t["val"], "choice") for t in types] if types else ["choice"]
 
-    try:
-        result = await provider.chat(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": prompt},
-            ],
-            temperature=0.8,
-            max_tokens=4096,
+    # Build RAG context (blueprint or vector search)
+    from app.services.exam_bank import exam_bank_service
+    rag_context = []
+    if variant_qid:
+        blueprint_q = exam_bank_service.get_by_exam_id(variant_qid)
+        if blueprint_q:
+            rag_context = [{
+                "content": blueprint_q.content,
+                "answer": blueprint_q.answer,
+                "knowledge_points": blueprint_q.knowledge_points,
+                "difficulty": blueprint_q.difficulty,
+                "source": blueprint_q.source,
+                "exam_id": blueprint_q.exam_id,
+                "similarity": 1.0,
+                "match_method": "blueprint",
+            }]
+    else:
+        similar = exam_bank_service.find_similar_questions(
+            knowledge_points=kps, difficulty=difficulty, limit=3,
         )
+        if similar:
+            rag_context = [{
+                "content": q.content, "answer": q.answer,
+                "knowledge_points": q.knowledge_points,
+                "difficulty": q.difficulty, "source": q.source,
+                "exam_id": q.exam_id, "similarity": 0.8, "match_method": "simple",
+            } for q in similar]
 
-        content = result.content
-        json_match = re.search(r"\{[\s\S]*\}", content)
-        if json_match:
-            data = json.loads(json_match.group())
-        else:
-            data = {"questions": []}
+    # Generate via llm_service (same engine as the REST endpoint)
+    from app.services.llm_service import llm_service
+    result = llm_service.generate_questions(
+        knowledge_points=kps,
+        difficulty=difficulty,
+        quantity=total_qty,
+        question_types=llm_types,
+        rag_context=rag_context if rag_context else None,
+    )
 
-        questions = data.get("questions", [])
-        audit_results = []
-        for q in questions:
-            if q.get("has_equation") or any(
-                kw in q.get("content", "") for kw in ["→", "=", "->", "方程式", "反应"]
-            ):
-                eq_match = re.search(r"([\d\w\(\)\+\s→=->]+)", q.get("content", ""))
-                if eq_match:
-                    audit = audit_chemical_equation(eq_match.group(1))
-                    audit_results.append({
-                        "question_idx": questions.index(q),
-                        "equation": eq_match.group(1),
-                        "audit": audit["overall_status"],
-                    })
+    questions = []
+    if result.get("success") and "questions" in result.get("content", ""):
+        try:
+            content = result["content"]
+            if "```json" in content:
+                content = content.split("```json")[1].split("```")[0]
+            data = json.loads(content)
+            questions = data.get("questions", [])
+        except (json.JSONDecodeError, KeyError, TypeError):
+            pass
 
-        await provider.close()
+    if not questions:
         return json.dumps({
-            "questions": questions,
-            "total": len(questions),
-            "audit_results": audit_results,
-            "_route": {
-                "navigate": not bool(student_name),
-                "page": "exam-v2" if not student_name else None,
-                "actions": [{"action": "openTab", "payload": "generate"}] if not student_name else [],
-                "populate": {"target": "questions", "data": {"questions": questions, "total": len(questions)}} if not student_name else None,
-            },
+            "result": f"已尝试生成{total_qty}道题但未获得有效结果，请检查知识点设置或重试",
+            "total": 0,
+            "questions": [],
         }, ensure_ascii=False)
 
-    except Exception as e:
-        await provider.close()
-        return json.dumps({"error": f"出题失败: {str(e)}", "questions": []}, ensure_ascii=False)
+    # Audit equations
+    from app.services.chemical_balance import audit_chemical_equation
+    for q in questions:
+        if any(kw in q.get("content", "") for kw in ["→", "=", "->", "方程式", "反应"]):
+            eq_match = re.search(r"([\d\w\(\)\+\s→=->]+)", q.get("content", ""))
+            if eq_match:
+                audit_chemical_equation(eq_match.group(1))
+
+    return json.dumps({
+        "result": f"已生成 {len(questions)} 道题目",
+        "total": len(questions),
+        "questions": questions,
+        "knowledge_points": kps,
+        "difficulty": difficulty,
+        "_component": {
+            "component": "exam-workbench",
+            "params": {
+                "knowledge_points": kps,
+                "difficulty": difficulty,
+                "types": types,
+                "variant_source": variant_source,
+            },
+        },
+    }, ensure_ascii=False)
 
 
 # ── 4. diagnose_barrier ──
