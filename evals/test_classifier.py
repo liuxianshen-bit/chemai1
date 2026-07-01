@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Classifier evals — test intent classification accuracy
 """
