@@ -1097,7 +1097,9 @@
         var progEl=qa.querySelector('.exam-prog-'+t.val)
         if(progEl)progEl.textContent='⏳ '+typeLabels[t.val]+' ×'+t.qty+' 已提交'
         var t0=Date.now()
-        fetch('/api/question/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({knowledge_points:kps,difficulty:diff,quantity:t.qty,question_types:[t.val]})})
+        var body = {knowledge_points:kps, difficulty:diff, quantity:t.qty, question_types:[t.val]}
+        if (panel._variantSource) { body.variant_source = panel._variantSource; body.variant_qid = panel._variantQid }
+        fetch('/api/question/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
           .then(function(r){return r.json()}).then(function(d){
             if(progEl)progEl.textContent='🔄 '+typeLabels[t.val]+' ×'+t.qty+' AI组织题目中...('+Math.round((Date.now()-t0)/1000)+'s)'
             var qs=d.questions||[]; qs.forEach(function(q){q._typeLabel=t.val;q._saved=false}); qa._qs=qa._qs.concat(qs)
@@ -1120,7 +1122,7 @@
           '<div class="inline-exam-qcard" style="border:1px solid #eee;border-radius:6px;padding:10px;margin:8px 0;background:#fff">'+
           '<div><b>'+(container.querySelectorAll('.inline-exam-qcard').length+1)+'.</b> '+(typeof renderChemistry==='function'?renderChemistry(q.content||''):escHtml(q.content||''))+'</div>'+
           (q.options?'<div style="margin:8px 0 0 20px;font-size:13px">'+o+'</div>':'')+
-          '<div style="margin-top:6px;font-size:12px;color:#999">答案: <span style="color:#b43c28">'+escHtml(q.answer||'')+'</span></div>'+
+          '<div style="margin-top:6px;font-size:12px;color:#999">答案: <span style="color:#b43c28">'+(typeof renderChemistry==='function'?renderChemistry(q.answer||''):escHtml(q.answer||''))+'</span></div>'+
           '<div style="margin-top:6px"><button class="inline-exam-btn-sm inline-exam-save-q">保存</button><button class="inline-exam-btn-sm inline-exam-del-q">删除</button></div></div>')
       })
       // Bind save/delete for the new cards

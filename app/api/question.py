@@ -24,6 +24,9 @@ class QuestionGenerateRequest(BaseModel):
     barrier_type: Optional[Literal["concept", "reading", "expression"]] = None  # 目标障碍类型
     question_types: Optional[List[str]] = None  # 题目类型：choice(选择题)/fill(填空题)/calc(计算题)
     estimated_time: Optional[int] = None  # 预估时间（分钟）
+    # 变种题参数（真题蓝本）
+    variant_source: Optional[str] = None  # 蓝本题描述
+    variant_qid: Optional[str] = None  # 蓝本题ID
 
 
 class SmartGenerateRequest(BaseModel):
@@ -122,12 +125,27 @@ async def generate_questions(request: QuestionGenerateRequest, db: Session = Dep
 
     start_time = time.time()
 
-    # 0. RAG检索：从历年真题库查找相似题目（使用两层检索）
+    # 0. 蓝本题直取：用户在前端选了真题蓝本，直接用指定题作为变种参考
     rag_context = []
-    rag_results = []  # 存储RAG检索结果用于后续关联
-    try:
-        # 优先使用向量检索（两层检索）
+    rag_results = []
+    if request.variant_qid and request.variant_source:
+        blueprint_q = exam_bank_service.get_by_exam_id(request.variant_qid)
+        if blueprint_q:
+            rag_context = [{
+                "content": blueprint_q.content,
+                "answer": blueprint_q.answer,
+                "knowledge_points": blueprint_q.knowledge_points,
+                "difficulty": blueprint_q.difficulty,
+                "source": blueprint_q.source,
+                "exam_id": blueprint_q.exam_id,
+                "similarity": 1.0,
+                "match_method": "blueprint"
+            }]
+            rag_results = rag_context.copy()
+            print(f"使用蓝本题: {blueprint_q.exam_id} ({blueprint_q.source})")
+    if not request.variant_qid:
         try:
+            # 优先使用向量检索（两层检索）
             from app.services.vector_search import vector_search_service
             # 构建查询文本
             query_text = " ".join(request.knowledge_points)
@@ -215,8 +233,8 @@ async def generate_questions(request: QuestionGenerateRequest, db: Session = Dep
                 ]
                 rag_results = rag_context.copy()
                 print(f"简单匹配检索到{len(rag_context)}道相似真题")
-    except Exception as e:
-        print(f"RAG检索失败: {e}")
+        except Exception as e:
+            print(f"RAG检索失败: {e}")
 
     # 1. 调用LLM生成题目（传入RAG上下文）
     llm_result = llm_service.generate_questions(
