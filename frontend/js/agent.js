@@ -393,33 +393,30 @@
             scrollBottom()
             break
 
-          // ── Tool cards ──
+          // ── Tool cards (always standalone) ──
           case 'tool_call':
-            if (_subPanel) {
-              _subToolCount++
-              addSubAgentTool(_subPanel, evt.name, 'running')
-            } else {
-              if (evt.name && (evt.name + '').startsWith('route_to_')) break
+            if (evt.name && (evt.name + '').startsWith('route_to_')) break
+            // Always show a tool card, regardless of sub-agent state
+            if (_subPanel) { _subToolCount++; addSubAgentTool(_subPanel, evt.name, 'running') }
+            try {
               var card = addToolCard(evt.name)
               if (card) { card._toolName = evt.name; _topToolCards.push(card) }
-            }
+            } catch(e) { console.error('[tool_call] addToolCard failed:', e) }
             var stTool2 = document.getElementById('status-tool')
             if (stTool2) stTool2.textContent = evt.name
             break
 
           case 'tool_result':
-            if (_subPanel) {
-              addSubAgentTool(_subPanel, evt.name, evt.success !== false ? 'done' : 'error')
-            } else {
-              var pending = _topToolCards.filter(function(c) { return c._toolName === evt.name && !c._filled })
-              if (pending.length) { updateToolCard(pending[0], evt); pending[0]._filled = true }
+            if (_subPanel) { addSubAgentTool(_subPanel, evt.name, evt.success !== false ? 'done' : 'error') }
+            var pending = _topToolCards.filter(function(c) { return c._toolName === evt.name && !c._filled })
+            if (pending.length) {
+              try { updateToolCard(pending[0], evt); pending[0]._filled = true }
+              catch(e) { console.error('[tool_result] updateToolCard failed:', e) }
             }
             break
 
           case 'tool_error':
-            if (_subPanel) {
-              addSubAgentTool(_subPanel, evt.name, 'error')
-            }
+            if (_subPanel) { addSubAgentTool(_subPanel, evt.name, 'error') }
             break
 
           // ── Main dialog streaming ──
@@ -504,6 +501,11 @@
       history.push({ role: 'assistant', content: reply })
       saveCurrentConv()
     }
+    // Remove empty coordinator bubble when sub-agent handled everything
+    if (!reply && !hasPanel && !bubble.textContent.trim() &&
+        (bubble.nextElementSibling || bubble.previousElementSibling)) {
+      bubble.remove()
+    }
     // Check if agent wants to navigate to another page
     var navigateTo = sessionStorage.getItem('chemai_navigate')
     if (navigateTo) {
@@ -541,6 +543,7 @@
 
   function addToolCard(name, status) {
     var container = document.getElementById('chat-messages')
+    if (!container) return null
     var card = document.createElement('div')
     card.className = 'tool-card running'
     card.innerHTML = '<div class="tool-card-header">' +
@@ -597,7 +600,7 @@
     var container = document.getElementById('chat-messages')
     var panel = document.createElement('div')
     panel.className = 'sub-agent-panel'
-    panel.style.cssText = 'border:1.5px solid #e0e0e0;border-radius:8px;margin:4px 0;overflow:hidden;background:#fcfcfc'
+    panel.style.cssText = 'border:1.5px solid #e0e0e0;border-radius:8px;margin:4px 0;background:#fcfcfc'
     var display = evt.display || evt.agent
 
     // Get icon for sub-agent type
@@ -612,9 +615,11 @@
       '<span style="font-weight:600">' + escHtml(display) + '</span>' +
       '<span class="sa-status" style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#b43c28;margin-left:auto">⏳ 执行中</span>' +
       '</div>' +
-      '<div class="sa-body" style="display:block">' +
+      '<div class="sa-body collapsible-body open">' +
+      '<div class="collapsible-inner">' +
       '<div class="sa-tools" style="padding:4px 12px"></div>' +
       '<div class="sa-text" style="padding:6px 12px 10px;font-size:13px;line-height:1.65;color:#666;border-top:1px dashed #eee;display:none;white-space:pre-wrap;word-break:break-word"></div>' +
+      '</div>' +
       '</div>'
     container.appendChild(panel)
     scrollBottom()
@@ -622,8 +627,8 @@
     panel.querySelector('.sa-header').addEventListener('click', function() {
       var body = this.nextElementSibling
       var chev = this.querySelector('.sa-chevron')
-      var expanded = body.style.display !== 'none'
-      body.style.display = expanded ? 'none' : 'block'
+      var expanded = body.classList.contains('open')
+      body.classList.toggle('open', !expanded)
       chev.style.transform = expanded ? 'rotate(0deg)' : 'rotate(90deg)'
     })
     return panel
@@ -670,7 +675,7 @@
     }
     // Collapse the panel
     var body = panel.querySelector('.sa-body')
-    if (body) body.style.display = 'none'
+    if (body) body.classList.remove('open')
   }
 
   function updateToolCard(card, evt) {
@@ -678,10 +683,7 @@
     card.classList.remove('running')
     card.classList.add(ok ? 'done' : 'error')
     var status = card.querySelector('.tool-card-header span:last-child')
-    if (status) {
-      status.textContent = ok ? '完成' : '失败'
-      status.style.color = ok ? '#2c6e49' : '#b43c28'
-    }
+    if (status) { status.textContent = ok ? '完成' : '失败'; status.style.color = ok ? '#2c6e49' : '#b43c28' }
     var inner = card.querySelector('.collapsible-inner')
     if (!inner) return
     var toolName = evt.name || evt.tool
@@ -718,7 +720,9 @@
       '<div class="plan-card-header" style="font-family:\'Cormorant Garamond\',Georgia,serif;font-size:16px;font-weight:600;margin-bottom:10px">' +
         '📋 ' + escHtml(plan.goal || '执行计划') +
         '<span style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#999;margin-left:8px">' + plan.total_steps + ' 步</span>' +
-      '</div>'
+      '</div>' +
+      '<div class="plan-card-body">' +
+      '<div class="plan-card-body-inner">'
     plan.steps.forEach(function(s, i) {
       html += '<div class="plan-step" id="plan-step-' + i + '" style="display:flex;align-items:center;gap:10px;padding:6px 0;font-size:13px">' +
         '<span class="plan-step-num" style="width:24px;height:24px;border-radius:50%;border:1.5px solid rgba(0,0,0,.15);display:flex;align-items:center;justify-content:center;font-family:\'JetBrains Mono\',monospace;font-size:11px;flex-shrink:0">' + s.step + '</span>' +
@@ -726,7 +730,8 @@
         '<span class="plan-step-status" style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#999">等待中</span>' +
         '</div>'
     })
-    html += '<div class="plan-card-summary" style="display:none;font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#2c6e49;padding:4px 0"></div>'
+    html += '</div></div>' +
+      '<div class="plan-card-summary" style="display:none;font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#2c6e49;padding:4px 0"></div>'
     html += '</div>'
     return html
   }
@@ -762,11 +767,9 @@
         var total = _planSteps.length
         summary.textContent = done + '/' + total + ' 步骤已完成'
         summary.style.display = ''
-        card.querySelectorAll('.plan-step').forEach(function(el) { el.style.display = 'none' })
+        card.classList.add('collapsed')
         card.onclick = function() {
-          var collapsed = card.querySelector('.plan-card-summary').style.display !== 'none'
-          card.querySelectorAll('.plan-step').forEach(function(el) { el.style.display = collapsed ? '' : 'none' })
-          card.querySelector('.plan-card-summary').style.display = collapsed ? 'none' : ''
+          card.classList.toggle('collapsed')
         }
       }, 2000)
     }
