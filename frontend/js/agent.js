@@ -1118,7 +1118,7 @@
       qa.innerHTML=progressHTML; st.textContent=''
       ChemAI.startTimer(qa.querySelector('.live-timer'))
 
-      // Generate questions via direct API (not through Agent — panel is UI, Agent is trigger)
+      // Direct API: panel handles exam generation, Agent handles conversation
       var pending = active.length
       active.forEach(function(t){
         var progEl = qa.querySelector('.exam-prog-'+t.val)

@@ -3,6 +3,10 @@
 Replaces the multi-agent coordinator+router+6-sub-agent architecture.
 Single ReAct loop: LLM sees all tools, picks based on docstring descriptions.
 GuardState provides dedup, call limits, and approval gating — same as v1.
+
+Panel interrupt: when LLM calls show_exam_workbench, post_model_hook pauses the
+graph via interrupt(). Frontend renders the panel, user fills params, clicks
+"AI 出题" which resumes the graph with panel params → LLM calls generate_questions.
 """
 
 import json
@@ -46,10 +50,7 @@ SYSTEM_PROMPT = """你是 ChemAI 化学教研助手。
 ## 出题规则
 - 用户说"出题""出卷""生成题目"等任何出题意图 → 调 show_exam_workbench 打开面板
 - 参数不全时也调 show_exam_workbench，预填已知参数（知识点、难度等）
-  面板打开后用户在里面配题型、选蓝本、点 AI 出题
-- 不要在对话中追问用户参数——让面板处理
-
-工具调用后：基于结果简洁回复用户。如果需要更多信息，继续调用工具。"""
+- 不要在对话中追问用户参数——让面板处理"""
 
 ALL_TOOLS = list(TOOLS) + [
     browse_navigate, browse_read, browse_click, browse_input, browse_screenshot,
@@ -69,17 +70,17 @@ async def create_chemai_agent(
 
     Returns (graph, guard_state). The guard_state is shared across all tool
     calls within one invocation — it tracks dedup, call limits, and approval.
+
+    Panel tools (show_exam_workbench) trigger post_model_hook interrupt:
+    graph pauses → frontend shows panel → user fills params → resume.
     """
     from agent.agents import load_persona
 
     persona_config = load_persona(persona)
     available_skills = persona_config.get("available_skills", [])
 
-    # Filter domain tools to persona's available_skills
     persona_tool_names = set(available_skills)
     domain_tools = [t for t in TOOLS if t.__name__ in persona_tool_names]
-
-    # Browser tools are always available (generic web interaction)
     browser_tools = [
         browse_navigate, browse_read, browse_click,
         browse_input, browse_screenshot,

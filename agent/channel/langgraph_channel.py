@@ -279,7 +279,7 @@ async def agent_chat_langgraph_resume(request: ChatRequest):
     cid = request.conversation_id or "default"
     user_response = request.message or ""
 
-    agent, _, AdapterClass = await _get_or_create_agent(
+    agent, guard_state, AdapterClass = await _get_or_create_agent(
         request.persona, request.provider, version=request.version)
     adapter = AdapterClass()
     config = {"configurable": {"thread_id": cid}, "recursion_limit": 12}
@@ -309,9 +309,10 @@ async def agent_chat_langgraph_resume(request: ChatRequest):
 
             final_state = await agent.aget_state(config)
             state_values = final_state.values if final_state else {}
+            gs = guard_state
             for result in adapter.finalize(
-                route=state_values.get("last_route"),
-                component=state_values.get("last_component"),
+                route=state_values.get("last_route") or (gs.last_route if gs else None),
+                component=state_values.get("last_component") or (gs.last_component if gs else None),
                 result_text=state_values.get("last_result_text"),
             ):
                 if result == "[DONE]":
