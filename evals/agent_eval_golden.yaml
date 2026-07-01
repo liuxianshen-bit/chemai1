@@ -142,6 +142,27 @@ scenarios:
       - type: "text_contains_one_of"
         values: ["范围", "班级", "难度", "知识点", "数量", "章节"]
 
+  # ── 直接出题（参数齐全）──
+  - id: "gen-questions-direct"
+    description: "参数齐全的出题应调 generate_questions 直接出题"
+    input: "出5道氧化还原的选择题，中等难度"
+    persona: "tutor"
+    assertions:
+      - type: "tool_called"
+        name: "generate_questions"
+      - type: "tool_arg_contains"
+        name: "generate_questions"
+        arg: "knowledge_points"
+
+  # ── 出题参数不全→开面板 ──
+  - id: "gen-questions-incomplete"
+    description: "参数不全应调 show_exam_workbench 开面板"
+    input: "帮我出几道题"
+    persona: "tutor"
+    assertions:
+      - type: "tool_called"
+        name: "show_exam_workbench"
+
   # ── 导入试卷 (import_exam_paper 已移除, 由 Baidu OCR pipeline 替代) ──
   - id: "import-paper"
     description: "导入试卷 → 调 show_exam_workbench（通过面板上传）"
