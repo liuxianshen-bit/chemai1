@@ -506,7 +506,10 @@
     var hasPanel = bubble.querySelector('.inline-exam-panel, .inline-diag-panel')
     if (reply && !hasPanel) {
       bubble.innerHTML = renderMarkdown(reply)
-      history.push({ role: 'assistant', content: reply })
+    }
+    // Always save conversation history, even when inline panel is shown
+    if (reply || hasPanel) {
+      history.push({ role: 'assistant', content: reply || '[面板交互]' })
       saveCurrentConv()
     }
     // Remove empty coordinator bubble when sub-agent handled everything
