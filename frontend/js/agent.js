@@ -1006,11 +1006,13 @@
     var preVariant = params.variant_source || ''
     var preFolder = params.set_name || ''
 
-    // Update mode: if panel already exists and params carry questions, update in-place
-    var existingPanel = bubble.querySelector('.inline-exam-panel')
+    // Update mode: search entire chat for existing panel, update in-place
+    var existingPanel = document.querySelector('.inline-exam-panel')
     if (existingPanel) {
       var qa = existingPanel.querySelector('.inline-exam-questions')
       if (!qa) return
+      // Remove the new bubble that triggered this update (panel already exists)
+      if (!bubble.contains(existingPanel)) { bubble.remove() }
       // Update question list from params
       var questions = params.questions || []
       if (questions.length) {

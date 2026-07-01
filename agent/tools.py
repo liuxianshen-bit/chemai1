@@ -280,6 +280,7 @@ async def generate_questions(
                 "difficulty": difficulty,
                 "types": types,
                 "variant_source": variant_source,
+                "questions": questions,
             },
         },
     }, ensure_ascii=False)
