@@ -5,6 +5,14 @@
 (function () {
   'use strict'
 
+  // ─── 图标字体预加载（防止各页面漏加导致乱码）───
+  if (!document.querySelector('link[href*="Material+Symbols"]')) {
+    var _iconLink = document.createElement('link')
+    _iconLink.rel = 'stylesheet'
+    _iconLink.href = 'https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap'
+    document.head.appendChild(_iconLink)
+  }
+
   // ─── 认证检查 ───
   var user = getUser()
   if (!user) { window.location.href = '/login.html'; return }
