@@ -987,17 +987,48 @@
     if (typeof katex === 'undefined' || typeof marked === 'undefined') return escHtml(text)
     try {
       var idx=0, blocks=[], h=text
-      // Protect paired $$...$$
+
+      // Step 0: Wrap bare \\mathrm{...} etc. in $$...$$ placeholders
+      // OCR chemistry content has these without $ delimiters.
+      // Match balanced braces after \\mathrm, \\texttt etc.
+      var bareRe = /\\(mathrm|texttt|text|textit|textbf)\s*\{/g
+      var newH = '', lastEnd = 0, m
+      while ((m = bareRe.exec(h)) !== null) {
+        newH += h.substring(lastEnd, m.index)
+        var cmd = m[1], pos = m.index + m[0].length - 1 // at opening {
+        var depth = 1, i = pos + 1
+        while (i < h.length && depth > 0) {
+          if (h[i] === '{') depth++
+          else if (h[i] === '}') depth--
+          i++
+        }
+        if (depth === 0) {
+          var full = h.substring(m.index, i)
+          var key = '\uE000BARE' + idx + '\uE001'
+          blocks.push({key: key, tex: full, display: false})
+          newH += key
+          idx++
+          lastEnd = i
+          bareRe.lastIndex = i
+        } else {
+          newH += m[0]
+          lastEnd = m.index + m[0].length
+        }
+      }
+      newH += h.substring(lastEnd)
+      h = newH
+
+      // Step 1: Protect paired $$...$$ (display math)
       h=h.replace(/\$\$([\s\S]*?)\$\$/g,function(m,e){var k='\uE000LATEX'+idx+'\uE001';blocks.push({key:k,tex:e,display:true});idx++;return k})
-      // Protect paired $...$
+      // Step 2: Protect paired $...$ (inline math)
       h=h.replace(/\$(?!\$)([\s\S]*?)\$/g,function(m,e){if(e.length<300){var k='\uE000LATEX'+idx+'\uE001';blocks.push({key:k,tex:e,display:false});idx++;return k}return m})
-      // Escape any remaining unpaired $ signs
+      // Step 3: Escape any remaining unpaired $ signs
       h=h.replace(/\$/g,'<span>$</span>')
-      // Markdown → HTML
+      // Step 4: Markdown → HTML
       h=marked.parse(h,{breaks:true,gfm:true})
-      // Render LaTeX blocks
+      // Step 5: Render LaTeX blocks
       blocks.forEach(function(b){try{var ren=katex.renderToString(b.tex,{displayMode:b.display,throwOnError:false,trust:true,strict:false});h=h.replace(b.key,ren)}catch(_){h=h.replace(b.key,b.tex)}})
-      // Render \ce{} blocks
+      // Step 6: Render \\ce{} blocks
       h=h.replace(/\\ce\{([^}]+)\}/g,function(m,f){try{return katex.renderToString(f,{throwOnError:false,trust:true,strict:false})}catch(_){return m}})
       return h
     } catch(e) { return text }
