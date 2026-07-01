@@ -43,7 +43,7 @@ def run():
         # ── Cases that should call specific tools ──
         tool_cases = [
             ("帮我配平 Fe + O2 = Fe2O3", "tutor", "balance_equation"),
-            ("出3道盐类水解的选择题", "tutor", "generate_questions"),
+            ("出3道盐类水解的选择题", "tutor", "show_exam_workbench"),
             ("搜索有机化学的真题", "tutor", "search_exam_bank"),
             ("模拟酸碱中和滴定实验", "tutor", "simulate_experiment"),
             ("什么是勒夏特列原理", "tutor", "chemistry_tutor"),

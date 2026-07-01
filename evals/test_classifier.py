@@ -20,7 +20,7 @@ def run():
             # (message, persona, expected_tools)
             ("帮我配平 Fe + O2 = Fe2O3", "tutor", ["balance_equation"]),
             ("配平这个方程式 KMnO4 + HCl = KCl + MnCl2 + Cl2 + H2O", "tutor", ["balance_equation"]),
-            ("出3道盐类水解的选择题", "tutor", ["generate_questions"]),
+            ("出3道盐类水解的选择题", "tutor", ["show_exam_workbench"]),
             ("搜索关于有机化学的真题", "tutor", ["search_exam_bank"]),
             ("找2023年高考化学真题", "teacher", ["search_exam_bank"]),
             ("模拟酸碱中和滴定实验", "tutor", ["simulate_experiment"]),
