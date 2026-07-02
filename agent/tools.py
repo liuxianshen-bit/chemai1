@@ -46,7 +46,7 @@ async def search_exam_bank(
                 lines.append(f"解析：{q.analysis[:200]}")
             if q.page_image:
                 fig_url = f"/static/figures/{q.region}/{q.year}/figures/{q.page_image}"
-                lines.append(f"原题图片：{fig_url}")
+                lines.append(f"\n![原题图片]({fig_url})\n<img src=\"{fig_url}\" alt=\"原题图片\" />")
             lines.append("")
 
     # If local results < 3, supplement with web search
