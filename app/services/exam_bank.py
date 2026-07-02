@@ -134,22 +134,9 @@ class ExamBankService:
     ) -> List[HistoricalQuestion]:
         """
         查询真题
-        支持按来源/地区/年份/知识点/难度/关键词筛选
-        use_vector=True 时先用向量搜索召回候选，再结构化过滤
+        先用结构化过滤（关键词/知识点/年份），结果不足时用向量搜索扩展
         """
-        # Vector semantic recall (if enabled and keyword provided)
-        if use_vector and keyword:
-            from app.services.vector_search import vector_search_service
-            candidates = vector_search_service.search_similar(
-                query_text=keyword, knowledge_points=[], difficulty="", limit=20
-            )
-            candidate_ids = {c.get("exam_id", "") for c in candidates if c.get("exam_id")}
-            if candidate_ids:
-                results = [q for q in self.questions if q.exam_id in candidate_ids]
-            else:
-                results = list(self.questions)
-        else:
-            results = list(self.questions)
+        results = list(self.questions)
 
         if source:
             results = [q for q in results if source in q.source]
@@ -174,13 +161,31 @@ class ExamBankService:
             terms = [keyword_lower]
             if len(keyword) > 2:
                 import re
-                # Split by common separators: 的、与、和、+等
-                terms.extend([t.strip() for t in re.split(r'[的与和、，,+\s]+', keyword) if len(t.strip()) >= 2])
+                _stop_words = {"题目", "真题", "高考", "一道", "搜索", "找一下", "有没有", "关于"}
+                split_terms = [t.strip() for t in re.split(r'[的与和、，,+\s]+', keyword) if len(t.strip()) >= 2]
+                terms.extend([t for t in split_terms if t not in _stop_words])
             results = [q for q in results
                       if any(t in q.content.lower()
                              or t in q.answer.lower()
                              or any(t in (kp or "").lower() for kp in q.knowledge_points)
                              for t in terms)]
+
+        # Vector fallback: if structured filters returned too few, expand via embedding
+        if use_vector and keyword and len(results) < 3:
+            from app.services.vector_search import vector_search_service
+            candidates = vector_search_service.search_similar(
+                query_text=keyword, knowledge_points=[], difficulty="", limit=20
+            )
+            # Only add high-confidence vector matches (similarity > 0.6)
+            high_conf = {c["exam_id"]: c["similarity"] for c in candidates
+                        if c.get("exam_id") and c.get("similarity", 0) > 0.6}
+            if high_conf:
+                existing_ids = {q.exam_id for q in results}
+                extra = [q for q in self.questions
+                        if q.exam_id in high_conf and q.exam_id not in existing_ids]
+                # Sort by similarity descending
+                extra.sort(key=lambda q: high_conf.get(q.exam_id, 0), reverse=True)
+                results = results + extra
 
         return results[:limit]
 
