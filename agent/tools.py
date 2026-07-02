@@ -29,6 +29,7 @@ async def search_exam_bank(
         year=year if year else None,
         difficulty=difficulty or None,
         limit=limit,
+        use_vector=True if keyword else False,
     )
     if not results:
         return json.dumps({
@@ -158,6 +159,60 @@ async def web_search(query: str = "") -> str:
     }, ensure_ascii=False)
 
 
+# ── 化学式后处理：确保 LaTeX 格式一致 ──
+
+def _normalize_chem_formulas(text: str) -> str:
+    """归一化化学式格式：
+    1. 将 $...$ 内部的 → 替换为 \\rightarrow
+    2. 检测裸化学式（如 Cl2, Fe3+）并在必要时包装
+    """
+    import re
+
+    # Step 1: 修复 $...$ 内部的 → 为 \\rightarrow
+    def _fix_arrow_in_math(m: re.Match) -> str:
+        content = m.group(1)
+        content = content.replace("→", "\\rightarrow")
+        content = content.replace("⇌", "\\rightleftharpoons")
+        content = content.replace("↑", "\\uparrow")
+        content = content.replace("↓", "\\downarrow")
+        return f"${content}$"
+
+    text = re.sub(r"\$([^$]+)\$", _fix_arrow_in_math, text)
+
+    # Step 2: 如果整段文本零 $ 但含有明显的化学式模式 → 用正则包装
+    if "$" not in text:
+        # 匹配至少2个元素符号组成的化学式（单元素如 Na 不处理，避免误伤）
+        # 如: H2O, CO2, NaCl, NaOH, Fe2O3, Na2CO3
+        chem_pattern = re.compile(
+            r'\b([A-Z][a-z]?\d*[A-Z][a-z]?\d*(?:[A-Z][a-z]?\d*)*)'
+        )
+        # 常见化学式白名单
+        known_formulas = {
+            "H2O", "CO2", "NaCl", "NaOH", "HCl", "Fe2O3", "FeO", "CaCO3",
+            "NH4Cl", "NH3", "Cl2", "Na", "Fe", "Cu", "O2", "H2", "N2",
+            "SO2", "SO3", "H2SO4", "CuSO4", "FeSO4", "CaO", "MnO2",
+            "KClO3", "KCl", "Na2CO3", "FeCl3", "CuO", "MgO", "Al2O3",
+            "NO2", "NO", "CO", "CH4", "C2H5OH", "CH3COOH", "HNO3",
+            "H3PO4", "Na2SO4", "BaSO4", "AgCl", "AgNO3", "CaCl2",
+            "Fe(OH)3", "Al(OH)3", "Mg(OH)2", "Ca(OH)2", "NaOH",
+            "NaHCO3", "KMnO4", "K2Cr2O7",
+        }
+        def _wrap_chem(m: re.Match) -> str:
+            w = m.group(0)
+            # Skip if looks like English word (3+ consecutive lowercase letters)
+            if re.search(r'[a-z]{3,}', w):
+                return w
+            # Must be in whitelist or contain digits
+            if w in known_formulas or any(c.isdigit() for c in w):
+                # 转换数字下标: Cl2 → Cl_2, Fe2O3 → Fe_2O_3
+                subbed = re.sub(r'([A-Za-z)])(\d+)', r'\1_\2', w)
+                return f"${subbed}$"
+            return w
+        text = chem_pattern.sub(_wrap_chem, text)
+
+    return text
+
+
 # ── 3. generate_questions ──
 
 async def generate_questions(
@@ -259,6 +314,14 @@ async def generate_questions(
             "questions": [],
         }, ensure_ascii=False)
 
+    # Normalize chemical formula formatting (LaTeX consistency)
+    for q in questions:
+        for field in ("content", "answer"):
+            if field in q and q[field]:
+                q[field] = _normalize_chem_formulas(q[field])
+        if "options" in q and q["options"]:
+            q["options"] = [_normalize_chem_formulas(o) for o in q["options"]]
+
     # Audit equations
     from app.services.chemical_balance import audit_chemical_equation
     for q in questions:
@@ -350,14 +413,19 @@ async def diagnose_barrier(
         barrier = json.loads(row[1]) if isinstance(row[1], str) else row[1]
         dominant = max(barrier.items(), key=lambda x: x[1]) if barrier else ("unknown", 0)
 
-        return json.dumps({
+        result_data = {
             "student_id": student_id,
             "student_name": row[0],
             "barrier_distribution": barrier,
             "dominant_barrier": dominant[0],
             "exercises_completed": row[2] or 0,
             "_route": {"navigate": False},
-        }, ensure_ascii=False)
+        }
+
+        # Writeback to long-term memory (best-effort)
+        _writeback_diagnosis(student_id, result_data)
+
+        return json.dumps(result_data, ensure_ascii=False)
 
     elif class_id:
         rows = session.execute(
@@ -772,6 +840,50 @@ async def save_to_bank(
         question_set.question_count = import_count
         db.commit()
 
+        # Sync to exam_bank_service memory + ChromaDB vector index
+        try:
+            from app.services.exam_bank import exam_bank_service
+            from app.models.historical_exam import HistoricalQuestion
+            from app.services.vector_search import vector_search_service
+
+            for i, q in enumerate(q_list):
+                hq = HistoricalQuestion(
+                    exam_id=question_id if i == 0 else f"q_{datetime.now().strftime('%Y%m%d%H%M%S')}_{i}",
+                    source="AI生成",
+                    year=None,
+                    region="AI生成",
+                    paper_name=set_name,
+                    question_number=str(i + 1),
+                    original_number=str(i + 1),
+                    question_type=q.get("type", "single_choice"),
+                    content=q.get("content", ""),
+                    options=q.get("options"),
+                    answer=str(q.get("answer", "")),
+                    analysis=q.get("analysis", ""),
+                    knowledge_points=q.get("knowledge_points", []),
+                    difficulty=q.get("difficulty", "medium"),
+                    discrimination=0.5,
+                    score=0,
+                    chapter="",
+                    page_image=None,
+                )
+                exam_bank_service.add_question(hq)
+
+            # Incrementally index to ChromaDB
+            idx_data = [{
+                "exam_id": q.get("content", "")[:20] + str(i),
+                "content": q.get("content", ""),
+                "knowledge_points": q.get("knowledge_points", []),
+                "difficulty": q.get("difficulty", "medium"),
+                "source": "AI生成",
+                "year": None,
+                "region": "AI生成",
+            } for i, q in enumerate(q_list)]
+            if idx_data:
+                vector_search_service.index_questions(idx_data, mode="append")
+        except Exception as e:
+            print(f"Exam bank/vector sync skipped: {e}")
+
         return json.dumps({
             "saved": True,
             "set_id": set_id,
@@ -1098,6 +1210,122 @@ async def show_students(
 
 # ── Tool list for factory ──
 
+# ── Diagnosis writeback helper ──
+
+def _writeback_diagnosis(student_id: str, result_data: dict):
+    """Best-effort write diagnosis result to SqliteStore."""
+    try:
+        store = _get_store_context()
+        if not store:
+            return
+        import asyncio
+        from datetime import datetime
+
+        async def _write():
+            ns = ("student", student_id, "diagnosis")
+            # Upsert: keep max 5 entries
+            try:
+                existing = await store.asearch(ns, limit=5)
+                if existing and len(existing) >= 5:
+                    oldest = existing[-1]
+                    oldest_key = getattr(oldest, "key", "")
+                    if oldest_key:
+                        await store.adelete(ns, oldest_key)
+            except Exception:
+                pass
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            await store.aput(ns, f"diag_{ts}", {
+                "barrier_type": result_data.get("dominant_barrier"),
+                "barrier_distribution": result_data.get("barrier_distribution"),
+                "timestamp": ts,
+            })
+
+        # Run async write in current event loop if available
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(_write())
+        except RuntimeError:
+            pass
+    except Exception:
+        pass
+
+
+# ── 15. memory_student_get ──
+
+async def memory_student_get(
+    student_id: str = "",
+    memory_type: str = "all",
+) -> str:
+    """学情记忆 — 获取学生历史诊断和学习计划记忆
+
+    何时用: 教师询问某学生的学习历史、之前的诊断结果、薄弱环节变化趋势
+    会发生什么: 返回学生诊断历史(最多5条)和当前学习计划
+    """
+    store = _get_store_context()
+    if not store:
+        return json.dumps({"error": "记忆系统不可用"}, ensure_ascii=False)
+
+    results = {"student_id": student_id, "diagnoses": [], "learning_plan": None}
+
+    if student_id:
+        # Diagnosis history
+        ns = ("student", student_id, "diagnosis")
+        try:
+            items = await store.asearch(ns, limit=5)
+            results["diagnoses"] = [
+                {"key": getattr(i, "key", ""), "data": getattr(i, "value", i)}
+                for i in (items or [])
+            ]
+        except Exception:
+            pass
+
+        # Current learning plan
+        ns2 = ("student", student_id, "learning_plan")
+        try:
+            plan = await store.aget(ns2, "current")
+            if plan and hasattr(plan, "value"):
+                results["learning_plan"] = plan.value
+        except Exception:
+            pass
+
+    return json.dumps(results, ensure_ascii=False)
+
+
+# ── 16. memory_teacher_get ──
+
+async def memory_teacher_get(
+    teacher_id: str = "",
+) -> str:
+    """教师偏好 — 获取教师教学偏好和历史设置
+
+    何时用: 需要了解教师的教学风格、难度偏好、班级配置
+    会发生什么: 返回教师存储的偏好设置
+    """
+    store = _get_store_context()
+    if not store:
+        return json.dumps({"error": "记忆系统不可用"}, ensure_ascii=False)
+
+    prefs = {}
+    if teacher_id:
+        try:
+            item = await store.aget(("teacher", teacher_id, "preferences"), "current")
+            if item and hasattr(item, "value"):
+                prefs = item.value
+        except Exception:
+            pass
+
+    return json.dumps(prefs, ensure_ascii=False)
+
+
+def _get_store_context():
+    """Get SqliteStore from agent context."""
+    try:
+        from agent.langgraph_agent_v2 import get_store_context
+        return get_store_context()
+    except Exception:
+        return None
+
+
 TOOLS = [
     search_exam_bank,
     web_search,
@@ -1113,4 +1341,6 @@ TOOLS = [
     save_to_bank,
     list_banks,
     delete_bank,
+    memory_student_get,
+    memory_teacher_get,
 ]

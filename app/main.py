@@ -18,6 +18,23 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse, JSONResponse
 from app.core.config import settings
 
+# LangGraph SqliteStore (long-term memory)
+_store = None
+_store_ctx = None  # async context manager holder
+
+
+async def get_store():
+    """Get the SqliteStore singleton (lazily initialized via async context manager)."""
+    global _store, _store_ctx
+    if _store is None:
+        from langgraph.store.sqlite.aio import AsyncSqliteStore
+        import os
+        db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "chemai_store.db")
+        _store_ctx = AsyncSqliteStore.from_conn_string(db_path)
+        _store = await _store_ctx.__aenter__()
+        await _store.setup()
+    return _store
+
 # ── 铁律：全局化学式渲染 — 所有 JSON 响应中的化学式自动转 Unicode 下标/上标 ──
 from app.utils.chem_render import render_chem_deep
 _original_json_render = JSONResponse.render
@@ -247,6 +264,10 @@ async def serve_page(page: str):
 
 @app.on_event("startup")
 async def startup_event():
+    # Initialize SqliteStore (long-term memory)
+    global _store
+    _store = await get_store()
+    print("SqliteStore initialized (chemai_store.db)")
     from app.models.database import engine, Base
     from app.models.database import get_session_factory
     Base.metadata.create_all(bind=engine)
@@ -262,6 +283,14 @@ async def startup_event():
     except Exception as e:
         print(f"Skills 注册失败: {e}")
 
+    # 构建向量索引
+    try:
+        from app.services.vector_search import vector_search_service
+        count = vector_search_service.build_index_from_exam_bank()
+        print(f"Vector index built: {count} questions")
+    except Exception as e:
+        print(f"Vector index build skipped: {e}")
+
     # 启动调度器
     try:
         from app.scheduler import init_scheduler
@@ -272,6 +301,17 @@ async def startup_event():
 
 @app.on_event("shutdown")
 async def shutdown_event():
+    # Close SqliteStore
+    global _store, _store_ctx
+    if _store_ctx is not None:
+        try:
+            await _store_ctx.__aexit__(None, None, None)
+            _store = None
+            _store_ctx = None
+            print("SqliteStore closed")
+        except Exception as e:
+            print(f"SqliteStore close failed: {e}")
+
     # 关闭调度器
     try:
         from app.scheduler import shutdown_scheduler

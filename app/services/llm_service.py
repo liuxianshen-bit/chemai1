@@ -147,11 +147,11 @@ class LLMService:
         active_types = question_types or ['choice']
 
         type_specs = {
-            'choice': {'rules': '4个选项(A/B/C/D)，标注正确选项。设置1-2个陷阱选项。', 'example': '{"content":"下列关于盐类水解的说法正确的是（ ）","type":"choice","options":["A...","B...","C...","D..."],"answer":"A","knowledge_points":["盐类水解"],"difficulty":"medium"}'},
-            'fill': {'rules': '题目用___标记填空。答案只填空缺内容。每道题可有1-3个空。不要设选项。', 'example': '{"content":"实验室制氧气的方程式为___，MnO2是___。","type":"fill","answer":"2KClO3=2KCl+3O2(MnO2催化); 催化剂","knowledge_points":["氧气制备"],"difficulty":"medium"}'},
-            'calc': {'rules': '具体数值条件。答案含分步计算: 公式→数据→结果→结论。不要设选项。', 'example': '{"content":"5.85g NaCl溶于水配成500mL溶液。求:(1)物质的量(2)浓度。M(NaCl)=58.5g/mol","type":"calc","answer":"(1)n=5.85/58.5=0.10mol (2)c=0.10/0.5=0.20mol/L","knowledge_points":["物质的量浓度"],"difficulty":"medium"}'},
-            'experiment': {'rules': '描述化学实验情境(仪器/试剂/操作)。2-3个子问题。不要设选项。', 'example': '{"content":"用右图装置进行铜与浓硫酸反应实验。(1)写方程式(2)品红褪色说明什么(3)棉花蘸NaOH的作用","type":"experiment","answer":"(1)Cu+2H2SO4(浓)=CuSO4+SO2+2H2O (2)SO2 (3)吸收SO2防污染","knowledge_points":["浓硫酸","SO2"],"difficulty":"medium"}'},
-            'inference': {'rules': '给出物质转化线索或实验现象，推断未知物质并写方程式。答案含推断过程。不要设选项。', 'example': '{"content":"A、B、C三种常见物质。A黑色粉末与稀硫酸生成蓝色溶液B。B与铁反应析出红色固体C。推断A、B、C并写方程式。","type":"inference","answer":"A:CuO B:CuSO4 C:Cu。CuO+H2SO4=CuSO4+H2O。Fe+CuSO4=FeSO4+Cu","knowledge_points":["金属活动性","置换反应"],"difficulty":"hard"}'},
+            'choice': {'rules': '4个选项(A/B/C/D)，标注正确选项。设置1-2个陷阱选项。', 'example': '{"content":"下列关于盐类水解的说法正确的是（ ）","type":"choice","options":["A. $Na_2CO_3$溶液显碱性是因为$CO_3^{2-}$水解","B. $NaCl$溶液显中性是因为$Na^+$和$Cl^-$都不水解","C. $FeCl_3$溶液显酸性是因为$Fe^{3+}$水解","D. 以上都对"],"answer":"D","knowledge_points":["盐类水解"],"difficulty":"medium"}'},
+            'fill': {'rules': '题目用___标记填空。答案只填空缺内容。每道题可有1-3个空。不要设选项。', 'example': '{"content":"实验室制氧气的方程式为___，$MnO_2$是___。","type":"fill","answer":"$2KClO_3 \\\\xrightarrow{{MnO_2}} 2KCl + 3O_2\\\\uparrow$; 催化剂","knowledge_points":["氧气制备"],"difficulty":"medium"}'},
+            'calc': {'rules': '具体数值条件。答案含分步计算: 公式→数据→结果→结论。不要设选项。', 'example': '{"content":"5.85g $NaCl$溶于水配成500mL溶液。求:(1)物质的量(2)浓度。$M(NaCl)=58.5g/mol$","type":"calc","answer":"(1)$n=m/M=5.85/58.5=0.10mol$ (2)$c=n/V=0.10/0.5=0.20mol/L$","knowledge_points":["物质的量浓度"],"difficulty":"medium"}'},
+            'experiment': {'rules': '描述化学实验情境(仪器/试剂/操作)。2-3个子问题。不要设选项。', 'example': '{"content":"用右图装置进行铜与浓硫酸反应实验。(1)写出化学方程式(2)品红褪色说明生成了什么(3)棉花蘸$NaOH$溶液的作用是什么","type":"experiment","answer":"(1)$Cu + 2H_2SO_4(浓) \\\\xrightarrow{{\\\\triangle}} CuSO_4 + SO_2\\\\uparrow + 2H_2O$ (2)生成了$SO_2$ (3)吸收$SO_2$防止污染空气","knowledge_points":["浓硫酸","$SO_2$"],"difficulty":"medium"}'},
+            'inference': {'rules': '给出物质转化线索或实验现象，推断未知物质并写方程式。答案含推断过程。不要设选项。', 'example': '{"content":"A、B、C三种常见物质。A为黑色粉末，与稀硫酸反应生成蓝色溶液B。B与铁反应析出红色固体C。推断A、B、C并写出涉及的反应方程式。","type":"inference","answer":"A:$CuO$ B:$CuSO_4$ C:$Cu$。$CuO + H_2SO_4 = CuSO_4 + H_2O$。$Fe + CuSO_4 = FeSO_4 + Cu$","knowledge_points":["金属活动性","置换反应"],"difficulty":"hard"}'},
         }
 
         type_sections = []
@@ -167,14 +167,30 @@ class LLMService:
 格式规范（严格遵循）:
 {chr(10).join(type_sections)}
 
+⚠️ 化学式格式规范（严格遵循，每道题每条选项都必须遵守）:
+1. 所有化学式/离子/方程式 必须用 $...$ 包裹（LaTeX行内公式）
+2. 下标用 _ 表示，上标用 ^ 表示。元素符号首字母大写
+   正确: $H_2O$ $CO_2$ $Fe_2O_3$ $Fe^{{3+}}$ $SO_4^{{2-}}$ $Cl^-$
+   错误: H2O CO2 Fe2O3 Fe3+ SO42-
+3. 化学方程式中箭头必须用 \\rightarrow，可逆用 \\rightleftharpoons
+   正确: $2H_2 + O_2 \\rightarrow 2H_2O$
+   错误: 2H2 + O2 → 2H2O
+4. 单质原子不需下标1: $Fe$ 而非 $Fe_1$
+5. 气体↑用 \\uparrow，沉淀↓用 \\downarrow
+6. 反应条件用 \\xrightarrow{{{{条件}}}}，加热用 \\xrightarrow{{{{\\triangle}}}}
+   正确: $2KClO_3 \\xrightarrow{{{{MnO_2}}}} 2KCl + 3O_2\\uparrow$
+7. 普通中文文字中嵌入的化学式也必须$包裹: 如"$MnO_2$是催化剂"
+8. 离子电子用 e^-: $Cu^{{2+}} + 2e^- \\rightarrow Cu$
+
 核心原则:
 1. 科学性100%正确，方程式配平
 2. 选择题带options，非选择题不带options
 3. 非选择题content必须是该题型的真实内容（不能是选择题去掉选项）
 4. 填空题必含___标记。计算题必含分步计算。实验题必含2-3个子问题。
+5. 所有化学式必须用$...$包裹并使用LaTeX下标（见上方化学式格式规范）
 
 返回纯JSON（无markdown代码块）:
-{{"questions":[{{"content":"...","type":"choice","options":["A...","B..."],"answer":"...","knowledge_points":["..."],"difficulty":"medium"}}]}}"""
+{{"questions":[{{"content":"下列关于氧化还原反应的说法正确的是（ ）","type":"choice","options":["A. $2Na + Cl_2 \\rightarrow 2NaCl$属于氧化还原反应","B. $NaOH + HCl \\rightarrow NaCl + H_2O$属于氧化还原反应","C. $CaCO_3 \\rightarrow CaO + CO_2$属于氧化还原反应","D. $NH_4Cl \\rightarrow NH_3 + HCl$属于氧化还原反应"],"answer":"A","knowledge_points":["氧化还原反应"],"difficulty":"medium"}}]}}"""
 
         if rag_context and len(rag_context) >= 3:
             ctx = "\n\n".join([f"真题{i+1}: {q.get('content','')} 答案:{q.get('answer','')}" for i, q in enumerate(rag_context[:5])])

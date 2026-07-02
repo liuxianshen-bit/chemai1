@@ -9,6 +9,15 @@ from fastapi.responses import StreamingResponse
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+
+async def _get_app_store():
+    """Get the SqliteStore singleton from app.main."""
+    try:
+        from app.main import get_store
+        return await get_store()
+    except Exception:
+        return None
+
 # ── 复用 ChatRequest ──
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 from agent.channel.fastapi_sse import (
@@ -21,18 +30,16 @@ _agent_cache: dict[str, object] = {}
 
 
 async def _get_or_create_agent(persona: str = "tutor", provider: str = "deepseek",
-                        student_profile=None, intent_hints="", version: str = "v1"):
-    """Get or create agent. Returns (graph, guard_state, adapter_class).
-
-    v1: multi-agent coordinator+router+6-sub-agents
-    v2: single ReAct agent with all tools
-    """
+                        student_profile=None, intent_hints="", version: str = "v1",
+                        store=None):
+    """Get or create agent. Returns (graph, guard_state, adapter_class)."""
     if version == "v2":
         from agent.langgraph_agent_v2 import create_chemai_agent as create_v2
         from agent.langgraph_sse_v2 import LangGraphSSEAdapterV2
         agent, guard = await create_v2(
             persona=persona, provider=provider,
             student_profile=student_profile, intent_hints=intent_hints,
+            store=store,
         )
         return agent, guard, LangGraphSSEAdapterV2
 
@@ -55,23 +62,17 @@ async def agent_chat_langgraph_stream(request: ChatRequest):
 
     from agent.deps import ChemAIDeps
     from langgraph.errors import GraphInterrupt
-    from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart
 
     cid = request.conversation_id
-    message_history = None
     student_id = request.student_id
 
-    # Session handling
+    # Session handling — only track student_id, no message_history
     from agent.channel.fastapi_sse import _conversations
-    session = None
     if cid and cid in _conversations:
-        session = _conversations[cid]
-        message_history = session.get("message_history")
         if not student_id:
-            student_id = session.get("student_id")
+            student_id = _conversations[cid].get("student_id")
     elif cid:
-        session = {"message_history": [], "student_id": student_id}
-        _conversations[cid] = session
+        _conversations[cid] = {"student_id": student_id}
 
     deps = ChemAIDeps(
         student_id=student_id,
@@ -84,9 +85,9 @@ async def agent_chat_langgraph_stream(request: ChatRequest):
         mem.load_student(student_id)
         deps.student_profile = mem.student_profile
 
-    # Gateway classifier
+    # Gateway classifier (no pydantic_ai message_history needed)
     tool_names, intent = await _classify_and_narrow(
-        request.message, request.persona, message_history
+        request.message, request.persona, None
     )
 
     # navigate shortcut
@@ -110,18 +111,23 @@ async def agent_chat_langgraph_stream(request: ChatRequest):
     if tool_names:
         hints = f"推荐工具: {', '.join(tool_names[:5])}\n用户消息: {request.message}\n使用推荐工具或其他工具，自行判断。"
 
+    store = await _get_app_store()
     agent, guard_state, AdapterClass = await _get_or_create_agent(
         request.persona, request.provider,
         student_profile=deps.student_profile, intent_hints=hints,
-        version=request.version,
+        version=request.version, store=store,
     )
 
     adapter = AdapterClass()
     full_reply = []
     config = {"configurable": {"thread_id": cid or "default"}, "recursion_limit": 12}
 
+    # Smart context management: TrimMessages + LLM summarization
+    from agent.context_manager import trim_context
+    await trim_context(agent, config)
+
     async def generate():
-        nonlocal full_reply, message_history
+        nonlocal full_reply
         try:
             yield f"data: {json.dumps({'type': 'phase', 'phase': 'thinking'}, ensure_ascii=False)}\n\n"
 
@@ -159,13 +165,6 @@ async def agent_chat_langgraph_stream(request: ChatRequest):
                     yield "data: [DONE]\n\n"
                 else:
                     yield f"data: {result}\n\n"
-
-            if session is not None:
-                if not message_history:
-                    message_history = []
-                message_history.append(ModelRequest(parts=[TextPart(content=request.message)]))
-                message_history.append(ModelResponse(parts=[TextPart(content="".join(full_reply))]))
-                session["message_history"] = message_history
 
         except Exception as e:
             import traceback; traceback.print_exc()
@@ -216,14 +215,18 @@ async def agent_chat_langgraph(request: ChatRequest):
         pre_routed_agent2 = intent.target_agent
         suggested_tools2 = intent.tools
 
+    store2 = await _get_app_store()
     agent, guard_state2, AdapterClass = await _get_or_create_agent(
         request.persona, request.provider,
         student_profile=deps.student_profile, intent_hints=hints,
-        version=request.version,
+        version=request.version, store=store2,
     )
 
     config = {"configurable": {"thread_id": cid or "default"}, "recursion_limit": 12}
     adapter = AdapterClass()
+
+    from agent.context_manager import trim_context
+    await trim_context(agent, config)
 
     try:
         result = await agent.ainvoke(
@@ -279,10 +282,15 @@ async def agent_chat_langgraph_resume(request: ChatRequest):
     cid = request.conversation_id or "default"
     user_response = request.message or ""
 
+    store3 = await _get_app_store()
     agent, guard_state, AdapterClass = await _get_or_create_agent(
-        request.persona, request.provider, version=request.version)
+        request.persona, request.provider, version=request.version, store=store3)
     adapter = AdapterClass()
     config = {"configurable": {"thread_id": cid}, "recursion_limit": 12}
+
+    from agent.context_manager import trim_context
+    await trim_context(agent, config)
+
     full_reply = []
 
     async def generate():
@@ -334,11 +342,24 @@ async def agent_chat_langgraph_resume(request: ChatRequest):
 
 @router.post("/chat/langgraph/reset")
 async def agent_chat_langgraph_reset(conversation_id: str):
-    """重置对话 — 删除 thread checkpoint。"""
+    """重置对话 — 删除 _conversations 条目 + 清空 LangGraph checkpoint。"""
     from agent.channel.fastapi_sse import _conversations
 
+    cleared_conv = False
     if conversation_id in _conversations:
         del _conversations[conversation_id]
+        cleared_conv = True
+
+    # Clear LangGraph checkpoint state
+    try:
+        from agent.langgraph_agent import _get_checkpointer
+        cp = await _get_checkpointer()
+        config = {"configurable": {"thread_id": conversation_id}}
+        await cp.aput(config, checkpoint={"messages": []}, metadata={}, new_versions={})
+    except Exception:
+        pass
+
+    if cleared_conv:
         return {"success": True, "message": "对话已重置"}
     return {"success": False, "message": "对话不存在"}
 

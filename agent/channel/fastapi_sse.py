@@ -29,24 +29,23 @@ class ChatRequest(BaseModel):
     version: str = "v1"  # v1=multi-agent, v2=single-agent
 
 
-def _extract_conversation_context(message_history: list | None, max_turns: int = 2) -> str:
-    """Extract the last N turns from pydantic-ai message_history as text context."""
-    if not message_history:
+def _extract_conversation_context(messages: list[dict] | None, max_turns: int = 2) -> str:
+    """Extract the last N turns from message list as text context.
+
+    Each message is a dict with keys: role ("user"/"assistant") and content (str).
+    """
+    if not messages:
         return ""
 
-    from pydantic_ai.messages import ModelRequest, ModelResponse
-
     lines = []
-    recent = message_history[-max_turns * 2:]  # each turn = request + response
+    recent = messages[-(max_turns * 2):]  # each turn = user + assistant
     for msg in recent:
-        if isinstance(msg, ModelRequest):
-            text = next((p.content for p in msg.parts if hasattr(p, 'content') and p.content), "")
-            if text:
-                lines.append(f"用户: {text[:200]}")
-        elif isinstance(msg, ModelResponse):
-            text = next((p.content for p in msg.parts if hasattr(p, 'content') and p.content), "")
-            if text:
-                lines.append(f"助手: {text[:200]}")
+        if not isinstance(msg, dict):
+            continue
+        role = "用户" if msg.get("role") == "user" else "助手"
+        content = msg.get("content", "")
+        if content:
+            lines.append(f"{role}: {str(content)[:200]}")
 
     return "\n".join(lines) if lines else ""
 

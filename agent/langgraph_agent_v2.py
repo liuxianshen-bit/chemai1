@@ -41,6 +41,19 @@ from agent.browser_tools import (
 
 RECURSION_LIMIT = 12
 
+# Store context — set before agent invocation for tool access
+_store_context = None
+
+
+def set_store_context(store):
+    global _store_context
+    _store_context = store
+
+
+def get_store_context():
+    return _store_context
+
+
 SYSTEM_PROMPT = """你是 ChemAI 化学教研助手。
 
 你必须调用一个工具。阅读每个工具的描述（何时用/会发生什么/下一步/NOT for）来决定用哪个。
@@ -65,6 +78,7 @@ async def create_chemai_agent(
     student_profile=None,
     intent_hints="",
     guard_state=None,
+    store=None,
 ):
     """Create a single ReAct agent with persona-filtered tools.
 
@@ -74,6 +88,9 @@ async def create_chemai_agent(
     Panel tools (show_exam_workbench) trigger post_model_hook interrupt:
     graph pauses → frontend shows panel → user fills params → resume.
     """
+    # Set store context for tool access
+    if store is not None:
+        set_store_context(store)
     from agent.agents import load_persona
 
     persona_config = load_persona(persona)

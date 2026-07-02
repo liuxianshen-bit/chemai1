@@ -129,13 +129,27 @@ class ExamBankService:
         difficulty: Optional[str] = None,
         keyword: Optional[str] = None,
         region: Optional[str] = None,
-        limit: int = 1000
+        limit: int = 1000,
+        use_vector: bool = False,
     ) -> List[HistoricalQuestion]:
         """
         查询真题
         支持按来源/地区/年份/知识点/难度/关键词筛选
+        use_vector=True 时先用向量搜索召回候选，再结构化过滤
         """
-        results = self.questions
+        # Vector semantic recall (if enabled and keyword provided)
+        if use_vector and keyword:
+            from app.services.vector_search import vector_search_service
+            candidates = vector_search_service.search_similar(
+                query_text=keyword, knowledge_points=[], difficulty="", limit=20
+            )
+            candidate_ids = {c.get("exam_id", "") for c in candidates if c.get("exam_id")}
+            if candidate_ids:
+                results = [q for q in self.questions if q.exam_id in candidate_ids]
+            else:
+                results = list(self.questions)
+        else:
+            results = list(self.questions)
 
         if source:
             results = [q for q in results if source in q.source]
@@ -156,9 +170,17 @@ class ExamBankService:
 
         if keyword:
             keyword_lower = keyword.lower()
+            # Split long keywords into terms for broader matching
+            terms = [keyword_lower]
+            if len(keyword) > 2:
+                import re
+                # Split by common separators: 的、与、和、+等
+                terms.extend([t.strip() for t in re.split(r'[的与和、，,+\s]+', keyword) if len(t.strip()) >= 2])
             results = [q for q in results
-                      if keyword_lower in q.content.lower()
-                      or keyword_lower in q.answer.lower()]
+                      if any(t in q.content.lower()
+                             or t in q.answer.lower()
+                             or any(t in (kp or "").lower() for kp in q.knowledge_points)
+                             for t in terms)]
 
         return results[:limit]
 
