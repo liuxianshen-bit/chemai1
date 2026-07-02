@@ -61,31 +61,28 @@ class VectorSearchService:
         if not questions:
             return 0
 
-        # Check dimension — dashscope v3 uses 1024, purge if mismatched
-        if mode != "append":
-            try:
-                existing = self.collection.get(limit=1)
-                if existing and existing.get("embeddings") and existing["embeddings"]:
-                    existing_dim = len(existing["embeddings"][0])
-                    sample_embedding = self._get_embedding(questions[0].get("content", ""))
-                    if len(sample_embedding) != existing_dim:
-                        print(f"Dimension mismatch: old={existing_dim} new={len(sample_embedding)}, recreating collection")
-                        self.chroma_client.delete_collection(self.collection.name)
-                        self.collection = self.chroma_client.create_collection(
-                            name="exam_questions",
-                            metadata={"hnsw:space": "cosine"}
-                        )
-            except Exception:
-                pass
+        # Check dimension mismatch — only recreate if actual mismatch
+        try:
+            existing = self.collection.get(limit=1)
+            if existing and existing.get("embeddings") and existing["embeddings"]:
+                existing_dim = len(existing["embeddings"][0])
+                sample_embedding = self._get_embedding(questions[0].get("content", ""))
+                if len(sample_embedding) != existing_dim:
+                    print(f"Dimension mismatch: old={existing_dim} new={len(sample_embedding)}, recreating collection")
+                    self.chroma_client.delete_collection(self.collection.name)
+                    self.collection = self.chroma_client.create_collection(
+                        name="exam_questions",
+                        metadata={"hnsw:space": "cosine"}
+                    )
+        except Exception:
+            pass
 
-        # Clear old data in replace mode (delete and recreate collection)
+        # Clear old data in replace mode
         if mode != "append":
             try:
-                self.chroma_client.delete_collection(self.collection.name)
-                self.collection = self.chroma_client.create_collection(
-                    name="exam_questions",
-                    metadata={"hnsw:space": "cosine"}
-                )
+                existing_ids = self.collection.get().get("ids", [])
+                if existing_ids:
+                    self.collection.delete(ids=existing_ids)
             except Exception:
                 pass
 
@@ -314,9 +311,26 @@ class VectorSearchService:
 
         return vector
 
-    def build_index_from_exam_bank(self):
-        """从exam_bank构建向量索引"""
+    def build_index_from_exam_bank(self, force: bool = False):
+        """从exam_bank构建向量索引。如果索引已存在且维度匹配则跳过。"""
         from app.services.exam_bank import exam_bank_service
+
+        # Skip rebuild if index already populated and dimensions match
+        if not force:
+            try:
+                existing = self.collection.get(limit=1)
+                if existing and existing.get("ids") and existing.get("embeddings"):
+                    existing_dim = len(existing["embeddings"][0])
+                    # Quick dimension check with pseudo embedding (no API call)
+                    sample_dim = len(self._pseudo_embedding("test"))
+                    if existing_dim >= sample_dim * 0.8:  # dimension roughly matches
+                        existing_count = len(existing["ids"])
+                        expected_count = len([q for q in exam_bank_service.questions if q.knowledge_points])
+                        if existing_count >= expected_count * 0.9:
+                            print(f"Vector index up to date ({existing_count} questions), skipping rebuild")
+                            return existing_count
+            except Exception:
+                pass
 
         questions_for_index = []
         for q in exam_bank_service.questions:
