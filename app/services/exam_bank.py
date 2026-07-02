@@ -147,28 +147,28 @@ class ExamBankService:
         if year:
             results = [q for q in results if q.year == year]
 
+        # Merge knowledge_point + keyword into a single filter (OR logic)
+        # Prevents knowledge_point filter from emptying results before keyword can help
+        search_terms = []
         if knowledge_point:
-            kp_lower = knowledge_point.lower()
-            results = [q for q in results
-                      if any(kp_lower in (kp or "").lower() for kp in q.knowledge_points)]
-
-        if difficulty:
-            results = [q for q in results if q.difficulty == difficulty]
-
+            search_terms.append(knowledge_point.lower())
         if keyword:
-            keyword_lower = keyword.lower()
-            # Split long keywords into terms for broader matching
-            terms = [keyword_lower]
+            search_terms.append(keyword.lower())
             if len(keyword) > 2:
                 import re
                 _stop_words = {"题目", "真题", "高考", "一道", "搜索", "找一下", "有没有", "关于"}
-                split_terms = [t.strip() for t in re.split(r'[的与和、，,+\s]+', keyword) if len(t.strip()) >= 2]
-                terms.extend([t for t in split_terms if t not in _stop_words])
+                split = [t.strip() for t in re.split(r'[的与和、，,+\s]+', keyword) if len(t.strip()) >= 2]
+                search_terms.extend([t for t in split if t not in _stop_words])
+
+        if search_terms:
             results = [q for q in results
                       if any(t in q.content.lower()
                              or t in q.answer.lower()
                              or any(t in (kp or "").lower() for kp in q.knowledge_points)
-                             for t in terms)]
+                             for t in search_terms)]
+
+        if difficulty:
+            results = [q for q in results if q.difficulty == difficulty]
 
         # Vector fallback: if structured filters returned too few, expand via embedding
         if use_vector and keyword and len(results) < 3:
