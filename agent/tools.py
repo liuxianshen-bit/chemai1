@@ -33,15 +33,16 @@ async def search_exam_bank(
     )
     if not results:
         return json.dumps({
+            "STATUS": "NOT_FOUND",
             "total": 0,
             "questions": [],
-            "hint": "题库中暂无匹配结果。请向用户确认更具体的搜索条件（知识点、年份），而不是反复尝试不同关键词。",
-            "_route": {"navigate": False},
+            "instruction": "题库中没有匹配的真题。告知用户未找到，可以建议调整搜索条件（如缩短关键词、试试知识点名称）。不要反复用不同关键词重试搜索，也不要调用 web_search 替代——用户要的是真题。",
         }, ensure_ascii=False)
 
     return json.dumps({
+        "STATUS": "FOUND",
         "total": len(results),
-        "summary": f"已找到 {len(results)} 道相关真题，必须逐题列出",
+        "instruction": f"已将 {len(results)} 道真题列在下方。在对话中逐题展示年份、来源、题目内容、答案。禁止说\"没有找到\"——工具明确返回了结果。禁止调用 web_search 替代——真题已在下方。",
         "questions": [
             {
                 "source": q.source,
@@ -66,10 +67,13 @@ async def search_exam_bank(
 async def web_search(query: str = "") -> str:
     """联网搜索 — 查询最新化学信息、高考动态、教学资源
 
-    何时用：用户询问的信息超出训练数据范围（如"2025高考大纲"）、需要最新政策或新闻、明确说"上网搜"
+    何时用：用户明确要求"上网搜"、查询最新政策/新闻/大纲。用户的问题无法用本地工具回答时使用。
     会发生什么：返回联网搜索结果摘要，在对话中展示
     下一步：基于搜索结果回答用户问题
-    NOT for 搜索本地题库里的历史真题 — 用 search_exam_bank"""
+    严格禁止：
+    - 禁止在 search_exam_bank 返回 FOUND 后调用本工具
+    - 禁止用本工具替代真题搜索
+    - 搜真题必须先调 search_exam_bank，只有 NOT_FOUND 时才考虑本工具"""
     import os as _os, httpx as _httpx
 
     search_text = ""
