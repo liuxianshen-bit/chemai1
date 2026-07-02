@@ -14,13 +14,12 @@ async def search_exam_bank(
     difficulty: str = "",
     limit: int = 5,
 ) -> str:
-    """考试工作台 — 搜索历年高考化学真题
+    """考试工作台 — 搜索历年高考化学真题（内部自动补齐：关键词→向量→联网）
 
-    何时用：用户明确说"搜索真题""看看有什么题"时使用
-    会发生什么：返回真题列表（含年份、来源、答案），total 字段明确告诉你找到了几道题。total>0 说明有结果。
-    下一步：直接列出 total 道题目。total=0 时才告知用户没找到。
-    NOT for 出题/出卷/组卷 — 直接调 show_exam_workbench
-    NOT for 上网查最新信息 — 用 web_search"""
+    何时用：用户说"搜索真题""找高考题"等任何真题搜索意图时使用
+    会发生什么：先关键词匹配本地题库，不够时向量召回补充，还不够时联网搜索补齐
+    返回：已整理好的真题列表，直接在对话中展示即可
+    禁止：调完本工具后不要再调 web_search——本工具已经包含了联网兜底"""
     from app.services.exam_bank import exam_bank_service
 
     results = exam_bank_service.search_questions(
@@ -31,34 +30,72 @@ async def search_exam_bank(
         limit=limit,
         use_vector=True if keyword else False,
     )
-    if not results:
-        return json.dumps({
-            "STATUS": "NOT_FOUND",
-            "total": 0,
-            "questions": [],
-            "hint": "题库中没有匹配的真题。下一步：自动调用 web_search 搜索网上相关真题。",
-        }, ensure_ascii=False)
 
-    # Return results as a prominent text block the LLM cannot ignore
-    lines = [f"=== 真题搜索结果：找到 {len(results)} 道 ===\n"]
-    for i, q in enumerate(results, 1):
-        lines.append(f"【第{i}题】{q.source} 第{q.question_number}题")
-        lines.append(f"知识点：{', '.join(q.knowledge_points)}")
-        lines.append(f"难度：{q.difficulty}")
-        lines.append(f"题目：{q.content}")
-        if q.options:
-            lines.append(f"选项：{', '.join(q.options)}")
-        lines.append(f"答案：{q.answer}")
-        if q.analysis:
-            lines.append(f"解析：{q.analysis[:200]}")
-        if q.page_image:
-            fig_url = f"/static/figures/{q.region}/{q.year}/figures/{q.page_image}"
-            lines.append(f"原题图片：{fig_url}")
-        lines.append("")
+    lines = []
+    if results:
+        lines.append(f"=== 真题搜索结果：找到 {len(results)} 道 ===\n")
+        for i, q in enumerate(results, 1):
+            lines.append(f"【第{i}题】{q.source} 第{q.question_number}题")
+            lines.append(f"知识点：{', '.join(q.knowledge_points)}")
+            lines.append(f"难度：{q.difficulty}")
+            lines.append(f"题目：{q.content}")
+            if q.options:
+                lines.append(f"选项：{', '.join(q.options)}")
+            lines.append(f"答案：{q.answer}")
+            if q.analysis:
+                lines.append(f"解析：{q.analysis[:200]}")
+            if q.page_image:
+                fig_url = f"/static/figures/{q.region}/{q.year}/figures/{q.page_image}"
+                lines.append(f"原题图片：{fig_url}")
+            lines.append("")
+
+    # If local results < 3, supplement with web search
+    if len(results) < 3 and keyword:
+        lines.append("---")
+        lines.append(f"本地题库仅 {len(results)} 道，以下为联网搜索结果：\n")
+        try:
+            web_result_str = await _do_web_search(keyword)
+            web_data = json.loads(web_result_str)
+            web_text = web_data.get("result", "")
+            if web_text:
+                lines.append(web_text[:2000])
+            else:
+                lines.append("(联网搜索暂无结果)")
+        except Exception:
+            lines.append("(联网搜索暂时不可用)")
+
+    if not results and not lines:
+        lines.append("未找到相关真题，建议调整搜索关键词")
 
     result_text = "\n".join(lines)
-    result_text += "\n---\n以上是搜索到的全部真题。请在对话中逐题列出，不要编造内容。"
+    result_text += "\n---\n请在对话中逐题展示以上结果。"
     return result_text
+
+
+async def _do_web_search(query: str) -> str:
+    """Internal web search helper — uses MiMo enable_search."""
+    import os as _os, httpx as _httpx
+    api_key = _os.getenv("XIAOMI_API_KEY", "")
+    if not api_key:
+        return json.dumps({"result": ""})
+
+    try:
+        async with _httpx.AsyncClient(timeout=60.0) as client:
+            resp = await client.post(
+                "https://api.xiaomimimo.com/v1/chat/completions",
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                json={
+                    "model": "mimo-v2.5",
+                    "messages": [{"role": "user", "content": f"搜索高考化学真题: {query}。请列出具体题目、年份、来源和答案。"}],
+                    "enable_search": True, "max_tokens": 2048, "temperature": 0.3,
+                },
+            )
+        if resp.status_code == 200:
+            data = resp.json()
+            return json.dumps({"result": data["choices"][0]["message"]["content"]})
+    except Exception:
+        pass
+    return json.dumps({"result": ""})
 
 
 # ── 2. web_search ──

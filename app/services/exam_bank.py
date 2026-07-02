@@ -147,8 +147,7 @@ class ExamBankService:
         if year:
             results = [q for q in results if q.year == year]
 
-        # Merge knowledge_point + keyword into a single filter (OR logic)
-        # Prevents knowledge_point filter from emptying results before keyword can help
+        # Step 1: Keyword matching (knowledge_point + keyword terms in content/answer/knowledge_points)
         search_terms = []
         if knowledge_point:
             search_terms.append(knowledge_point.lower())
@@ -170,23 +169,25 @@ class ExamBankService:
         if difficulty:
             results = [q for q in results if q.difficulty == difficulty]
 
-        # Vector fallback: if structured filters returned too few, expand via embedding
-        if use_vector and keyword and len(results) < 3:
+        # Step 2: If keyword found too few, fill gaps via vector search
+        if use_vector and keyword and len(results) < limit:
             from app.services.vector_search import vector_search_service
             candidates = vector_search_service.search_similar(
                 query_text=keyword, knowledge_points=[], difficulty="", limit=20
             )
-            # Take top-3 vector results not already matched (no hard threshold for small dataset)
             existing_ids = {q.exam_id for q in results}
+            need = limit - len(results)
             extra_ids = []
             for c in candidates:
                 eid = c.get("exam_id", "")
-                if eid and eid not in existing_ids and eid not in extra_ids:
+                sim = c.get("similarity", 0)
+                if eid and sim >= 0.5 and eid not in existing_ids and eid not in extra_ids:
                     extra_ids.append(eid)
-                if len(extra_ids) >= 3:
+                if len(extra_ids) >= need:
                     break
-            extra = [q for q in self.questions if q.exam_id in extra_ids]
-            results = results + extra
+            if extra_ids:
+                extra = [q for q in self.questions if q.exam_id in extra_ids]
+                results = results + extra
 
         return results[:limit]
 
