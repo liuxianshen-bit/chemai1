@@ -68,7 +68,7 @@ async def search_exam_bank(
         lines.append("未找到相关真题，建议调整搜索关键词")
 
     result_text = "\n".join(lines)
-    result_text += "\n---\n请在对话中逐题展示以上结果。"
+    result_text += "\n---\n以上是全部搜索到的题目（含本地题库和联网结果）。必须逐题完整列出，一道都不能省略。禁止添加知识点总结——用户要的就是真题本身。"
     return result_text
 
 
