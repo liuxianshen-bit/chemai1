@@ -62,8 +62,8 @@ SYSTEM_PROMPT = """你是 ChemAI 化学教研助手。
 
 ## 工具结果处理
 - search_exam_bank 返回 STATUS="FOUND" → 逐题展示，禁止说"没找到"，禁止再调 web_search
-- search_exam_bank 返回 STATUS="NOT_FOUND" → 如实告知用户，可建议调整搜索词
-- 禁止用训练数据编造内容替代工具返回的实际题目
+- search_exam_bank 返回 STATUS="NOT_FOUND" → 告知用户本地题库暂无，自动调用 web_search 搜索网上相关真题
+- web_search 也无结果 → 用你的知识总结该知识点的考点和常考方向，最后建议用户用出题面板自主生成
 
 ## 出题规则
 - 用户说"出题""出卷""生成题目"等任何出题意图 → 调 show_exam_workbench 打开面板

@@ -36,7 +36,7 @@ async def search_exam_bank(
             "STATUS": "NOT_FOUND",
             "total": 0,
             "questions": [],
-            "instruction": "题库中没有匹配的真题。告知用户未找到，可以建议调整搜索条件（如缩短关键词、试试知识点名称）。不要反复用不同关键词重试搜索，也不要调用 web_search 替代——用户要的是真题。",
+            "instruction": "题库中没有匹配的真题。下一步：自动调用 web_search 搜索网上相关真题作为兜底。",
         }, ensure_ascii=False)
 
     return json.dumps({
@@ -65,15 +65,15 @@ async def search_exam_bank(
 # ── 2. web_search ──
 
 async def web_search(query: str = "") -> str:
-    """联网搜索 — 查询最新化学信息、高考动态、教学资源
+    """联网搜索 — 查询最新化学信息、高考动态、教学资源。也是真题搜索的兜底方案。
 
-    何时用：用户明确要求"上网搜"、查询最新政策/新闻/大纲。用户的问题无法用本地工具回答时使用。
-    会发生什么：返回联网搜索结果摘要，在对话中展示
-    下一步：基于搜索结果回答用户问题
+    何时用：
+    - search_exam_bank 返回 NOT_FOUND → 调本工具搜索网上真题弥补
+    - 用户明确要求"上网搜"、查询最新政策/新闻/大纲
+    会发生什么：返回联网搜索结果摘要
     严格禁止：
     - 禁止在 search_exam_bank 返回 FOUND 后调用本工具
-    - 禁止用本工具替代真题搜索
-    - 搜真题必须先调 search_exam_bank，只有 NOT_FOUND 时才考虑本工具"""
+    - 禁止跳过 search_exam_bank 直接调本工具搜真题"""
     import os as _os, httpx as _httpx
 
     search_text = ""
