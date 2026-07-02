@@ -265,12 +265,19 @@ class VectorSearchService:
     def _get_embedding(self, text: str) -> List[float]:
         """获取文本向量 — dashscope text-embedding-v3 (1024维)"""
         try:
+            import os
             import dashscope
             from dashscope import TextEmbedding
 
+            # Ensure API key is set (dashscope doesn't auto-read env)
+            if not dashscope.api_key:
+                from dotenv import load_dotenv
+                load_dotenv()
+                dashscope.api_key = os.getenv("DASHSCOPE_API_KEY", "")
+
             resp = TextEmbedding.call(
                 model=TextEmbedding.Models.text_embedding_v3,
-                input=text[:2048],  # API input limit
+                input=text[:2048],
             )
             if resp.status_code == 200 and resp.output and resp.output.get("embeddings"):
                 return resp.output["embeddings"][0]["embedding"]
