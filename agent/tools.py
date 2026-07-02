@@ -51,6 +51,9 @@ async def search_exam_bank(
         lines.append(f"答案：{q.answer}")
         if q.analysis:
             lines.append(f"解析：{q.analysis[:200]}")
+        if q.page_image:
+            fig_url = f"/static/figures/{q.region}/{q.year}/figures/{q.page_image}"
+            lines.append(f"原题图片：{fig_url}")
         lines.append("")
 
     result_text = "\n".join(lines)
