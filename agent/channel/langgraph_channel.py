@@ -156,10 +156,14 @@ async def agent_chat_langgraph_stream(request: ChatRequest):
             final_state = await agent.aget_state(config)
             state_values = final_state.values if final_state else {}
             gs = guard_state
+            result_text = state_values.get("last_result_text")
+            # Fallback: use collected streaming text if state has no result_text (v2)
+            if not result_text and full_reply:
+                result_text = "".join(full_reply)
             for result in adapter.finalize(
                 route=state_values.get("last_route") or (gs.last_route if gs else None),
                 component=state_values.get("last_component") or (gs.last_component if gs else None),
-                result_text=state_values.get("last_result_text"),
+                result_text=result_text,
             ):
                 if result == "[DONE]":
                     yield "data: [DONE]\n\n"
@@ -318,10 +322,13 @@ async def agent_chat_langgraph_resume(request: ChatRequest):
             final_state = await agent.aget_state(config)
             state_values = final_state.values if final_state else {}
             gs = guard_state
+            result_text2 = state_values.get("last_result_text")
+            if not result_text2 and full_reply:
+                result_text2 = "".join(full_reply)
             for result in adapter.finalize(
                 route=state_values.get("last_route") or (gs.last_route if gs else None),
                 component=state_values.get("last_component") or (gs.last_component if gs else None),
-                result_text=state_values.get("last_result_text"),
+                result_text=result_text2,
             ):
                 if result == "[DONE]":
                     yield "data: [DONE]\n\n"
