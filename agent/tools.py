@@ -36,30 +36,26 @@ async def search_exam_bank(
             "STATUS": "NOT_FOUND",
             "total": 0,
             "questions": [],
-            "instruction": "题库中没有匹配的真题。下一步：自动调用 web_search 搜索网上相关真题作为兜底。",
+            "hint": "题库中没有匹配的真题。下一步：自动调用 web_search 搜索网上相关真题。",
         }, ensure_ascii=False)
 
-    return json.dumps({
-        "STATUS": "FOUND",
-        "total": len(results),
-        "instruction": f"已将 {len(results)} 道真题列在下方。在对话中逐题展示年份、来源、题目内容、答案。禁止说\"没有找到\"——工具明确返回了结果。禁止调用 web_search 替代——真题已在下方。",
-        "questions": [
-            {
-                "source": q.source,
-                "year": q.year,
-                "question_type": q.question_type,
-                "content": q.content,
-                "answer": q.answer,
-                "analysis": (q.analysis or "")[:200],
-                "knowledge_points": q.knowledge_points,
-                "difficulty": q.difficulty,
-                "score": q.score,
-                "page_image": q.page_image,
-            }
-            for q in results
-        ],
-        "_route": {"navigate": False},
-    }, ensure_ascii=False)
+    # Return results as a prominent text block the LLM cannot ignore
+    lines = [f"=== 真题搜索结果：找到 {len(results)} 道 ===\n"]
+    for i, q in enumerate(results, 1):
+        lines.append(f"【第{i}题】{q.source} 第{q.question_number}题")
+        lines.append(f"知识点：{', '.join(q.knowledge_points)}")
+        lines.append(f"难度：{q.difficulty}")
+        lines.append(f"题目：{q.content}")
+        if q.options:
+            lines.append(f"选项：{', '.join(q.options)}")
+        lines.append(f"答案：{q.answer}")
+        if q.analysis:
+            lines.append(f"解析：{q.analysis[:200]}")
+        lines.append("")
+
+    result_text = "\n".join(lines)
+    result_text += "\n---\n以上是搜索到的全部真题。请在对话中逐题列出，不要编造内容。"
+    return result_text
 
 
 # ── 2. web_search ──
