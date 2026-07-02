@@ -176,16 +176,17 @@ class ExamBankService:
             candidates = vector_search_service.search_similar(
                 query_text=keyword, knowledge_points=[], difficulty="", limit=20
             )
-            # Only add high-confidence vector matches (similarity > 0.6)
-            high_conf = {c["exam_id"]: c["similarity"] for c in candidates
-                        if c.get("exam_id") and c.get("similarity", 0) > 0.6}
-            if high_conf:
-                existing_ids = {q.exam_id for q in results}
-                extra = [q for q in self.questions
-                        if q.exam_id in high_conf and q.exam_id not in existing_ids]
-                # Sort by similarity descending
-                extra.sort(key=lambda q: high_conf.get(q.exam_id, 0), reverse=True)
-                results = results + extra
+            # Take top-3 vector results not already matched (no hard threshold for small dataset)
+            existing_ids = {q.exam_id for q in results}
+            extra_ids = []
+            for c in candidates:
+                eid = c.get("exam_id", "")
+                if eid and eid not in existing_ids and eid not in extra_ids:
+                    extra_ids.append(eid)
+                if len(extra_ids) >= 3:
+                    break
+            extra = [q for q in self.questions if q.exam_id in extra_ids]
+            results = results + extra
 
         return results[:limit]
 
