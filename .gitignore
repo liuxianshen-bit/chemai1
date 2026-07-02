@@ -66,3 +66,5 @@ tmp/
 data/sample_answer_sheets/
 !data/sample_answer_sheets/.gitkeep
 .gstack/
+chemai.db-shm
+chemai.db-wal
