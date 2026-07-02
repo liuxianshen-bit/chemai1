@@ -18,8 +18,8 @@ async def search_exam_bank(
 
     何时用：用户说"搜索真题""找高考题"等任何真题搜索意图时使用
     会发生什么：先关键词匹配本地题库，不够时向量召回补充，还不够时联网搜索补齐
-    返回：已整理好的真题列表，直接在对话中展示即可
-    禁止：调完本工具后不要再调 web_search——本工具已经包含了联网兜底"""
+    返回：已整理好的真题列表，已在返回文本中逐题列出全部题目，直接输出即可
+    禁止：调完本工具后不要再调 web_search"""
     from app.services.exam_bank import exam_bank_service
 
     results = exam_bank_service.search_questions(
@@ -32,43 +32,46 @@ async def search_exam_bank(
     )
 
     lines = []
+
+    # ── Local results ──
     if results:
-        lines.append(f"=== 真题搜索结果：找到 {len(results)} 道 ===\n")
+        lines.append(f"## 来自题库（{len(results)} 道）\n")
         for i, q in enumerate(results, 1):
-            lines.append(f"【第{i}题】{q.source} 第{q.question_number}题")
-            lines.append(f"知识点：{', '.join(q.knowledge_points)}")
-            lines.append(f"难度：{q.difficulty}")
-            lines.append(f"题目：{q.content}")
+            lines.append(f"**第{i}题**  {q.source} 第{q.question_number}题")
+            lines.append(f"知识点：{', '.join(q.knowledge_points)}  |  难度：{q.difficulty}")
+            lines.append(f"> {q.content}")
             if q.options:
-                lines.append(f"选项：{', '.join(q.options)}")
-            lines.append(f"答案：{q.answer}")
+                lines.append(f"选项：{'；'.join(q.options)}")
+            lines.append(f"答案：**{q.answer}**")
             if q.analysis:
                 lines.append(f"解析：{q.analysis[:200]}")
             if q.page_image:
                 fig_url = f"/static/figures/{q.region}/{q.year}/figures/{q.page_image}"
-                lines.append(f"\n![原题图片]({fig_url})\n<img src=\"{fig_url}\" alt=\"原题图片\" />")
+                lines.append(f'<br><img src="{fig_url}" style="max-width:100%;border:1px solid #eee;border-radius:4px" alt="原题图片">')
             lines.append("")
 
-    # If local results < 3, supplement with web search
+    # ── Web search supplement (always run if local < 3) ──
+    web_lines = []
     if len(results) < 3 and keyword:
-        lines.append("---")
-        lines.append(f"本地题库仅 {len(results)} 道，以下为联网搜索结果：\n")
         try:
             web_result_str = await _do_web_search(keyword)
             web_data = json.loads(web_result_str)
             web_text = web_data.get("result", "")
-            if web_text:
-                lines.append(web_text[:2000])
-            else:
-                lines.append("(联网搜索暂无结果)")
+            if web_text and len(web_text) > 50:
+                web_lines.append(f"\n## 来自网络搜索（补充 {3 - len(results)} 道）\n")
+                web_lines.append(web_text[:2000])
         except Exception:
-            lines.append("(联网搜索暂时不可用)")
+            pass
 
-    if not results and not lines:
-        lines.append("未找到相关真题，建议调整搜索关键词")
+    if web_lines:
+        lines.append("---\n")
+        lines.extend(web_lines)
+
+    if not results and not web_lines:
+        lines.append("未找到相关真题，建议尝试更简短的关键词")
 
     result_text = "\n".join(lines)
-    result_text += "\n---\n以上是全部搜索到的题目（含本地题库和联网结果）。必须逐题完整列出，一道都不能省略。禁止添加知识点总结——用户要的就是真题本身。"
+    result_text += "\n\n> 以上是全部搜索结果。已在上面逐题列出，直接输出即可，不要省略任何一题，不要额外添加知识点总结。"
     return result_text
 
 
