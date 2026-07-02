@@ -70,45 +70,18 @@ async def web_search(query: str = "") -> str:
     会发生什么：返回联网搜索结果摘要，在对话中展示
     下一步：基于搜索结果回答用户问题
     NOT for 搜索本地题库里的历史真题 — 用 search_exam_bank"""
-    import os as _os, httpx as _httpx, urllib.parse as _urlparse
+    import os as _os, httpx as _httpx
 
-    # Step 1: Fetch search results via HTTP (Bing)
     search_text = ""
-    try:
-        async with _httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
-            resp = await client.get(
-                f"https://www.bing.com/search?q={_urlparse.quote(query)}",
-                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-            )
-        if resp.status_code == 200:
-            import re as _re
-            # Extract text from search result snippets
-            snippets = _re.findall(r'<p[^>]*class="[^"]*b_lineclamp[^"]*"[^>]*>(.*?)</p>', resp.text, _re.DOTALL)
-            if snippets:
-                search_text = "\n\n".join(
-                    _re.sub(r'<[^>]+>', '', s).strip()[:300]
-                    for s in snippets[:8]
-                )
-            # Fallback: try extracting all visible text
-            if not search_text:
-                body = _re.sub(r'<script[^>]*>.*?</script>', '', resp.text, flags=_re.DOTALL)
-                body = _re.sub(r'<style[^>]*>.*?</style>', '', body, flags=_re.DOTALL)
-                body = _re.sub(r'<[^>]+>', ' ', body)
-                body = _re.sub(r'\s+', ' ', body).strip()
-                search_text = body[:2000]
-    except Exception:
-        pass
 
-    # Step 2: If HTTP search failed, fallback to MiMo enable_search
-    if not search_text or len(search_text) < 50:
-        api_key = _os.getenv("XIAOMI_API_KEY", "")
-        if not api_key:
-            return json.dumps({"error": "搜索暂不可用"})
+    # Primary: MiMo with enable_search (has real web search capability)
+    miimo_key = _os.getenv("XIAOMI_API_KEY", "")
+    if miimo_key:
         try:
             async with _httpx.AsyncClient(timeout=60.0) as client:
                 resp = await client.post(
                     "https://api.xiaomimimo.com/v1/chat/completions",
-                    headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                    headers={"Authorization": f"Bearer {miimo_key}", "Content-Type": "application/json"},
                     json={
                         "model": "mimo-v2.5",
                         "messages": [{"role": "user", "content": query}],
@@ -118,15 +91,34 @@ async def web_search(query: str = "") -> str:
             if resp.status_code == 200:
                 data = resp.json()
                 search_text = data["choices"][0]["message"]["content"]
+        except Exception as e:
+            print(f"MiMo search failed: {e}")
+
+    # Fallback: Bing scraping (unreliable but no API key needed)
+    if not search_text or len(search_text) < 50:
+        import urllib.parse as _urlparse
+        try:
+            async with _httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+                resp = await client.get(
+                    f"https://www.bing.com/search?q={_urlparse.quote(query)}",
+                    headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+                )
+            if resp.status_code == 200:
+                import re as _re
+                snippets = _re.findall(r'<li class="b_algo"[^>]*>.*?</li>', resp.text, _re.DOTALL)
+                if not snippets:
+                    snippets = _re.findall(r'<p[^>]*>(.*?)</p>', resp.text, _re.DOTALL)
+                parts = [_re.sub(r'<[^>]+>', '', s).strip()[:200] for s in snippets[:5]]
+                search_text = "\n\n".join(p for p in parts if len(p) > 20)
         except Exception:
             pass
 
     if not search_text or len(search_text) < 20:
-        return json.dumps({"error": "未获取到搜索结果"})
+        return json.dumps({"error": "未获取到搜索结果，请稍后重试"}, ensure_ascii=False)
 
-    # Step 3: Summarize with DeepSeek (no training cutoff issue)
+    # Summarize with DeepSeek
     ds_key = _os.getenv("DEEPSEEK_API_KEY", "")
-    if ds_key and len(search_text) > 50:
+    if ds_key and len(search_text) > 100:
         try:
             async with _httpx.AsyncClient(timeout=60.0) as client:
                 resp = await client.post(
@@ -145,16 +137,13 @@ async def web_search(query: str = "") -> str:
                 data = resp.json()
                 result = data["choices"][0]["message"]["content"]
                 return json.dumps({
-                    "_display": f"已完成搜索「{query[:30]}」",
                     "query": query,
                     "result": result,
                 }, ensure_ascii=False)
         except Exception:
             pass
 
-    # Fallback: return raw results
     return json.dumps({
-        "_display": f"已搜索「{query[:30]}」",
         "query": query,
         "result": search_text[:2000],
     }, ensure_ascii=False)
