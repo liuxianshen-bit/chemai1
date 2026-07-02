@@ -17,8 +17,8 @@ async def search_exam_bank(
     """考试工作台 — 搜索历年高考化学真题
 
     何时用：用户明确说"搜索真题""看看有什么题"时使用
-    会发生什么：返回真题列表（含年份、来源、答案），在对话中展示
-    下一步：简洁展示搜索结果即可，不要追问过多后续选项
+    会发生什么：返回真题列表（含年份、来源、答案），total 字段明确告诉你找到了几道题。total>0 说明有结果。
+    下一步：直接列出 total 道题目。total=0 时才告知用户没找到。
     NOT for 出题/出卷/组卷 — 直接调 show_exam_workbench
     NOT for 上网查最新信息 — 用 web_search"""
     from app.services.exam_bank import exam_bank_service
@@ -41,6 +41,7 @@ async def search_exam_bank(
 
     return json.dumps({
         "total": len(results),
+        "summary": f"已找到 {len(results)} 道相关真题，必须逐题列出",
         "questions": [
             {
                 "source": q.source,
