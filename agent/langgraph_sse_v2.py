@@ -52,21 +52,41 @@ class LangGraphSSEAdapterV2:
             output = data.get("output", "")
             result_str = str(output) if not isinstance(output, str) else output
             success = True
+
+            # Extract structured images from search_exam_bank output
+            image_events = []
             try:
                 parsed = json.loads(result_str) if isinstance(result_str, str) else result_str
-                if isinstance(parsed, dict) and "error" in parsed:
+                if isinstance(parsed, dict) and "images" in parsed:
+                    # Replace result_str with just the text (LLM sees clean text)
+                    result_str = parsed.get("text", result_str)
+                    for img_entry in parsed.get("images", []):
+                        image_events.append(json.dumps({
+                            "type": "exam_images",
+                            "q_index": img_entry.get("q_index", 0),
+                            "title": img_entry.get("title", ""),
+                            "urls": img_entry.get("urls", []),
+                        }, ensure_ascii=False))
+                    # Store only text in _tool_results
+                    self._tool_results.append({"tool_name": name, "result": {"text": result_str}})
+                elif isinstance(parsed, dict) and "error" in parsed:
                     success = False
-                self._tool_results.append({"tool_name": name, "result": parsed})
+                    self._tool_results.append({"tool_name": name, "result": parsed})
+                else:
+                    self._tool_results.append({"tool_name": name, "result": parsed})
             except (json.JSONDecodeError, TypeError):
                 self._tool_results.append({
                     "tool_name": name,
                     "result": {"raw": str(result_str)[:500]},
                 })
-            return [json.dumps({
+
+            events = [json.dumps({
                 "type": "tool_result", "name": name,
                 "tool": _tool_category(name), "success": success,
                 "result": result_str[:8000] if isinstance(result_str, str) else str(result_str)[:8000],
             }, ensure_ascii=False)]
+            events.extend(image_events)
+            return events
 
         # ── Text streaming ──
         if event_type == "on_chat_model_stream":

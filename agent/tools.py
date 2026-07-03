@@ -31,9 +31,10 @@ async def search_exam_bank(
         use_vector=True if keyword else False,
     )
 
+    # ── Build display text and image metadata ──
     lines = []
+    images = []
 
-    # ── Local results ──
     if results:
         lines.append(f"## 来自题库（{len(results)} 道）\n")
         for i, q in enumerate(results, 1):
@@ -47,10 +48,11 @@ async def search_exam_bank(
                 lines.append(f"解析：{q.analysis[:200]}")
             if q.page_image:
                 fig_url = f"/static/figures/{q.region}/{q.year}/figures/{q.page_image}"
-                lines.append(f"[图：{fig_url}]")
+                lines.append(f"[原题图片见下方]")
+                images.append({"q_index": i - 1, "title": f"第{i}题 原题图片", "urls": [fig_url]})
             lines.append("")
 
-    # ── Web search supplement (based on KEYWORD match count, not vector-padded total) ──
+    # ── Web search supplement ──
     kw_count = getattr(results, 'keyword_count', len(results))
     web_lines = []
     if kw_count < 3 and keyword:
@@ -73,6 +75,10 @@ async def search_exam_bank(
 
     result_text = "\n".join(lines)
     result_text += "\n\n> 以上是全部搜索结果。已在上面逐题列出，直接输出即可，不要省略任何一题，不要额外添加知识点总结。"
+
+    # Return structured format: LLM gets text, frontend gets images via SSE
+    if images:
+        return json.dumps({"text": result_text, "images": images}, ensure_ascii=False)
     return result_text
 
 

@@ -436,6 +436,24 @@
             updatePlanCard(evt)
             break
 
+          case 'exam_images':
+            var urls = evt.urls || []
+            if (urls.length > 0) {
+              var container = document.createElement('div')
+              container.style.cssText = 'margin:8px 0;display:flex;flex-wrap:wrap;gap:8px'
+              urls.forEach(function(url) {
+                var img = document.createElement('img')
+                img.src = url
+                img.style.cssText = 'max-width:100%;max-height:400px;border:1px solid #ddd;border-radius:6px;cursor:pointer;background:#fff'
+                img.title = evt.title || '原题图片'
+                img.onclick = function() { window.open(url, '_blank') }
+                container.appendChild(img)
+              })
+              bubble.appendChild(container)
+              scrollBottom()
+            }
+            break
+
           case 'step':
             var st3 = bubble.querySelector('.think-status')
             var labels = {search_exam_bank:'搜索真题', generate_questions:'AI出题', diagnose_barrier:'障碍诊断', chemistry_tutor:'智能辅导', simulate_experiment:'模拟实验', weekly_report:'生成周报', import_exam_paper:'导入试卷', assign_adaptive_practice:'布置练习', balance_equation:'配平审核', web_search:'联网搜索'}
