@@ -361,7 +361,11 @@
         if (evt.type === 'done') break
 
         if (evt.type !== 'text' && evt.type !== 'phase' && evt.type !== 'step') {
-          console.log('[IMG-DEBUG] SSE EVENT:', evt.type)
+          console.log('[IMG-DBG] SSE EVENT:', evt.type)
+        }
+
+        if (evt.type !== 'text' && evt.type !== 'phase' && evt.type !== 'step') {
+          console.log('[IMG-DBG] SSE EVENT:', evt.type)
         }
 
         switch (evt.type) {
@@ -441,13 +445,13 @@
             break
 
           case 'exam_images':
-            console.log('[IMG-DEBUG] exam_images event RECEIVED:', evt.urls ? evt.urls.length : 0, 'urls')
+            console.log('[IMG-DBG] exam_images event RECEIVED:', evt.urls ? evt.urls.length : 0, 'urls')
             _pendingImages = _pendingImages || []
             _pendingImages.push(evt)
             break
 
           default:
-            console.log('[IMG-DEBUG] unhandled SSE event type:', evt.type)
+            console.log('[IMG-DBG] unhandled SSE event type:', evt.type)
             break
 
           case 'step':
@@ -514,11 +518,11 @@
       bubble.innerHTML = renderMarkdown(reply)
     }
     // Inject collected exam images (deferred from exam_images events)
-    console.log('[IMG-DEBUG] pendingImages count:', (_pendingImages ? _pendingImages.length : 0), 'reply length:', (reply ? reply.length : 0))
+    console.log('[IMG-DBG] pendingImages count:', (_pendingImages ? _pendingImages.length : 0), 'reply length:', (reply ? reply.length : 0))
     if (_pendingImages && _pendingImages.length > 0) {
       _pendingImages.forEach(function(evt) {
         var urls = evt.urls || []
-        console.log('[IMG-DEBUG] injecting', urls.length, 'urls:', urls)
+        console.log('[IMG-DBG] injecting', urls.length, 'urls:', urls)
         if (urls.length > 0) {
           var container = document.createElement('div')
           container.style.cssText = 'margin:8px 0;display:flex;flex-wrap:wrap;gap:8px'
@@ -527,8 +531,8 @@
             img.src = url
             img.style.cssText = 'max-width:100%;max-height:400px;border:1px solid #ddd;border-radius:6px;cursor:pointer;background:#fff'
             img.title = evt.title || ''
-            img.onload = function() { console.log('[IMG-DEBUG] image loaded:', this.src) }
-            img.onerror = function() { console.error('[IMG-DEBUG] image FAILED:', this.src) }
+            img.onload = function() { console.log('[IMG-DBG] image loaded:', this.src) }
+            img.onerror = function() { console.error('[IMG-DBG] image FAILED:', this.src) }
             img.onclick = function() { window.open(url, '_blank') }
             container.appendChild(img)
           })
