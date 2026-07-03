@@ -53,14 +53,16 @@ class LangGraphSSEAdapterV2:
             result_str = str(output) if not isinstance(output, str) else output
             success = True
 
-            # Unwrap LangGraph ToolMessage format: "content='...' additional_kwargs={}"
+            # Unwrap LangGraph ToolMessage repr: "content='...JSON...'"
             if result_str.startswith("content='") or result_str.startswith('content="'):
-                import re as _re
-                m = _re.match(r"^content=['\"](.+)['\"]\s*(additional_kwargs=.*)?$", result_str, _re.DOTALL)
-                if m:
-                    result_str = m.group(1)
-                    # Unescape escaped quotes in the content
-                    result_str = result_str.replace("\\'", "'").replace('\\"', '"')
+                quote_char = result_str[8]  # ' or "
+                # Strip prefix and trailing quote
+                inner = result_str[9:]  # len("content='")
+                if inner.endswith(quote_char):
+                    inner = inner[:-1]
+                # Unescape escaped quotes from repr
+                inner = inner.replace("\\'", "'").replace('\\"', '"').replace('\\\\', '\\')
+                result_str = inner
 
             # Extract structured images from search_exam_bank output
             image_events = []
