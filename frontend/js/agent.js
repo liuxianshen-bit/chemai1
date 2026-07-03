@@ -322,7 +322,7 @@
     fetch('/api/agent/chat/langgraph/stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ persona: 'teacher', message: msg, provider: 'deepseek', conversation_id: currentConvId, history: history.slice(0, -1) })
+      body: JSON.stringify({ persona: 'teacher', message: msg, provider: 'deepseek', conversation_id: currentConvId, history: history.slice(0, -1), version: 'v2' })
     }).then(function (resp) {
       if (!resp.ok) throw new Error('HTTP ' + resp.status)
       return streamResponse(resp, bubble)
