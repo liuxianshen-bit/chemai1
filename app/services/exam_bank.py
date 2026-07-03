@@ -152,7 +152,7 @@ class ExamBankService:
         if year:
             results = [q for q in results if q.year == year]
 
-        # Step 1: Keyword matching (knowledge_point + keyword terms in content/answer/knowledge_points)
+        # Step 1: Keyword matching — knowledge_points only (content/answer too noisy)
         search_terms = []
         if knowledge_point:
             search_terms.append(knowledge_point.lower())
@@ -166,9 +166,7 @@ class ExamBankService:
 
         if search_terms:
             results = [q for q in results
-                      if any(t in q.content.lower()
-                             or t in q.answer.lower()
-                             or any(t in (kp or "").lower() for kp in q.knowledge_points)
+                      if any(any(t in (kp or "").lower() for kp in q.knowledge_points)
                              for t in search_terms)]
 
         if difficulty:
