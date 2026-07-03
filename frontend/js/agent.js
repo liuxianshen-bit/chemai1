@@ -517,13 +517,22 @@
     if (reply && !hasPanel) {
       bubble.innerHTML = renderMarkdown(reply)
     }
-    // Inject collected exam images (deferred from exam_images events)
-    console.log('[IMG-DBG] pendingImages count:', (_pendingImages ? _pendingImages.length : 0), 'reply length:', (reply ? reply.length : 0))
+    // Inject collected exam images — match by q_index to question position
     if (_pendingImages && _pendingImages.length > 0) {
       _pendingImages.forEach(function(evt) {
         var urls = evt.urls || []
-        console.log('[IMG-DBG] injecting', urls.length, 'urls:', urls)
+        var qIdx = evt.q_index || 0
         if (urls.length > 0) {
+          // Find the Nth question heading in the rendered bubble
+          var headers = bubble.querySelectorAll('strong, b, h1, h2, h3, h4')
+          var targetEl = null
+          for (var h = 0; h < headers.length; h++) {
+            var txt = headers[h].textContent || ''
+            if (txt.indexOf('第' + (qIdx + 1) + '题') !== -1) {
+              targetEl = headers[h]
+              break
+            }
+          }
           var container = document.createElement('div')
           container.style.cssText = 'margin:8px 0;display:flex;flex-wrap:wrap;gap:8px'
           urls.forEach(function(url) {
@@ -531,12 +540,16 @@
             img.src = url
             img.style.cssText = 'max-width:100%;max-height:400px;border:1px solid #ddd;border-radius:6px;cursor:pointer;background:#fff'
             img.title = evt.title || ''
-            img.onload = function() { console.log('[IMG-DBG] image loaded:', this.src) }
-            img.onerror = function() { console.error('[IMG-DBG] image FAILED:', this.src) }
             img.onclick = function() { window.open(url, '_blank') }
             container.appendChild(img)
           })
-          bubble.appendChild(container)
+          // Insert after question block: find the paragraph after the heading
+          if (targetEl) {
+            var parent = targetEl.closest('p') || targetEl.parentElement
+            parent.insertAdjacentElement('afterend', container)
+          } else {
+            bubble.appendChild(container)
+          }
         }
       })
       _pendingImages = []
