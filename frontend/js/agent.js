@@ -360,6 +360,10 @@
         } catch (e) { console.error('SSE event error:', e, payload); continue }
         if (evt.type === 'done') break
 
+        if (evt.type !== 'text' && evt.type !== 'phase' && evt.type !== 'step') {
+          console.log('[IMG-DEBUG] SSE EVENT:', evt.type)
+        }
+
         switch (evt.type) {
           case 'phase':
             var st = bubble.querySelector('.think-status')
@@ -437,9 +441,13 @@
             break
 
           case 'exam_images':
-            // Collect for deferred injection (after renderMarkdown nukes bubble content)
+            console.log('[IMG-DEBUG] exam_images event RECEIVED:', evt.urls ? evt.urls.length : 0, 'urls')
             _pendingImages = _pendingImages || []
             _pendingImages.push(evt)
+            break
+
+          default:
+            console.log('[IMG-DEBUG] unhandled SSE event type:', evt.type)
             break
 
           case 'step':
