@@ -53,27 +53,21 @@ class LangGraphSSEAdapterV2:
             result_str = str(output) if not isinstance(output, str) else output
             success = True
 
-            # Debug
-            has_img_kw = 'images' in result_str
-            print("[IMG-DEBUG]", name, "len=", len(result_str), "starts_content=", result_str.startswith("content="), "has_images_kw=", has_img_kw, flush=True)
-
-            # Unwrap LangGraph ToolMessage repr: "content='...JSON...'"
+            # Unwrap LangGraph ToolMessage repr: "content='...JSON...' additional_kwargs={...}"
             if result_str.startswith("content='") or result_str.startswith('content="'):
-                quote_char = result_str[8]  # ' or "
-                # Strip prefix and trailing quote
-                inner = result_str[9:]  # len("content='")
+                quote_char = result_str[8]
+                inner = result_str[9:]
                 if inner.endswith(quote_char):
                     inner = inner[:-1]
-                # Unescape escaped quotes from repr
                 inner = inner.replace("\\'", "'").replace('\\"', '"').replace('\\\\', '\\')
                 result_str = inner
 
-            # Extract structured images from search_exam_bank output
+            # Extract structured images (raw_decode handles trailing content)
             image_events = []
             try:
-                parsed = json.loads(result_str) if isinstance(result_str, str) else result_str
+                decoder = json.JSONDecoder()
+                parsed, _ = decoder.raw_decode(result_str) if isinstance(result_str, str) else (result_str, 0)
                 if isinstance(parsed, dict) and "images" in parsed:
-                    print("[IMG-DEBUG] FOUND images! count=", len(parsed.get('images',[])), flush=True)
                     # Replace result_str with just the text (LLM sees clean text)
                     result_str = parsed.get("text", result_str)
                     for img_entry in parsed.get("images", []):
@@ -91,8 +85,7 @@ class LangGraphSSEAdapterV2:
                     self._tool_results.append({"tool_name": name, "result": parsed})
                 else:
                     self._tool_results.append({"tool_name": name, "result": parsed})
-            except (json.JSONDecodeError, TypeError):
-                # Plain text result (no images) — normal path
+            except Exception:
                 self._tool_results.append({
                     "tool_name": name,
                     "result": {"raw": str(result_str)[:500]},
