@@ -337,7 +337,7 @@
   async function streamResponse(resp, bubble) {
     var reader = resp.body.getReader()
     var decoder = new TextDecoder()
-    var buffer = '', reply = '', _subPanel = null, _subAgentName = '', _subToolCount = 0, _routeCard = null, _topToolCards = []
+    var buffer = '', reply = '', _subPanel = null, _subAgentName = '', _subToolCount = 0, _routeCard = null, _topToolCards = [], _pendingImages = []
 
     while (true) {
       var r = await reader.read()
@@ -437,21 +437,9 @@
             break
 
           case 'exam_images':
-            var urls = evt.urls || []
-            if (urls.length > 0) {
-              var container = document.createElement('div')
-              container.style.cssText = 'margin:8px 0;display:flex;flex-wrap:wrap;gap:8px'
-              urls.forEach(function(url) {
-                var img = document.createElement('img')
-                img.src = url
-                img.style.cssText = 'max-width:100%;max-height:400px;border:1px solid #ddd;border-radius:6px;cursor:pointer;background:#fff'
-                img.title = evt.title || '原题图片'
-                img.onclick = function() { window.open(url, '_blank') }
-                container.appendChild(img)
-              })
-              bubble.appendChild(container)
-              scrollBottom()
-            }
+            // Collect for deferred injection (after renderMarkdown nukes bubble content)
+            _pendingImages = _pendingImages || []
+            _pendingImages.push(evt)
             break
 
           case 'step':
@@ -516,6 +504,27 @@
     var hasPanel = bubble.querySelector('.inline-exam-panel, .inline-diag-panel')
     if (reply && !hasPanel) {
       bubble.innerHTML = renderMarkdown(reply)
+    }
+    // Inject collected exam images (deferred from exam_images events)
+    if (_pendingImages && _pendingImages.length > 0) {
+      _pendingImages.forEach(function(evt) {
+        var urls = evt.urls || []
+        if (urls.length > 0) {
+          var container = document.createElement('div')
+          container.style.cssText = 'margin:8px 0;display:flex;flex-wrap:wrap;gap:8px'
+          urls.forEach(function(url) {
+            var img = document.createElement('img')
+            img.src = url
+            img.style.cssText = 'max-width:100%;max-height:400px;border:1px solid #ddd;border-radius:6px;cursor:pointer;background:#fff'
+            img.title = evt.title || ''
+            img.onclick = function() { window.open(url, '_blank') }
+            container.appendChild(img)
+          })
+          bubble.appendChild(container)
+        }
+      })
+      _pendingImages = []
+      scrollBottom()
     }
     // Always save conversation history, even with inline panels
     if (reply || hasPanel) {
