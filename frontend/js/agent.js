@@ -523,13 +523,14 @@
         var urls = evt.urls || []
         var qIdx = evt.q_index || 0
         if (urls.length > 0) {
-          // Find the Nth question heading in the rendered bubble
-          var headers = bubble.querySelectorAll('strong, b, h1, h2, h3, h4')
+          // Find the Nth question heading in the rendered bubble (LLM may use h3/strong/p)
+          var qLabel = '第' + (qIdx + 1) + '题'
+          var allEls = bubble.querySelectorAll('h1, h2, h3, h4, h5, h6, strong, b, p')
           var targetEl = null
-          for (var h = 0; h < headers.length; h++) {
-            var txt = headers[h].textContent || ''
-            if (txt.indexOf('第' + (qIdx + 1) + '题') !== -1) {
-              targetEl = headers[h]
+          for (var h = 0; h < allEls.length; h++) {
+            var txt = allEls[h].textContent || ''
+            if (txt.indexOf(qLabel) !== -1) {
+              targetEl = allEls[h]
               break
             }
           }
@@ -543,10 +544,9 @@
             img.onclick = function() { window.open(url, '_blank') }
             container.appendChild(img)
           })
-          // Insert after question block: find the paragraph after the heading
+          // Insert after the question heading element
           if (targetEl) {
-            var parent = targetEl.closest('p') || targetEl.parentElement
-            parent.insertAdjacentElement('afterend', container)
+            targetEl.insertAdjacentElement('afterend', container)
           } else {
             bubble.appendChild(container)
           }
