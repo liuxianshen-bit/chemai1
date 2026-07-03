@@ -185,16 +185,18 @@ class ExamBankService:
             )
             existing_ids = {q.exam_id for q in results}
             need = limit - len(results)
-            extra_ids = []
+            extra_original_ids = []
             for c in candidates:
-                eid = c.get("exam_id", "")
+                chunk_id = c.get("exam_id", "")       # e.g. "nat_2020_t1::kp-0"
                 sim = c.get("similarity", 0)
-                if eid and sim >= 0.6 and eid not in existing_ids and eid not in extra_ids:
-                    extra_ids.append(eid)
-                if len(extra_ids) >= need:
+                # Extract original exam_id from chunked ID
+                orig_id = chunk_id.split("::")[0] if "::" in chunk_id else chunk_id
+                if chunk_id and sim >= 0.6 and orig_id not in existing_ids and orig_id not in extra_original_ids:
+                    extra_original_ids.append(orig_id)
+                if len(extra_original_ids) >= need:
                     break
-            if extra_ids:
-                extra = [q for q in self.questions if q.exam_id in extra_ids]
+            if extra_original_ids:
+                extra = [q for q in self.questions if q.exam_id in extra_original_ids]
                 results = results + extra
 
         # Preserve keyword-only count for web search fallback logic

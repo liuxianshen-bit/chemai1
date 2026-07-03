@@ -49,10 +49,10 @@ class VectorSearchService:
 
     def index_questions(self, questions: List[Dict], mode: str = "replace") -> int:
         """
-        将题目索引到向量库
+        将题目索引到向量库。每个知识标签生成一个独立向量。
         questions: [{"exam_id": "...", "content": "...", "knowledge_points": [...], ...}]
         mode: "replace" — clear collection and rebuild; "append" — add to existing
-        返回: 成功索引的题目数量
+        返回: 成功索引的向量数量（= Σ knowledge_points）
         """
         if not self.collection:
             print("Warning: Chroma not available, skipping indexing")
@@ -66,7 +66,17 @@ class VectorSearchService:
             existing = self.collection.get(limit=1)
             if existing and existing.get("embeddings") and existing["embeddings"]:
                 existing_dim = len(existing["embeddings"][0])
-                sample_embedding = self._get_embedding(questions[0].get("content", ""))
+                sample_text = self._build_embed_text(
+                    kp_name=questions[0].get("knowledge_points", ["测试"])[0],
+                    question_type=questions[0].get("question_type", ""),
+                    difficulty=questions[0].get("difficulty", "medium"),
+                    source=questions[0].get("source", ""),
+                    year=questions[0].get("year", 0),
+                    question_number=questions[0].get("question_number", ""),
+                    content=questions[0].get("content", ""),
+                    answer=questions[0].get("answer", ""),
+                )
+                sample_embedding = self._get_embedding(sample_text)
                 if len(sample_embedding) != existing_dim:
                     print(f"Dimension mismatch: old={existing_dim} new={len(sample_embedding)}, recreating collection")
                     self.chroma_client.delete_collection(self.collection.name)
@@ -86,7 +96,7 @@ class VectorSearchService:
             except Exception:
                 pass
 
-        # Generate embeddings and index
+        # Generate embeddings: one vector per knowledge_point
         ids = []
         embeddings = []
         metadatas = []
@@ -99,29 +109,51 @@ class VectorSearchService:
             source = q.get("source", "")
             year = q.get("year", 0)
             region = q.get("region", "")
+            question_type = q.get("question_type", "")
+            question_number = q.get("question_number", "")
+            answer = q.get("answer", "")
 
-            embedding = self._get_embedding(content)
+            for kp_idx, kp_name in enumerate(knowledge_points):
+                embed_text = self._build_embed_text(
+                    kp_name, question_type, difficulty,
+                    source, year, question_number, content, answer
+                )
+                embedding = self._get_embedding(embed_text)
 
-            ids.append(exam_id)
-            embeddings.append(embedding)
-            metadatas.append({
-                "source": source,
-                "year": year,
-                "region": region,
-                "knowledge_points": ",".join(knowledge_points) if knowledge_points else "",
-                "difficulty": difficulty,
-                "content_preview": content[:200]
-            })
+                chunk_id = f"{exam_id}::kp-{kp_idx}"
+                ids.append(chunk_id)
+                embeddings.append(embedding)
+                metadatas.append({
+                    "exam_id": exam_id,
+                    "kp_index": kp_idx,
+                    "kp_name": kp_name,
+                    "source": source,
+                    "year": year,
+                    "region": region,
+                    "difficulty": difficulty,
+                    "question_number": question_number,
+                    "knowledge_points": ",".join(knowledge_points) if knowledge_points else "",
+                    "content_preview": content[:200],
+                })
 
-        # 批量添加
+        # Batch add
         if ids:
-            self.collection.add(
-                ids=ids,
-                embeddings=embeddings,
-                metadatas=metadatas
-            )
+            self.collection.add(ids=ids, embeddings=embeddings, metadatas=metadatas)
 
         return len(ids)
+
+    def _build_embed_text(self, kp_name: str, question_type: str, difficulty: str,
+                          source: str, year: int, question_number: str,
+                          content: str, answer: str) -> str:
+        """Build embedding text with knowledge point as the primary signal."""
+        return (
+            f"考点：{kp_name}。"
+            f"题型：{question_type}。"
+            f"难度：{difficulty}。"
+            f"来源：{source} {year}年第{question_number}题。"
+            f"题目：{content[:500]}。"
+            f"答案：{answer}"
+        )
 
     def search_similar(
         self,
@@ -184,6 +216,7 @@ class VectorSearchService:
 
             similar_questions.append({
                 "exam_id": id,
+                "kp_name": metadata.get("kp_name", ""),
                 "source": metadata.get("source", ""),
                 "year": metadata.get("year", 0),
                 "region": metadata.get("region", ""),
@@ -220,7 +253,11 @@ class VectorSearchService:
 
         for i, metadata in enumerate(all_data["metadatas"]):
             q_kps = set(metadata.get("knowledge_points", "").split(","))
+            kp_name = metadata.get("kp_name", "")
+            # Score: exact kp_name match gets bonus weight
             overlap = len(kp_set & q_kps)
+            if kp_name and kp_name in kp_set:
+                overlap += 2  # bonus for matching the specific chunk's kp
 
             if overlap > 0:
                 # 难度匹配优先
@@ -325,7 +362,8 @@ class VectorSearchService:
                     sample_dim = len(self._pseudo_embedding("test"))
                     if existing_dim >= sample_dim * 0.8:  # dimension roughly matches
                         existing_count = len(existing["ids"])
-                        expected_count = len([q for q in exam_bank_service.questions if q.knowledge_points])
+                        # Expected: Σ knowledge_points across all questions (one vector per kp)
+                        expected_count = sum(len(q.knowledge_points) for q in exam_bank_service.questions if q.knowledge_points)
                         if existing_count >= expected_count * 0.9:
                             print(f"Vector index up to date ({existing_count} questions), skipping rebuild")
                             return existing_count
@@ -344,11 +382,14 @@ class VectorSearchService:
                 "difficulty": q.difficulty,
                 "source": q.source,
                 "year": q.year,
-                "region": q.region
+                "region": q.region,
+                "question_type": q.question_type,
+                "question_number": q.question_number,
+                "answer": q.answer,
             })
 
         count = self.index_questions(questions_for_index)
-        print(f"Indexed {count} questions to vector store")
+        print(f"Indexed {count} vectors to vector store (from {len(questions_for_index)} questions)")
         return count
 
     def get_index_stats(self) -> Dict:
