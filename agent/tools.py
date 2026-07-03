@@ -50,9 +50,10 @@ async def search_exam_bank(
                 lines.append(f'<br><img src="{fig_url}" style="max-width:100%;border:1px solid #eee;border-radius:4px" alt="原题图片">')
             lines.append("")
 
-    # ── Web search supplement (always run if local < 3) ──
+    # ── Web search supplement (based on KEYWORD match count, not vector-padded total) ──
+    kw_count = getattr(results, 'keyword_count', len(results))
     web_lines = []
-    if len(results) < 3 and keyword:
+    if kw_count < 3 and keyword:
         try:
             web_result_str = await _do_web_search(keyword)
             web_data = json.loads(web_result_str)

@@ -809,8 +809,14 @@
     if (!text) return ''
     _latexBlocks = []
 
-    // Step 1: protect LaTeX / chemistry before parsing
+    // Step 0: protect raw HTML tags (img, br) from escaping
+    var _htmlBlocks = []
     var safe = text
+      .replace(/<img\b[^>]*\/?>/gi, function(m) { _htmlBlocks.push(m); return '\x00H' + (_htmlBlocks.length-1) + '\x00' })
+      .replace(/<br\s*\/?>/gi, function(m) { _htmlBlocks.push(m); return '\x00H' + (_htmlBlocks.length-1) + '\x00' })
+
+    // Step 1: protect LaTeX / chemistry before parsing
+    safe = safe
       .replace(/\$\$([\s\S]*?)\$\$/g, function(m, f) { _latexBlocks.push({t:'d',f:f}); return '\x00L' + (_latexBlocks.length-1) + '\x00' })
       .replace(/\\\[([\s\S]*?)\\\]/g, function(m, f) { _latexBlocks.push({t:'d',f:f}); return '\x00L' + (_latexBlocks.length-1) + '\x00' })
       .replace(/\\\(([\s\S]*?)\\\)/g, function(m, f) { _latexBlocks.push({t:'i',f:f}); return '\x00l' + (_latexBlocks.length-1) + '\x00' })
@@ -917,6 +923,9 @@
       html = html.replace(/\x00[Ll](\d+)\x00/g, function(m, i) { return '<code>' + escHtml(_latexBlocks[parseInt(i)].f) + '</code>' })
       html = html.replace(/\x00c(\d+)\x00/g, function(m, i) { return '<code>\\ce{' + escHtml(_latexBlocks[parseInt(i)].f) + '}</code>' })
     }
+
+    // Restore protected HTML blocks (img, br)
+    html = html.replace(/\x00H(\d+)\x00/g, function(m, idx) { return _htmlBlocks[parseInt(idx)] })
 
     // Step 4: auto-detect chemical equations in text nodes
     if (typeof katex !== 'undefined') {

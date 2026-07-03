@@ -9,6 +9,11 @@ from app.core.config import settings
 from app.models.historical_exam import HistoricalQuestion, ExamPaper
 
 
+class _SearchResult(list):
+    """A list subclass carrying keyword_count metadata for the web search fallback."""
+    keyword_count: int = 0
+
+
 class ExamBankService:
     """
     历年真题库服务
@@ -169,6 +174,9 @@ class ExamBankService:
         if difficulty:
             results = [q for q in results if q.difficulty == difficulty]
 
+        # Capture keyword-only count before vector padding
+        keyword_count = len(results)
+
         # Step 2: If keyword found too few, fill gaps via vector search
         if use_vector and keyword and len(results) < limit:
             from app.services.vector_search import vector_search_service
@@ -181,7 +189,7 @@ class ExamBankService:
             for c in candidates:
                 eid = c.get("exam_id", "")
                 sim = c.get("similarity", 0)
-                if eid and sim >= 0.5 and eid not in existing_ids and eid not in extra_ids:
+                if eid and sim >= 0.6 and eid not in existing_ids and eid not in extra_ids:
                     extra_ids.append(eid)
                 if len(extra_ids) >= need:
                     break
@@ -189,7 +197,12 @@ class ExamBankService:
                 extra = [q for q in self.questions if q.exam_id in extra_ids]
                 results = results + extra
 
-        return results[:limit]
+        # Preserve keyword-only count for web search fallback logic
+        truncated = results[:limit]
+        if not isinstance(truncated, _SearchResult):
+            truncated = _SearchResult(truncated)
+        truncated.keyword_count = keyword_count
+        return truncated
 
     def get_by_exam_id(self, exam_id: str) -> Optional[HistoricalQuestion]:
         """根据ID获取题目"""
