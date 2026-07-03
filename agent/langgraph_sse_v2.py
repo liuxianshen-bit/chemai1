@@ -53,6 +53,10 @@ class LangGraphSSEAdapterV2:
             result_str = str(output) if not isinstance(output, str) else output
             success = True
 
+            # Debug
+            has_img_kw = 'images' in result_str
+            print("[IMG-DEBUG]", name, "len=", len(result_str), "starts_content=", result_str.startswith("content="), "has_images_kw=", has_img_kw, flush=True)
+
             # Unwrap LangGraph ToolMessage repr: "content='...JSON...'"
             if result_str.startswith("content='") or result_str.startswith('content="'):
                 quote_char = result_str[8]  # ' or "
@@ -69,6 +73,7 @@ class LangGraphSSEAdapterV2:
             try:
                 parsed = json.loads(result_str) if isinstance(result_str, str) else result_str
                 if isinstance(parsed, dict) and "images" in parsed:
+                    print("[IMG-DEBUG] FOUND images! count=", len(parsed.get('images',[])), flush=True)
                     # Replace result_str with just the text (LLM sees clean text)
                     result_str = parsed.get("text", result_str)
                     for img_entry in parsed.get("images", []):
