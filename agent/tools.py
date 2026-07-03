@@ -47,7 +47,7 @@ async def search_exam_bank(
                 lines.append(f"解析：{q.analysis[:200]}")
             if q.page_image:
                 fig_url = f"/static/figures/{q.region}/{q.year}/figures/{q.page_image}"
-                lines.append(f'<br><img src="{fig_url}" style="max-width:100%;border:1px solid #eee;border-radius:4px" alt="原题图片">')
+                lines.append(f"[图：{fig_url}]")
             lines.append("")
 
     # ── Web search supplement (based on KEYWORD match count, not vector-padded total) ──
@@ -59,7 +59,7 @@ async def search_exam_bank(
             web_data = json.loads(web_result_str)
             web_text = web_data.get("result", "")
             if web_text and len(web_text) > 50:
-                web_lines.append(f"\n## 来自网络搜索（补充 {3 - len(results)} 道）\n")
+                web_lines.append(f"\n## AI辅助搜索（本地题库仅 {len(results)} 道，以下为AI补充，仅供教学参考。共补 {3 - len(results)} 道）\n")
                 web_lines.append(web_text[:2000])
         except Exception:
             pass
@@ -90,8 +90,13 @@ async def _do_web_search(query: str) -> str:
                 headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
                 json={
                     "model": "mimo-v2.5",
-                    "messages": [{"role": "user", "content": f"搜索高考化学真题: {query}。请列出具体题目、年份、来源和答案。"}],
-                    "enable_search": True, "max_tokens": 2048, "temperature": 0.3,
+                    "messages": [{"role": "user", "content": (
+                        f"搜索关于「{query}」的高考化学真题。要求："
+                        "1. 逐题列出，每道题必须包含：年份、省份/卷别、完整的题目内容、选项（如有）、标准答案、简要解析。"
+                        "2. 如果搜不到原题，请明确说明'未搜到原题'，然后列出该知识点的典型考法和例题。"
+                        "3. 禁止编造不存在的题目，你输出的每道题都应该是真实存在的高考真题。"
+                    )}],
+                    "enable_search": True, "max_tokens": 2048, "temperature": 0.1,
                 },
             )
         if resp.status_code == 200:
