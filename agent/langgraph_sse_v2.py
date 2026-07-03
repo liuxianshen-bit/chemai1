@@ -53,15 +53,20 @@ class LangGraphSSEAdapterV2:
             result_str = str(output) if not isinstance(output, str) else output
             success = True
 
+            # Unwrap LangGraph ToolMessage format: "content='...' additional_kwargs={}"
+            if result_str.startswith("content='") or result_str.startswith('content="'):
+                import re as _re
+                m = _re.match(r"^content=['\"](.+)['\"]\s*(additional_kwargs=.*)?$", result_str, _re.DOTALL)
+                if m:
+                    result_str = m.group(1)
+                    # Unescape escaped quotes in the content
+                    result_str = result_str.replace("\\'", "'").replace('\\"', '"')
+
             # Extract structured images from search_exam_bank output
             image_events = []
             try:
                 parsed = json.loads(result_str) if isinstance(result_str, str) else result_str
-                is_dict = isinstance(parsed, dict)
-                has_img = is_dict and "images" in parsed
-                img_count = len(parsed.get("images", [])) if has_img else 0
-                print(f"[SSE] {name}: is_dict={is_dict}, has_images={has_img}, img_count={img_count}, result_len={len(str(result_str))}")
-                if is_dict and "images" in parsed:
+                if isinstance(parsed, dict) and "images" in parsed:
                     # Replace result_str with just the text (LLM sees clean text)
                     result_str = parsed.get("text", result_str)
                     for img_entry in parsed.get("images", []):
