@@ -174,8 +174,14 @@ class ExamBankService:
         if difficulty:
             results = [q for q in results if q.difficulty == difficulty]
 
-        # Capture keyword-only count before vector padding
-        keyword_count = len(results)
+        # Relevance count for web search trigger: only count questions where
+        # the FULL keyword/phrase matches in knowledge_points (not split terms like "氧化")
+        keyword_count = 0
+        if keyword:
+            kw_lower = keyword.lower()
+            keyword_count = sum(1 for q in results
+                              if kw_lower in q.content.lower()
+                              or any(kw_lower in (kp or "").lower() for kp in q.knowledge_points))
 
         # Step 2: If keyword found too few, fill gaps via vector search
         if use_vector and keyword and len(results) < limit:

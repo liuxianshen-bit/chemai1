@@ -57,16 +57,21 @@ class LangGraphSSEAdapterV2:
             image_events = []
             try:
                 parsed = json.loads(result_str) if isinstance(result_str, str) else result_str
-                if isinstance(parsed, dict) and "images" in parsed:
+                is_dict = isinstance(parsed, dict)
+                has_img = is_dict and "images" in parsed
+                img_count = len(parsed.get("images", [])) if has_img else 0
+                print(f"[SSE] {name}: is_dict={is_dict}, has_images={has_img}, img_count={img_count}, result_len={len(str(result_str))}")
+                if is_dict and "images" in parsed:
                     # Replace result_str with just the text (LLM sees clean text)
                     result_str = parsed.get("text", result_str)
                     for img_entry in parsed.get("images", []):
-                        image_events.append(json.dumps({
-                            "type": "exam_images",
-                            "q_index": img_entry.get("q_index", 0),
-                            "title": img_entry.get("title", ""),
-                            "urls": img_entry.get("urls", []),
-                        }, ensure_ascii=False))
+                        if img_entry.get("urls"):
+                            image_events.append(json.dumps({
+                                "type": "exam_images",
+                                "q_index": img_entry.get("q_index", 0),
+                                "title": img_entry.get("title", ""),
+                                "urls": img_entry.get("urls", []),
+                            }, ensure_ascii=False))
                     # Store only text in _tool_results
                     self._tool_results.append({"tool_name": name, "result": {"text": result_str}})
                 elif isinstance(parsed, dict) and "error" in parsed:
@@ -75,6 +80,7 @@ class LangGraphSSEAdapterV2:
                 else:
                     self._tool_results.append({"tool_name": name, "result": parsed})
             except (json.JSONDecodeError, TypeError):
+                # Plain text result (no images) — normal path
                 self._tool_results.append({
                     "tool_name": name,
                     "result": {"raw": str(result_str)[:500]},
