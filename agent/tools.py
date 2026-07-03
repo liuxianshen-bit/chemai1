@@ -47,7 +47,8 @@ async def search_exam_bank(
             if q.analysis:
                 lines.append(f"解析：{q.analysis[:200]}")
             if q.page_image:
-                fig_url = f"/static/figures/{q.region}/{q.year}/figures/{q.page_image}"
+                import urllib.parse
+                fig_url = "/static/figures/" + urllib.parse.quote(f"{q.region}/{q.year}/figures/{q.page_image}")
                 lines.append(f"[原题图片见下方]")
                 images.append({"q_index": i - 1, "title": f"第{i}题 原题图片", "urls": [fig_url]})
             lines.append("")
