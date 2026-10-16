@@ -4,8 +4,6 @@ import yaml
 from dataclasses import dataclass
 from typing import Optional
 
-from pydantic_ai import Agent
-
 from agent.deps import ChemAIDeps
 from agent.models import get_model
 from agent.tools import TOOLS
@@ -37,7 +35,7 @@ class ChemAIAgentFactory:
         provider: str = "deepseek",
         deps: Optional[ChemAIDeps] = None,
         tool_names: Optional[list[str]] = None,
-    ) -> Agent:
+    ) -> "Agent":
         """创建 Agent 实例。
 
         Args:
@@ -47,6 +45,8 @@ class ChemAIAgentFactory:
             tool_names: 预分类的 tool 名列表。None 表示全量；传入则与 persona 的
                         available_skills 做交集；交集为空时自动回退全量
         """
+        from pydantic_ai import Agent
+
         if persona not in self._personas:
             self._personas[persona] = load_persona(persona)
 

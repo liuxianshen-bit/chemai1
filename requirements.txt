@@ -11,6 +11,7 @@ alembic==1.13.1
 # AI/ML
 dashscope==1.20.0  # 通义千问API
 chromadb==0.4.22
+numpy<2  # chromadb 0.4.22 的 api/types.py 用了 np.float_，NumPy 2.0 已移除
 tencentcloud-sdk-python-ocr==3.1.188  # 腾讯OCR
 
 # Utils

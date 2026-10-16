@@ -45,7 +45,7 @@ jobs:
       - name: Verify agent imports
         run: |
           python -c "from agent.guard import GuardState, _make_guarded_tool, _make_request_approval_tool, TOOL_APPROVAL_REQUIRED, _get_checkpointer, get_langchain_model"
-          python -c "from agent.tools import TOOLS, TOOL_META; assert len(TOOLS) == 26; assert len(TOOL_META) == 26"
+          python -c "from agent.tools import TOOLS, TOOL_META; assert len(TOOLS) == 30; assert len(TOOL_META) == 30"
           python -c "from agent.langgraph_agent_v2 import create_chemai_agent"
           python -c "from agent.langgraph_agent import create_chemai_agent as create_v1"
 
