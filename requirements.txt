@@ -11,7 +11,7 @@ alembic==1.13.1
 # AI/ML
 dashscope==1.20.0  # 通义千问API
 chromadb==0.4.22
-tencentcloud-sdk-python-ocr==1.0.2752  # 腾讯OCR
+tencentcloud-sdk-python-ocr==3.1.188  # 腾讯OCR
 
 # Utils
 pydantic==2.6.1
@@ -28,5 +28,5 @@ rdkit==2024.3.1  # 化学结构处理
 playwright>=1.40
 
 # Testing
-pytest==8.0.0
-pytest-asyncio==0.23.4
+pytest==8.3.5
+pytest-asyncio==0.25.3
