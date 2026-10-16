@@ -124,7 +124,6 @@ body{font-family:'IBM Plex Sans',sans-serif;background:#f7f4ed;color:#1a1a1a;mar
   <!-- 页面标题 -->
   <h1 class="page-title">班级学情面板</h1>
   <p class="page-sub">LEARNING ANALYTICS · DASHBOARD
-    <span id="mock-badge" style="display:none;font-family:'JetBrains Mono',monospace;font-size:10px;background:rgba(180,60,40,.1);color:#b43c28;padding:2px 8px;border-radius:3px;margin-left:12px;vertical-align:middle">MOCK · 演示数据</span>
   </p>
 
   <!-- 班级选择器 -->
@@ -194,77 +193,6 @@ var CHART_COLORS = {
   line: '#1a1a1a'
 };
 
-// ─── Mock 数据（API 无返回时用于演示）───
-function mockPanelData() {
-  var kps = ['盐类水解', '电离平衡', '氧化还原反应', '原电池·电解池', '化学平衡', '反应速率', '元素周期律', '有机化学'];
-  return {
-    overview: {
-      avg_score: 78,
-      exam_count: 12,
-      student_count: 42,
-      knowledge_point_stats: kps.map(function(k) {
-        return { knowledge_point: k, error_rate: Math.round((0.15 + Math.random() * 0.55) * 100) / 100 }
-      }).sort(function(a, b) { return b.error_rate - a.error_rate })
-    }
-  }
-}
-function mockBarrierData() {
-  return {
-    distribution: {
-      concept: { count: 12 },
-      reading: { count: 8 },
-      expression: { count: 5 }
-    }
-  }
-}
-function mockTrendData() {
-  var scores = [72, 74, 71, 77, 76, 80, 78, 82];
-  var months = ['9月月考', '10月月考', '11月期中', '12月月考', '1月期末', '3月月考', '4月月考', '5月模拟'];
-  return { trend: months.map(function(m, i) { return { date: m, avg_score: scores[i] } }) }
-}
-function mockStudentsData() {
-  var names = ['张明宇', '李思涵', '王浩然', '陈雨桐', '刘子轩', '赵文博', '周雅琪', '吴俊杰', '郑晓萌', '钱一鸣', '孙悦然', '朱天乐', '马思远', '胡雨菲', '林志远'];
-  var barriers = [
-    { concept: 0.85, reading: 0.15, expression: 0.05 },
-    { concept: 0.30, reading: 0.72, expression: 0.15 },
-    { concept: 0.15, reading: 0.10, expression: 0.88 },
-    { concept: 0.70, reading: 0.20, expression: 0.25 },
-    { concept: 0.45, reading: 0.60, expression: 0.10 },
-    { concept: 0.80, reading: 0.05, expression: 0.30 },
-    { concept: 0.10, reading: 0.78, expression: 0.10 },
-    { concept: 0.55, reading: 0.35, expression: 0.22 },
-    { concept: 0.22, reading: 0.10, expression: 0.75 },
-    { concept: 0.65, reading: 0.40, expression: 0.12 },
-    { concept: 0.08, reading: 0.15, expression: 0.82 },
-    { concept: 0.72, reading: 0.25, expression: 0.18 },
-    { concept: 0.40, reading: 0.50, expression: 0.20 },
-    { concept: 0.18, reading: 0.30, expression: 0.70 },
-    { concept: 0.60, reading: 0.10, expression: 0.35 }
-  ];
-  var wkps = [
-    ['盐类水解', '电离平衡'], ['氧化还原反应', '原电池'], ['化学平衡', '反应速率'],
-    ['盐类水解', 'pH计算'], ['电离平衡', '盐类水解'], ['原电池·电解池', '氧化还原反应'],
-    ['元素周期律', '化学键'], ['化学平衡', '电离平衡'], ['有机化学', '同分异构体'],
-    ['反应速率', '化学平衡'], ['盐类水解', '离子浓度比较'], ['氧化还原反应', '电化学'],
-    ['有机化学', '官能团'], ['电离平衡', 'pH计算'], ['原电池·电解池', '电极反应']
-  ];
-  var dates = ['2026-05-15', '2026-05-10', '2026-04-28', '2026-04-20', '2026-03-15', '2026-03-08', '2026-02-20', '2026-02-01', '2026-01-25', '2026-01-12', '2025-12-20', '2025-12-05', '2025-11-15', '2025-11-01', '2025-10-20'];
-  return {
-    students: names.map(function(n, i) {
-      return {
-        id: 's' + (i + 1),
-        name: n,
-        barrier_type: barriers[i],
-        weak_knowledge_points: wkps[i],
-        weak_kps: wkps[i],
-        exercises_completed: Math.floor(12 + Math.random() * 30),
-        last_exercise_at: dates[i],
-        created_at: '2025-09-01'
-      }
-    })
-  }
-}
-
 // ─── Load ───
 async function loadDashboard() {
   var sel = document.getElementById('classSelect');
@@ -272,7 +200,6 @@ async function loadDashboard() {
   if (!cid || cid.indexOf('加载') >= 0) return;
 
   var panel, barrier, students;
-  // 尝试真实 API，失败或空则用 mock
   try {
     [panel, barrier, students] = await Promise.all([
       api('/api/panel/class/' + cid),
@@ -281,29 +208,33 @@ async function loadDashboard() {
     ]);
   } catch(e) { panel = barrier = students = null }
 
-  // 真实数据为空时用 mock
-  if (!panel || !panel.overview || !(panel.overview.knowledge_point_stats || []).length) {
-    panel = mockPanelData()
-    document.getElementById('mock-badge').style.display = 'inline-block'
-  } else {
-    document.getElementById('mock-badge').style.display = 'none'
+  if (!panel) { document.getElementById('cards').innerHTML = '<div class=\"empty-state\">数据加载失败</div>'; return; }
+
+  // 真实 API 字段映射
+  var overview = panel.class_overview || panel.overview || {};
+  var kpData = panel.knowledge_points || panel.top_errors || [];
+
+  var dist = {};
+  if (barrier && barrier.distribution) {
+    dist = barrier.distribution;
+  } else if (panel.barrier_distribution) {
+    // API 返回的 barrier 计数转 distribution 格式
+    var bd = panel.barrier_distribution;
+    dist = { concept: {count: bd.concept||0}, reading: {count: bd.reading||0}, expression: {count: bd.expression||0} };
   }
-  if (!barrier || !barrier.distribution) barrier = mockBarrierData()
-  if (!students || (!students.students && !students.data)) students = mockStudentsData()
-  var overview = panel.overview || {};
-  var dist = barrier.distribution || {};
   var warnCount = (dist.concept?.count || 0) + (dist.reading?.count || 0) + (dist.expression?.count || 0);
-  var slist = students.students || students.data || [];
+  var slist = (students && students.students) || (students && students.data) || [];
+
   var cardsEl = document.getElementById('cards');
   cardsEl.innerHTML =
-    '<div class="stat-card"><div class="stat-value">' + (overview.avg_score !== undefined ? overview.avg_score : '--') + '</div><div class="stat-label">平均分</div></div>' +
     '<div class="stat-card"><div class="stat-value">' + (overview.exam_count || 0) + '</div><div class="stat-label">考试次数</div></div>' +
     '<div class="stat-card warn"><div class="stat-value">' + warnCount + '</div><div class="stat-label">需关注学生</div></div>' +
-    '<div class="stat-card ok"><div class="stat-value">' + (overview.student_count || slist.length || 0) + '</div><div class="stat-label">班级人数</div></div>';
+    '<div class="stat-card ok"><div class="stat-value">' + (overview.total_students || slist.length || 0) + '</div><div class="stat-label">班级人数</div></div>' +
+    '<div class="stat-card"><div class="stat-value">' + (overview.recent_exam_avg ? (overview.recent_exam_avg*100).toFixed(0)+'%' : '--') + '</div><div class="stat-label">最近均分</div></div>';
 
   // ── 知识点错误率 ──
-  var kpData = overview.knowledge_point_stats || [];
-  renderBar(kpData.slice(0, 8));
+  if (kpData.length) renderBar(kpData.slice(0, 8));
+  else document.getElementById('kpChart').parentElement.innerHTML += '<div class=\"empty-state\">暂无知识点数据</div>';
 
   // ── 障碍分布 ──
   renderDoughnut(dist);
@@ -311,12 +242,19 @@ async function loadDashboard() {
   // ── 成绩趋势 ──
   try {
     var trend = await api('/api/panel/class/' + cid + '/trend');
-    if (!trend || !(trend.trend || []).length) trend = mockTrendData()
-    renderLine(trend.trend || []);
-  } catch(e) { renderLine(mockTrendData().trend) }
+    if (trend && (trend.trend || []).length) renderLine(trend.trend);
+    else {
+      // 用 overview 的 avg_score_trend 兜底
+      if (overview.avg_score_trend && overview.avg_score_trend.length) {
+        var dummyTrend = overview.avg_score_trend.map(function(v, i) { return {date: '考试'+(i+1), avg_score: Math.round(v*100)} });
+        renderLine(dummyTrend);
+      }
+    }
+  } catch(e) { document.getElementById('trendChart').parentElement.innerHTML += '<div class=\"empty-state\">暂无趋势数据</div>' }
 
   // ── 学生列表 ──
-  renderAttentionStudents(slist);
+  if (slist.length) renderAttentionStudents(slist);
+  else document.getElementById('studentList').innerHTML = '<div class=\"empty-state\">暂无学生数据</div>';
 }
 
 // ── 知识点柱状图 ──

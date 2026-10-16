@@ -77,39 +77,61 @@
 
   // ─── 学习计划 ───
   function renderLearningPlan(data) {
-    var plan = data.plan || data || {}
+    // 兼容两种数据格式: {plan_text, plan_data} 来自 generate_learning_plan, {plan} 来自旧版
+    var plan = data.plan_data || data.plan || data || {}
+    var studentName = data.student_name || ''
     var title = plan.plan_title || '个性化学习计划'
     var period = plan.plan_period || ''
     var tasks = plan.daily_tasks || []
     var weeks = plan.weekly_goals || []
-    var barriers = plan.barrier_interventions || []
-    var motivation = plan.motivation_tips || []
-    var html = '<div style="border-left:4px solid #290068;padding:8px 14px;background:rgba(0,0,0,.01);border-radius:4px;margin-bottom:8px">'+
-      '<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:700;font-family:Manrope;font-size:15px">'+esc(title)+'</span>'+
-      (period?'<span style="font-size:11px;color:#74777f">周期: '+esc(period)+'</span>':'')+'</div>'
+    var barriers = plan.barrier_interventions || {}
+    var tips = plan.motivation_tips || []
 
-    if (barriers.length) {
-      html += '<div style="margin-top:8px"><span style="font-size:12px;font-weight:600">干预策略</span>'
-      barriers.forEach(function(b){
-        html += '<div style="display:flex;gap:8px;padding:6px 10px;margin-top:3px;background:rgba(0,0,0,.02);border-radius:4px;font-size:12px"><span style="font-family:JetBrains Mono;font-size:10px;color:var(--methyl-green,#13696a);min-width:70px">'+esc(b.barrier||'')+'</span><div><span>'+esc(b.strategy||'')+'</span><p style="color:#74777f;font-size:11px">'+esc(b.practice_tips||'')+'</p></div></div>'
-      })
-      html += '</div>'
-    }
-    if (tasks.length) {
-      html += '<div style="margin-top:8px"><span style="font-size:12px;font-weight:600">每日任务</span>'
-      tasks.forEach(function(t){
-        html += '<div style="display:flex;gap:8px;padding:6px 10px;margin-top:3px;background:rgba(0,0,0,.02);border-radius:4px;font-size:12px"><span style="font-family:JetBrains Mono;font-size:10px;color:var(--methyl-green,#13696a);min-width:70px">'+esc(t.day||'')+'</span><span>'+esc(t.content||'')+'</span></div>'
-      })
-      html += '</div>'
-    }
+    var html = '<div style="border-left:4px solid #2c6e49;padding:12px 16px;background:#f8fcf9;border-radius:6px;margin-bottom:8px">'+
+      '<div style="font-weight:700;font-size:15px;color:#2c6e49">'+esc(title)+'</div>'
+    if (studentName) html += '<div style="font-size:12px;color:#888;margin-top:2px">学生: '+esc(studentName)+(period?' · 周期: '+esc(period):'')+'</div>'
+
+    // 周目标
     if (weeks.length) {
-      html += '<div style="margin-top:8px"><span style="font-size:12px;font-weight:600">每周目标</span>'
+      html += '<div style="margin-top:10px"><span style="font-size:12px;font-weight:600;color:#555">🎯 周目标</span>'
       weeks.forEach(function(w){
-        html += '<div style="display:flex;gap:8px;padding:6px 10px;margin-top:3px;background:rgba(0,0,0,.02);border-radius:4px;font-size:12px"><span style="font-family:JetBrains Mono;font-size:10px;color:var(--methyl-green,#13696a);min-width:70px">'+esc(w.week||'')+'</span><span>'+esc(w.milestone||'')+'</span></div>'
+        var goal = typeof w === 'string' ? w : (w.milestone || w.goal || w.text || '')
+        var wk = w.week || w.label || ''
+        html += '<div style="padding:3px 8px;margin-top:2px;font-size:12px;color:#444">'+(wk?'<b>'+esc(wk)+'</b>: ':'')+esc(goal)+'</div>'
       })
       html += '</div>'
     }
-    if (motivation.length) html += '<div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap">'+motivation.map(function(m){return '<span class="tag" style="background:#e0f2f1;color:#004f50">'+esc(m)+'</span>'}).join('')+'</div>'
+
+    // 每日任务
+    if (tasks.length) {
+      html += '<div style="margin-top:8px"><span style="font-size:12px;font-weight:600;color:#555">📅 每日任务</span>'
+      tasks.slice(0,14).forEach(function(t){
+        var day = t.day || ''
+        var task = t.task || t.content || (typeof t === 'string' ? t : '')
+        html += '<div style="display:flex;gap:8px;padding:3px 8px;margin-top:2px;font-size:12px;color:#444"><span style="font-family:JetBrains Mono;font-size:11px;color:#2c6e49;min-width:50px">'+esc(day)+'</span><span>'+esc(task)+'</span></div>'
+      })
+      html += '</div>'
+    }
+
+    // 障碍干预 (兼容数组和字典)
+    if (!Array.isArray(barriers) && typeof barriers === 'object' && Object.keys(barriers).length) {
+      html += '<div style="margin-top:8px"><span style="font-size:12px;font-weight:600;color:#555">🧠 障碍干预</span>'
+      var btLabels = {concept:'概念理解', reading:'审题仔细', expression:'答题表述'}
+      Object.keys(barriers).forEach(function(bt){
+        html += '<div style="display:flex;gap:8px;padding:3px 8px;margin-top:2px;font-size:12px;color:#444"><span style="font-family:JetBrains Mono;font-size:11px;color:#d97706;min-width:60px">'+esc(btLabels[bt]||bt)+'</span><span>'+esc(barriers[bt])+'</span></div>'
+      })
+      html += '</div>'
+    } else if (Array.isArray(barriers) && barriers.length) {
+      html += '<div style="margin-top:8px"><span style="font-size:12px;font-weight:600;color:#555">🧠 干预策略</span>'
+      barriers.forEach(function(b){
+        html += '<div style="padding:3px 8px;margin-top:2px;font-size:12px;color:#444"><span style="color:#d97706">'+esc(b.barrier||'')+'</span>: '+esc(b.strategy||'')+'</div>'
+      })
+      html += '</div>'
+    }
+
+    if (tips.length) {
+      html += '<div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap">'+tips.map(function(m){var t=typeof m==='string'?m:(m.tip||m.text||'');return '<span class="tag" style="background:#e0f2f1;color:#004f50;font-size:11px;padding:2px 8px;border-radius:10px">'+esc(t)+'</span>'}).join('')+'</div>'
+    }
     html += '</div>'
     return html
   }
@@ -330,6 +352,7 @@
     diagnosis_barrier_class:renderBarrierOverview,
     diagnosis_plan_generate:renderLearningPlan,
     diagnosis_plan:         renderLearningPlan,
+    generate_learning_plan: renderLearningPlan,
     parser_ocr:             renderOcrTable,
     ocr_result:             renderOcrTable,
   }

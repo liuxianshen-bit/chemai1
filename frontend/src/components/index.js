@@ -11,5 +11,5 @@ export { Toast } from './Toast.js'
 // Agent工作过程展示（模拟）
 export { AgentThinking, showAgentThinking, updateAgentThinking, hideAgentThinking, callAgentApi } from './AgentThinking.js'
 
-// Hermes Agent流式思考展示（真正SSE）
+// ChemAI Agent流式思考展示（真正SSE）
 export { HermesThinking, showHermesThinking, updateHermesThinking, hideHermesThinking } from './HermesThinking.js'

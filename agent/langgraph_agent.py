@@ -9,130 +9,26 @@ Routing tools execute through a real ToolNode — frontend sees tool_call/tool_r
 import json, os, logging
 from typing import Annotated
 from uuid import uuid4
-from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
-from langgraph.types import interrupt
-import aiosqlite as _aiosqlite
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver  # kept for reference
+from langgraph.types import interrupt  # kept for sub-agent interrupt usage
+import aiosqlite as _aiosqlite  # kept — may be referenced elsewhere
 
-_checkpointer = None
+# ── Guard infrastructure (shared with v2) ──
+from agent.guard import (
+    GuardState,
+    _make_guarded_tool,
+    _make_request_approval_tool,
+    TOOL_APPROVAL_REQUIRED,
+    _get_checkpointer,
+    get_langchain_model,
+)
 
-async def _get_checkpointer():
-    global _checkpointer
-    if _checkpointer is None:
-        conn = await _aiosqlite.connect("chemai_checkpoints.db")
-        _checkpointer = AsyncSqliteSaver(conn)
-        await _checkpointer.setup()
-    return _checkpointer
-from langchain_openai import ChatOpenAI
+from langchain_openai import ChatOpenAI  # kept for sub-agent model usage
 from langchain_core.tools import tool as lc_tool, StructuredTool
 
 logger = logging.getLogger(__name__)
 
-TOOL_APPROVAL_REQUIRED = {"assign_adaptive_practice", "import_exam_paper", "delete_bank"}
 RECURSION_LIMIT = 8
-
-TOOL_CALL_LIMITS: dict[str, int] = {
-    "search_exam_bank": 3, "web_search": 2, "show_exam_workbench": 3,
-    "diagnose_barrier": 2, "weekly_report": 2, "balance_equation": 3,
-    "chemistry_tutor": 3, "simulate_experiment": 2, "import_exam_paper": 1,
-    "assign_adaptive_practice": 1, "save_to_bank": 1, "show_students": 1,
-    "show_diagnosis": 1,
-}
-
-
-class GuardState:
-    def __init__(self):
-        self.seen_calls: set[str] = set()
-        self.call_counts: dict[str, int] = {}
-        self.approved: bool = False
-        self.last_route: dict | None = None
-        self.last_component: dict | None = None
-
-    def check_dedup(self, name: str, kwargs: dict) -> bool:
-        key = f"{name}:{json.dumps(kwargs, sort_keys=True, ensure_ascii=False)}"
-        if key in self.seen_calls:
-            return True
-        self.seen_calls.add(key)
-        return False
-
-    def check_limit(self, name: str) -> str | None:
-        limit = TOOL_CALL_LIMITS.get(name)
-        if limit is None:
-            return None
-        count = self.call_counts.get(name, 0) + 1
-        self.call_counts[name] = count
-        if count > limit:
-            return f"已调用 {name} {count} 次（上限 {limit} 次），请基于已有结果继续。"
-        return None
-
-    def check_prerequisites(self, name: str, kwargs: dict) -> str | None:
-        prereqs = {
-            "show_exam_workbench": [],
-            "search_exam_bank": ["keyword"],
-            "diagnose_barrier": ["student_id_or_class_id"],
-            "weekly_report": ["student_id_or_class_id"],
-            "assign_adaptive_practice": ["student_id_or_class_id"],
-        }
-        for field in prereqs.get(name, []):
-            if field == "student_id_or_class_id":
-                if not any((kwargs.get(k, "") or "").strip() for k in
-                           ("student_id", "student_name", "class_id", "class_name")):
-                    return "缺少必要信息：请先向用户确认学生姓名/学号或班级。"
-                continue
-            if field == "keyword":
-                val = (kwargs.get("keyword", "") or "").strip()
-                if not val or len(val) <= 2:
-                    return "搜索关键词太宽泛。请先向用户确认：需要哪个具体知识点的真题？"
-                continue
-            if not (kwargs.get(field, "") or "").strip():
-                return f"缺少必要信息: {field}。请先向用户确认。"
-        return None
-
-
-def _make_guarded_tool(fn, guard_state: GuardState, requires_approval: bool = False):
-    base_tool = lc_tool(fn)
-
-    async def _guarded(**kwargs) -> str:
-        name = fn.__name__
-        if (msg := guard_state.check_prerequisites(name, kwargs)):
-            return json.dumps({"error": msg, "missing_prerequisites": True}, ensure_ascii=False)
-        if (msg := guard_state.check_limit(name)):
-            return json.dumps({"error": msg, "limit_exceeded": True}, ensure_ascii=False)
-        if guard_state.check_dedup(name, kwargs):
-            return json.dumps({"error": "检测到重复调用，已跳过", "dedup_skipped": True}, ensure_ascii=False)
-        if requires_approval and not guard_state.approved:
-            return json.dumps({"error": "此操作需要老师确认，请先调用 request_approval",
-                               "requires_approval_blocked": True}, ensure_ascii=False)
-        result = await fn(**kwargs)
-        if isinstance(result, str):
-            try:
-                data = json.loads(result)
-                if isinstance(data, dict):
-                    if "_route" in data:
-                        guard_state.last_route = data.pop("_route")
-                    if "_component" in data:
-                        guard_state.last_component = data.pop("_component")
-                    return json.dumps(data, ensure_ascii=False)
-            except (json.JSONDecodeError, TypeError):
-                pass
-        elif isinstance(result, dict):
-            if "_route" in result:
-                guard_state.last_route = result.pop("_route")
-            if "_component" in result:
-                guard_state.last_component = result.pop("_component")
-        return result
-
-    return StructuredTool(name=base_tool.name, description=base_tool.description,
-                          args_schema=base_tool.args_schema, coroutine=_guarded)
-
-
-def _make_request_approval_tool(guard_state: GuardState):
-    @lc_tool
-    async def request_approval(message: str, context: str = "") -> str:
-        """向老师请求确认。"""
-        guard_state.approved = True
-        interrupt({"type": "approval", "message": message, "context": context})
-        return "approved"
-    return request_approval
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -474,24 +370,3 @@ async def create_chemai_agent(persona: str = "tutor", provider: str = "deepseek"
     logger.info("[MultiAgent] Graph compiled — 6 sub-agents ready")
     return graph, None
 
-
-# ═══════════════════════════════════════════════════════════════════════
-# Shared utilities
-# ═══════════════════════════════════════════════════════════════════════
-
-def get_langchain_model(provider: str) -> ChatOpenAI:
-    api_keys = {
-        "deepseek": os.getenv("DEEPSEEK_API_KEY", ""),
-        "mimo": os.getenv("XIAOMI_API_KEY", ""),
-        "zhipu": os.getenv("ZHIPU_API_KEY", ""),
-        "dashscope": os.getenv("DASHSCOPE_API_KEY", ""),
-    }
-    configs = {
-        "deepseek": {"model": "deepseek-chat", "base_url": "https://api.deepseek.com/v1"},
-        "mimo": {"model": "mimo-v2.5", "base_url": "https://api.xiaomimimo.com/v1"},
-        "zhipu": {"model": "GLM-4-Flash", "base_url": "https://open.bigmodel.cn/api/paas/v4"},
-        "dashscope": {"model": "qwen-turbo", "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1"},
-    }
-    cfg = configs.get(provider, configs["deepseek"])
-    return ChatOpenAI(model=cfg["model"], api_key=api_keys.get(provider, ""),
-                      base_url=cfg["base_url"], temperature=0.3, max_tokens=4096)

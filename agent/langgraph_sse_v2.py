@@ -26,6 +26,11 @@ class LangGraphSSEAdapterV2:
     def __init__(self):
         self._phase = "thinking"
         self._tool_results = []
+        self._did_stream_text = False
+        self._last_tool_text = ""       # last tool's text output (for dedup)
+        self._reply_prefix = ""         # accumulate first chars of new reply
+        self._skip_dedup = False        # dedup already decided for this reply
+        self._tool_complete = False     # tool already gave a complete answer — skip LLM text
 
     def feed(self, event: dict) -> list[str]:
         event_type = event.get("event", "")
@@ -80,16 +85,22 @@ class LangGraphSSEAdapterV2:
                             }, ensure_ascii=False))
                     # Store only text in _tool_results
                     self._tool_results.append({"tool_name": name, "result": {"text": result_str}})
+                    # Store for text dedup (LLM should not echo tool guidance verbatim)
+                    self._last_tool_text = result_str
+                    # If tool returned structured tutoring response, skip LLM text after it
+                    if "guidance" in parsed or "step" in parsed:
+                        self._tool_complete = True
                 elif isinstance(parsed, dict) and "error" in parsed:
                     success = False
                     self._tool_results.append({"tool_name": name, "result": parsed})
                 else:
                     self._tool_results.append({"tool_name": name, "result": parsed})
-            except Exception:
+            except Exception as exc:
                 self._tool_results.append({
                     "tool_name": name,
-                    "result": {"raw": str(result_str)[:500]},
+                    "result": {"error": str(exc), "raw": str(result_str)[:500]},
                 })
+                success = False
 
             events = [json.dumps({
                 "type": "tool_result", "name": name,
@@ -101,6 +112,9 @@ class LangGraphSSEAdapterV2:
 
         # ── Text streaming ──
         if event_type == "on_chat_model_stream":
+            # If tool already gave a complete answer, skip all LLM text
+            if self._tool_complete:
+                return []
             chunk = data.get("chunk", None)
             if chunk is None:
                 return []
@@ -110,15 +124,39 @@ class LangGraphSSEAdapterV2:
             results = []
             if self._phase != "reply":
                 self._phase = "reply"
+                self._did_stream_text = False
+                self._reply_prefix = ""
+                self._skip_dedup = False
                 results.append(json.dumps(
                     {"type": "phase", "phase": "reply"}, ensure_ascii=False
                 ))
+            # Dedup: check if new reply is just echoing the last tool output
+            if not self._skip_dedup and self._last_tool_text:
+                self._reply_prefix += content
+                if len(self._reply_prefix) >= 50 or (not content.strip()):
+                    self._skip_dedup = True  # decide once
+                    prefix = self._reply_prefix.strip()
+                    tool_prefix = self._last_tool_text.strip()[:len(prefix)]
+                    # Heuristic: if first 50 chars overlap >70%, skip entire reply
+                    if prefix and tool_prefix and self._text_similarity(prefix, tool_prefix) > 0.7:
+                        return []  # skip — LLM echoing tool guidance
+            self._did_stream_text = True
             results.append(json.dumps(
                 {"type": "text", "content": content}, ensure_ascii=False
             ))
             return results
 
         return []
+
+    @staticmethod
+    def _text_similarity(a: str, b: str) -> float:
+        """Simple character-level similarity (Jaccard-like on char sets)."""
+        if not a or not b:
+            return 0.0
+        set_a, set_b = set(a), set(b)
+        intersection = len(set_a & set_b)
+        union = len(set_a | set_b)
+        return intersection / union if union > 0 else 0.0
 
     def finalize(self, route: dict = None, component: dict = None,
                  result_text: str = None) -> list[str]:
@@ -131,8 +169,8 @@ class LangGraphSSEAdapterV2:
                 "component": component["component"],
                 "params": component.get("params", {}),
             }, ensure_ascii=False))
-        # ── Text result (when no component, emit agent's answer directly) ──
-        elif result_text:
+        # ── Text result: only emit if NOT already streamed chunk-by-chunk ──
+        elif result_text and not self._did_stream_text:
             events.append(json.dumps({
                 "type": "text", "content": result_text,
             }, ensure_ascii=False))

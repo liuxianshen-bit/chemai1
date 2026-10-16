@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 ChemAI Agent & MinerU 完整测试套件
-测试 Hermes Skills 工具调用成功率、返回率等
+测试 Chem Skills 工具调用成功率、返回率等
 以及 MinerU 文档解析功能
 """
 import sys
@@ -43,12 +43,12 @@ class TestResult:
 def test_chemistry_exam_tools(tr: TestResult):
     print(blue("\n=== 1. Chemistry Exam Handler 测试 ==="))
 
-    from hermes_skills.chemistry_exam.handler import (
+    from chem_skills.chemistry_exam.handler import (
         ExamHandler, exam_generate, exam_audit, exam_search_historical,
         exam_get_exam_sets, exam_find_similar, exam_manual_select,
         exam_balance_check
     )
-    from hermes_skills.chemistry_exam.engine.balance_checker import ChemicalEquationAuditor
+    from chem_skills.chemistry_exam.engine.balance_checker import ChemicalEquationAuditor
     auditor = ChemicalEquationAuditor()
 
     # 1.1 直接测试配平检测引擎
@@ -141,7 +141,7 @@ def test_chemistry_exam_tools(tr: TestResult):
 def test_chemistry_diagnosis_tools(tr: TestResult):
     print(blue("\n=== 2. Chemistry Diagnosis Handler 测试 ==="))
 
-    from hermes_skills.chemistry_diagnosis.handler import (
+    from chem_skills.chemistry_diagnosis.handler import (
         DiagnosisHandler, diagnosis_barrier_class, diagnosis_barrier_student,
         diagnosis_plan_generate, diagnosis_config_get, diagnosis_config_update
     )
@@ -199,7 +199,7 @@ def test_chemistry_diagnosis_tools(tr: TestResult):
 def test_chemistry_parser_tools(tr: TestResult):
     print(blue("\n=== 3. Chemistry Parser Handler 测试 ==="))
 
-    from hermes_skills.chemistry_parser.handler import (
+    from chem_skills.chemistry_parser.handler import (
         ParserHandler, standardize_chemical_formula, classify_question_type,
         extract_answer_from_ocr, validate_parsed_result, get_mineru_status
     )
@@ -305,7 +305,7 @@ def test_chemistry_parser_tools(tr: TestResult):
 def test_mineru_status(tr: TestResult):
     print(blue("\n=== 4. MinerU 状态测试 ==="))
 
-    from hermes_skills.chemistry_parser.handler import get_mineru_status
+    from chem_skills.chemistry_parser.handler import get_mineru_status
 
     try:
         status = get_mineru_status()
@@ -324,7 +324,7 @@ def test_chemistry_memory_tools(tr: TestResult):
     print(blue("\n=== 5. Chemistry Memory Handler 测试 ==="))
 
     try:
-        from hermes_skills.chemistry_memory.handler import MemoryHandler
+        from chem_skills.chemistry_memory.handler import MemoryHandler
 
         handler = MemoryHandler()
 
@@ -355,7 +355,7 @@ def test_chemistry_notification_tools(tr: TestResult):
     print(blue("\n=== 6. Chemistry Notification Handler 测试 ==="))
 
     try:
-        from hermes_skills.chemistry_notification.handler import NotificationHandler
+        from chem_skills.chemistry_notification.handler import NotificationHandler
 
         handler = NotificationHandler()
 
@@ -386,7 +386,7 @@ def test_chemistry_improvement_tools(tr: TestResult):
     print(blue("\n=== 7. Chemistry Improvement Handler 测试 ==="))
 
     try:
-        from hermes_skills.chemistry_improvement.handler import ImprovementHandler
+        from chem_skills.chemistry_improvement.handler import ImprovementHandler
 
         handler = ImprovementHandler()
 
@@ -457,7 +457,7 @@ def test_skill_routing(tr: TestResult):
     print(blue("\n=== 9. Agent Skill 路由测试 ==="))
 
     # 测试各Handler的base_url配置
-    from hermes_skills._templates.base_handler import BaseSkillHandler
+    from chem_skills._templates.base_handler import BaseSkillHandler
 
     try:
         handler = BaseSkillHandler()
@@ -469,7 +469,7 @@ def test_skill_routing(tr: TestResult):
         tr.add("BaseSkillHandler_base_url", False, str(e))
 
     # 测试ExamHandler的API路由
-    from hermes_skills.chemistry_exam.handler import ExamHandler
+    from chem_skills.chemistry_exam.handler import ExamHandler
     exam_handler = ExamHandler()
     print(f"    ExamHandler API URL: {exam_handler.base_url}")
     tr.add("ExamHandler_API_URL", True, f"url={exam_handler.base_url}")
@@ -504,7 +504,7 @@ def test_backend_api_integration(tr: TestResult):
     # 10.1 通过Agent Handler调用后端API
     print(yellow("\n  [Agent Handler -> Backend API 集成测试]"))
 
-    from hermes_skills.chemistry_exam.handler import ExamHandler
+    from chem_skills.chemistry_exam.handler import ExamHandler
 
     handler = ExamHandler(base_url=BASE_URL)  # 指定ChemAI后端地址
 
@@ -576,7 +576,7 @@ def test_backend_api_integration(tr: TestResult):
 def test_mineru_client_mock(tr: TestResult):
     print(blue("\n=== 11. MinerU 客户端测试 ==="))
 
-    from hermes_skills.chemistry_parser.mineru_client import MinerUClient, MinerUNotFoundError, find_mineru_root
+    from chem_skills.chemistry_parser.mineru_client import MinerUClient, MinerUNotFoundError, find_mineru_root
 
     # 11.1 测试MinerU路径查找
     print(yellow("\n  [MinerU 安装检查]"))
@@ -587,7 +587,7 @@ def test_mineru_client_mock(tr: TestResult):
     else:
         print(f"    {yellow('WARN')} MinerU 未找到（未安装或路径不对）")
         print(f"    预期路径包括:")
-        from hermes_skills.chemistry_parser.mineru_client import DEFAULT_MINERU_PATHS
+        from chem_skills.chemistry_parser.mineru_client import DEFAULT_MINERU_PATHS
         for p in DEFAULT_MINERU_PATHS:
             exists = "存在" if os.path.exists(p) else "不存在"
             print(f"      - {p} ({exists})")
@@ -623,7 +623,7 @@ def test_tools_registration(tr: TestResult):
     for module_name, functions in modules_to_check:
         print(yellow(f"\n  [{module_name}]"))
         try:
-            module = __import__(f"hermes_skills.{module_name}.handler", fromlist=functions)
+            module = __import__(f"chem_skills.{module_name}.handler", fromlist=functions)
             for func_name in functions:
                 if hasattr(module, func_name):
                     print(f"    {green('PASS')} {func_name}")

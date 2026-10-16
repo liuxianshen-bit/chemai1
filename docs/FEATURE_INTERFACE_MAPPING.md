@@ -4,7 +4,7 @@
 
 ChemAI 是一个高中化学 AI 辅助教学系统，支持：
 - **Web 前端**：教师端、学生端、家长端
-- **Hermes Agent 集成**：通过 MCP 协议连接外部 Agent（Telegram/Discord）
+- **ChemAI Agent 集成**：通过 MCP 协议连接外部 Agent（Telegram/Discord）
 - **核心能力**：OCR识别、智能出题、障碍诊断、错题强化、间隔复习、学情预警
 
 ---
@@ -148,24 +148,24 @@ ChemAI 是一个高中化学 AI 辅助教学系统，支持：
 
 ### 4.4 Chat 对话界面（核心缺失）
 
-**现状**：MCP 工具设计给 Hermes Agent 用，但 Web 前端没有 chat 界面
+**现状**：MCP 工具设计给 ChemAI Agent 用，但 Web 前端没有 chat 界面
 **问题**：用户如何在 Web 端使用这些智能功能？
 
 **两个解决方案**：
 
-**方案A：接入 Hermes Agent（推荐）**
+**方案A：接入 ChemAI Agent（推荐）**
 ```
-Web前端 → Hermes Agent (localhost:8642) → MCP → ChemAI后端
+Web前端 → ChemAI Agent (localhost:8642) → MCP → ChemAI后端
 ```
 - 前端已有 `hermes.js` 服务
 - 只需增加一个 Chat 界面
-- Hermes Agent 连接 Telegram/Discord 实现消息推送
+- ChemAI Agent 连接 Telegram/Discord 实现消息推送
 
 **方案B：前端直连 MCP**
 ```
 Web前端 → /api/mcp/call → ChemAI后端
 ```
-- 不需要 Hermes Agent
+- 不需要 ChemAI Agent
 - 但失去 Agent 的智能调度能力
 
 ---
@@ -271,8 +271,8 @@ Web前端 → /api/mcp/call → ChemAI后端
 - ✅ 教师端核心功能页面
 - ✅ 学生端核心功能页面
 - ✅ 家长端核心功能页面
-- ✅ MCP Server (Hermes Agent 集成)
-- ✅ Hermes Skill 封装
+- ✅ MCP Server (ChemAI Agent 集成)
+- ✅ Chem Skill 封装
 
 ### 需新增/优化
 1. **学生端 - 复习中心独立页面**（复习任务入口）

@@ -1,4 +1,4 @@
-# ChemAI Hermes Agent 集成修复计划 v2
+# ChemAI ChemAI Agent 集成修复计划 v2
 
 > 创建日期：2026-04-16
 > 基于：技术验证报告 v1
@@ -13,7 +13,7 @@
 
 | # | 问题 | 严重程度 | 根因 |
 |---|------|----------|------|
-| **P1** | hermes_skills 未注册到 Hermes Agent | 🔴 严重 | Skills 未调用 registry.register() |
+| **P1** | chem_skills 未注册到 ChemAI Agent | 🔴 严重 | Skills 未调用 registry.register() |
 | **P2** | SSE 事件格式完全不兼容 | 🔴 严重 | 前端期望 vs 后端发送的协议不匹配 |
 | **P3** | 缺少 chemistry toolset 定义 | 🟡 中等 | toolsets.py 未包含化学 Tools |
 | **P4** | chemistry_tools.py 未创建 | 🟡 中等 | 包装层缺失 |
@@ -30,7 +30,7 @@
 { needs_confirmation: true, confirm_type: 'xxx' }
 ```
 
-**Hermes Agent `api_server.py` 实际发送的格式**：
+**ChemAI Agent `api_server.py` 实际发送的格式**：
 ```python
 # OpenAI 兼容的 SSE 格式
 {"id": "chatcmpl-xxx", "object": "chat.completion.chunk",
@@ -54,16 +54,16 @@
 │                         hermes.js (事件协议适配层)                           │
 │                                                                             │
 │  原设计: HermesEventType.{THINKING, TOOL_CALL, ...}                        │
-│  新需求: 适配 Hermes Agent 的 OpenAI SSE 格式                               │
+│  新需求: 适配 ChemAI Agent 的 OpenAI SSE 格式                               │
 └────────────────────────────────┬────────────────────────────────────────────┘
                                  │ OpenAI SSE 格式
               ┌──────────────────┴──────────────────┐
-              │ 8642 (Hermes Agent)               │ 8001 (FastAPI)
+              │ 8642 (ChemAI Agent)               │ 8001 (FastAPI)
               ▼                                   ▼
 ┌─────────────────────────┐       ┌───────────────────────────────────────┐
 │  hermes-agent-main      │       │        chemai-backend                  │
 │                         │       │                                        │
-│  新增: chemistry_tools  │       │  hermes_skills/                        │
+│  新增: chemistry_tools  │       │  chem_skills/                        │
 │  - parse_pdf_questions  │       │    - chemistry_parser                  │
 │  - exam_generate        │       │    - chemistry_exam                    │
 │  - exam_audit           │       │    - chemistry_diagnosis               │
@@ -77,12 +77,12 @@
 
 ### 2.2 核心决策
 
-**决策 1：修改前端 `hermes.js` 以适配 Hermes Agent 的 OpenAI SSE 格式**
+**决策 1：修改前端 `hermes.js` 以适配 ChemAI Agent 的 OpenAI SSE 格式**
 
 原因：
-- Hermes Agent 是第三方框架，修改其核心代码会导致升级困难
-- 前端适配成本更低，且不影响其他项目使用 Hermes Agent
-- Hermes Agent 的 `/v1/chat/completions` 是标准 OpenAI 格式，无法改变
+- ChemAI Agent 是第三方框架，修改其核心代码会导致升级困难
+- 前端适配成本更低，且不影响其他项目使用 ChemAI Agent
+- ChemAI Agent 的 `/v1/chat/completions` 是标准 OpenAI 格式，无法改变
 
 **决策 2：使用 `/v1/chat/completions` 而非 `/v1/runs`**
 
@@ -95,7 +95,7 @@
 
 ## 三、详细实施步骤
 
-### Phase 1: 创建 Hermes Agent 化学工具模块 [预计 2-3 天]
+### Phase 1: 创建 ChemAI Agent 化学工具模块 [预计 2-3 天]
 
 #### Step 1.1: 创建 `tools/chemistry_tools.py`
 
@@ -105,8 +105,8 @@
 
 ```python
 """
-Chemistry Tools for Hermes Agent
-包装 hermes_skills 为 Hermes 标准 Tools
+Chemistry Tools for ChemAI Agent
+包装 chem_skills 为 Hermes 标准 Tools
 """
 
 import sys
@@ -114,7 +114,7 @@ import json
 from typing import Dict, Any, List, Optional
 
 # ============================================================================
-# 路径配置 - 确保能导入 hermes_skills
+# 路径配置 - 确保能导入 chem_skills
 # ============================================================================
 
 CHEMAI_BACKEND_PATH = r"D:\化学\chemai-backend"
@@ -126,9 +126,9 @@ from tools.registry import tool_error, tool_result
 
 # 导入 Skills Handlers
 try:
-    from hermes_skills.chemistry_parser.handler import ParserHandler
-    from hermes_skills.chemistry_exam.handler import ExamHandler
-    from hermes_skills.chemistry_diagnosis.handler import DiagnosisHandler
+    from chem_skills.chemistry_parser.handler import ParserHandler
+    from chem_skills.chemistry_exam.handler import ExamHandler
+    from chem_skills.chemistry_diagnosis.handler import DiagnosisHandler
     SKILLS_AVAILABLE = True
 except ImportError as e:
     SKILLS_AVAILABLE = False
@@ -556,9 +556,9 @@ _modules = [
 
 ### Phase 3: 重构前端 hermes.js - 适配 OpenAI SSE 格式 [预计 2-3 天]
 
-#### Step 3.1: 理解 Hermes Agent 的 SSE 事件流
+#### Step 3.1: 理解 ChemAI Agent 的 SSE 事件流
 
-Hermes Agent `/v1/chat/completions` 的 SSE 事件流：
+ChemAI Agent `/v1/chat/completions` 的 SSE 事件流：
 
 ```
 1. 角色声明
@@ -600,14 +600,14 @@ async _processSSEvent(data, onEvent) {
 }
 ```
 
-**问题**：Hermes Agent 发送的是 OpenAI 格式，不是这种结构化格式。
+**问题**：ChemAI Agent 发送的是 OpenAI 格式，不是这种结构化格式。
 
 #### Step 3.3: 新实现 - 适配 OpenAI SSE
 
 ```javascript
 /**
  * 处理 OpenAI SSE 格式事件
- * Hermes Agent api_server.py 发送的标准 OpenAI 格式
+ * ChemAI Agent api_server.py 发送的标准 OpenAI 格式
  */
 async _processSSEvent(data, onEvent) {
     // 跳过空数据
@@ -669,7 +669,7 @@ async _processSSEvent(data, onEvent) {
 
 /**
  * 处理 hermes.tool.progress 格式事件
- * 这是 Hermes Agent 自定义的事件格式
+ * 这是 ChemAI Agent 自定义的事件格式
  */
 async _processToolProgress(data) {
     // hermes.tool.progress 事件格式:
@@ -875,7 +875,7 @@ cd D:\化学\chemai-backend
 python -m app.main
 # 预期输出: Uvicorn running on http://0.0.0.0:8001
 
-# 终端2: 启动 Hermes Agent API Server
+# 终端2: 启动 ChemAI Agent API Server
 cd D:\化学\hermes-agent-main
 python -m gateway.run --platform api_server
 # 预期输出: API server listening on http://127.0.0.1:8642
@@ -908,7 +908,7 @@ curl -X POST http://localhost:8642/v1/chat/completions \
 
 1. 启动前端开发服务器
 2. 测试完整工作流：
-   - 教师上传 PDF → Hermes Agent 解析 → 题目入库
+   - 教师上传 PDF → ChemAI Agent 解析 → 题目入库
    - AI 出题 → 题目生成 → 教师审核
    - 学情诊断 → 障碍分析 → 学习计划
 
@@ -918,7 +918,7 @@ curl -X POST http://localhost:8642/v1/chat/completions \
 
 | 问题编号 | 问题描述 | 解决方案 | 涉及文件 |
 |----------|----------|----------|----------|
-| P1 | hermes_skills 未注册到 Agent | 创建 chemistry_tools.py，调用 registry.register() | 新建: tools/chemistry_tools.py |
+| P1 | chem_skills 未注册到 Agent | 创建 chemistry_tools.py，调用 registry.register() | 新建: tools/chemistry_tools.py |
 | P2 | SSE 事件格式完全不兼容 | 重构 hermes.js 的 _processSSEvent() 和 processStream() | 修改: hermes.js |
 | P3 | 缺少 chemistry toolset 定义 | 在 toolsets.py 中添加 "chemistry" toolset | 修改: toolsets.py |
 | P4 | chemistry_tools.py 未创建 | 实现完整的 chemistry_tools.py | 新建: tools/chemistry_tools.py |
@@ -931,9 +931,9 @@ curl -X POST http://localhost:8642/v1/chat/completions \
 | 风险 | 影响 | 缓解措施 |
 |------|------|----------|
 | LLM 不按预期调用 Tool | 高 | 在 prompt 中提供明确的 Tool 调用示例 |
-| hermes_skills 导入失败 | 中 | 添加 SKILLS_AVAILABLE 检查，返回友好错误 |
+| chem_skills 导入失败 | 中 | 添加 SKILLS_AVAILABLE 检查，返回友好错误 |
 | OpenAI SSE 格式理解偏差 | 中 | 多次测试验证实际收到的格式 |
-| 升级 Hermes Agent 导致兼容性问题 | 低 | chemistry_tools.py 隔离，不修改 Agent 核心 |
+| 升级 ChemAI Agent 导致兼容性问题 | 低 | chemistry_tools.py 隔离，不修改 Agent 核心 |
 
 ---
 
@@ -953,7 +953,7 @@ curl -X POST http://localhost:8642/v1/chat/completions \
 
 ### 6.3 端到端工作流验收
 
-- [ ] 教师上传 PDF → Hermes Agent 解析 → 题目入库
+- [ ] 教师上传 PDF → ChemAI Agent 解析 → 题目入库
 - [ ] AI 出题 → 题目生成 → 成功返回
 - [ ] 学情诊断 → 障碍分析 → 学习计划生成
 
@@ -1006,7 +1006,7 @@ Week 2:
 | model_tools.py | 修改 | `D:\化学\hermes-agent-main\model_tools.py` |
 | hermes.js | 修改 | `D:\化学\chemai-backend\frontend\src\services\hermes.js` |
 
-### B. Hermes Agent SSE 事件格式参考
+### B. ChemAI Agent SSE 事件格式参考
 
 **OpenAI 格式 (chat.completion.chunk)**：
 ```json

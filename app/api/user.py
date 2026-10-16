@@ -61,6 +61,25 @@ async def get_students(
 
     students = query.all()
 
+    # Collect class names + accuracy data in batch
+    class_ids = set(s.class_id for s in students if s.class_id)
+    class_names = {}
+    if class_ids:
+        from app.models.database import Class
+        for c in db.query(Class).filter(Class.class_id.in_(class_ids)).all():
+            class_names[c.class_id] = c.name
+
+    # Batch accuracy per student
+    accuracy_map = {}
+    from sqlalchemy import text
+    acc_rows = db.execute(text(
+        "SELECT student_id, CAST(SUM(CASE WHEN is_correct THEN 1 ELSE 0 END) AS FLOAT)/MAX(1,COUNT(*)) as acc "
+        "FROM student_answers GROUP BY student_id"
+    )).fetchall()
+    for row in acc_rows:
+        if row[1] is not None:
+            accuracy_map[row[0]] = round(row[1], 2)
+
     return {
         "success": True,
         "total": len(students),
@@ -69,15 +88,55 @@ async def get_students(
                 "student_id": s.student_id,
                 "name": s.name,
                 "class_id": s.class_id,
+                "class_name": class_names.get(s.class_id, ""),
                 "phone": s.phone,
                 "status": s.status,
                 "barrier_type": s.barrier_type,
                 "exercises_completed": s.exercises_completed,
+                "last_exercise_at": s.last_exercise_at.isoformat() if s.last_exercise_at else None,
+                "accuracy": accuracy_map.get(s.student_id),
                 "created_at": s.created_at.isoformat() if s.created_at else None
             }
             for s in students
         ]
     }
+
+
+@router.get("/student/{student_id}/detail")
+async def get_student_detail(student_id: str, db: Session = Depends(get_db)):
+    """获取学生详情: 薄弱知识点 + 最近活动"""
+    import json
+    from sqlalchemy import text
+    from collections import Counter
+    s = db.query(Student).filter(Student.student_id == student_id).first()
+    if not s: raise HTTPException(status_code=404, detail="学生不存在")
+    wkp, activity = [], []
+    rows = db.execute(text(
+        "SELECT q.knowledge_points FROM student_answers sa JOIN questions q ON sa.question_id=q.question_id "
+        "WHERE sa.student_id=:s AND sa.is_correct=0 ORDER BY sa.answered_at DESC LIMIT 30"
+    ), {"s": student_id}).fetchall()
+    kp_count = Counter()
+    for (kj,) in rows:
+        for k in (json.loads(kj) if isinstance(kj, str) else (kj or [])):
+            kp_count[k] += 1
+    wkp = [k for k, _ in kp_count.most_common(5)]
+    act_rows = db.execute(text(
+        "SELECT q.knowledge_points, q.difficulty, sa.is_correct, sa.answered_at FROM student_answers sa "
+        "JOIN questions q ON sa.question_id=q.question_id WHERE sa.student_id=:s "
+        "ORDER BY sa.answered_at DESC LIMIT 10"
+    ), {"s": student_id}).fetchall()
+    for row in act_rows:
+        d = row[3]
+        if isinstance(d, str): date_str = d[:10] if len(d) > 10 else (d[:5] if '-' in d else '')
+        elif hasattr(d, 'strftime'): date_str = d.strftime("%m-%d")
+        else: date_str = str(d)[:10]
+        kps = json.loads(row[0]) if isinstance(row[0], str) else (row[0] or [])
+        kp_name = kps[0] if kps else "化学"
+        diff_label = {"EASY":"基础","MEDIUM":"进阶","HARD":"拔高"}.get(row[1],"")
+        status = "✓" if row[2] else "✗"
+        desc = f"{status} {kp_name}{diff_label+'·' if diff_label else ''}练习"
+        activity.append({"date": date_str, "desc": desc, "is_correct": row[2]})
+    return {"success": True, "weak_knowledge_points": wkp, "recent_activity": activity}
 
 
 @router.get("/teachers")

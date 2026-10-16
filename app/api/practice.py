@@ -249,10 +249,14 @@ async def get_student_practice_tasks(student_id: str, db: Session = Depends(get_
         if not student:
             raise HTTPException(status_code=404, detail=f"学生 {student_id} 不存在")
 
-        # 查询该学生的练习记录
+        # 查询学生的练习记录(PRACTICE) + 已发布考试(EXAM)
+        from sqlalchemy import or_
         practices = db.query(ExamRecord).filter(
             ExamRecord.class_id == student.class_id,
-            ExamRecord.type == RecordType.PRACTICE
+            or_(
+                ExamRecord.type == RecordType.PRACTICE,
+                ExamRecord.type == RecordType.EXAM
+            )
         ).all()
 
         tasks = []
@@ -266,18 +270,41 @@ async def get_student_practice_tasks(student_id: str, db: Session = Depends(get_
                 except:
                     stats = None
 
-            if stats and "knowledge_points" in stats:
-                tasks.append(PracticeTask(
-                    practice_id=p.record_id,
-                    student_id=student_id,
-                    student_name=student.name,
-                    knowledge_points=stats.get("knowledge_points", []) if isinstance(stats, dict) else [],
-                    target_barrier="concept",
-                    question_count=len(stats.get("question_stats", [])) if isinstance(stats, dict) else 0,
-                    difficulty="medium",
-                    deadline=p.exam_date.strftime("%Y-%m-%d %H:%M") if p.exam_date else "",
-                    status="pending"
-                ))
+            # EXAM 需要 published=true, PRACTICE 不需要
+            if p.type == RecordType.EXAM:
+                if not stats or not stats.get("published"):
+                    continue
+
+            # 统计题目数量：优先查 Question 表，回退到 stats 中的 metadata
+            question_count = db.query(Question).filter(
+                Question.record_id == p.record_id
+            ).count()
+            if question_count == 0 and isinstance(stats, dict):
+                question_count = stats.get("question_count", 0)
+
+            # PRACTICE 从 question_stats 获取 kp，EXAM 可能没有 kp
+            if isinstance(stats, dict) and "knowledge_points" in stats:
+                knowledge_points = stats.get("knowledge_points", [])
+            else:
+                knowledge_points = []
+
+            # 检查学生是否已提交过
+            submitted = db.query(StudentAnswer).filter(
+                StudentAnswer.exam_record_id == p.record_id,
+                StudentAnswer.student_id == student_id
+            ).count()
+
+            tasks.append(PracticeTask(
+                practice_id=p.record_id,
+                student_id=student_id,
+                student_name=student.name,
+                knowledge_points=knowledge_points,
+                target_barrier="concept",
+                question_count=question_count,
+                difficulty="medium",
+                deadline=p.exam_date.strftime("%Y-%m-%d %H:%M") if p.exam_date else "",
+                status="completed" if submitted > 0 else "pending"
+            ))
 
         return {
             "student_id": student_id,
@@ -386,7 +413,25 @@ async def submit_practice(request: PracticeSubmitRequest, db: Session = Depends(
 
         db.commit()
 
-        # 异步更新 barrier_type（基于最近答题正确率）
+        # Trigger LLM barrier diagnosis in background for this exam
+        import threading, asyncio as _asyncio
+        def _run_diagnosis_bg():
+            try:
+                from app.models.database import get_db as _get_db
+                _bg_db = next(_get_db())
+                from app.api.diagnosis import run_llm_barrier_diagnosis
+                loop = _asyncio.new_event_loop()
+                _asyncio.set_event_loop(loop)
+                loop.run_until_complete(
+                    run_llm_barrier_diagnosis(exam_record_id=request.practice_id, db=_bg_db)
+                )
+                _bg_db.close()
+                loop.close()
+            except Exception as _e:
+                print(f"[Practice] Background diagnosis failed: {_e}", flush=True)
+        threading.Thread(target=_run_diagnosis_bg, daemon=True).start()
+
+        # 更新 barrier_type（基于最近答题正确率）
         try:
             all_recent = db.query(StudentAnswer).filter(
                 StudentAnswer.student_id == request.student_id,
@@ -413,6 +458,19 @@ async def submit_practice(request: PracticeSubmitRequest, db: Session = Depends(
 
         accuracy = correct_count / total_count if total_count > 0 else 0
 
+        # Check if this exam is fully completed by the class
+        exam_completed = False
+        try:
+            exam = db.query(ExamRecord).filter(ExamRecord.record_id == request.practice_id).first()
+            if exam:
+                students = db.query(Student).filter(Student.class_id == exam.class_id).count()
+                submitted = db.query(StudentAnswer.exam_record_id, StudentAnswer.student_id).filter(
+                    StudentAnswer.exam_record_id == request.practice_id
+                ).distinct().count()
+                exam_completed = submitted >= students
+        except Exception:
+            pass
+
         return PracticeResult(
             practice_id=request.practice_id,
             student_id=request.student_id,
@@ -425,19 +483,7 @@ async def submit_practice(request: PracticeSubmitRequest, db: Session = Depends(
     except HTTPException:
         raise
     except Exception as e:
-        # 数据库未初始化时返回Mock结果
-        correct_count = len(request.answers) // 2
-        total_count = len(request.answers)
-        accuracy = correct_count / total_count if total_count > 0 else 0
-        return PracticeResult(
-            practice_id=request.practice_id,
-            student_id=request.student_id,
-            correct_count=correct_count,
-            total_count=total_count,
-            accuracy=round(accuracy, 2),
-            difficulty_appropriate=True,
-            barrier_change={"concept": 0.3, "reading": 0.4, "expression": 0.3}
-        )
+        raise HTTPException(status_code=500, detail=f"提交失败: {str(e)}")
 
 
 @router.get("/effect/{student_id}")
@@ -617,176 +663,4 @@ async def get_practice_history(
     }
 
 
-@router.get("/wrong/list")
-async def get_wrong_questions_list(
-    student_id: Optional[str] = None,
-    limit: int = 50,
-    knowledge_point: Optional[str] = None,
-    db: Session = Depends(get_db)
-):
-    """获取错题列表（全局，不限定考试）"""
-    query = db.query(StudentAnswer).filter(StudentAnswer.is_correct == False)
-
-    if student_id:
-        query = query.filter(StudentAnswer.student_id == student_id)
-    if knowledge_point:
-        # 通过Question表过滤知识点
-        kp_questions = db.query(Question.question_id).filter(
-            Question.knowledge_points.contains(knowledge_point)
-        ).all()
-        kp_ids = [q[0] for q in kp_questions]
-        if kp_ids:
-            query = query.filter(StudentAnswer.question_id.in_(kp_ids))
-
-    wrong_answers = query.order_by(StudentAnswer.answered_at.desc()).limit(limit).all()
-
-    # 去重（同一道题可能错多次）
-    seen_questions = set()
-    unique_wrong = []
-    for wa in wrong_answers:
-        if wa.question_id not in seen_questions:
-            seen_questions.add(wa.question_id)
-            q = db.query(Question).filter(Question.question_id == wa.question_id).first()
-            unique_wrong.append({
-                "question_id": wa.question_id,
-                "content": q.content if q else "",
-                "options": q.options if q else None,
-                "answer": q.answer if q else "",
-                "analysis": q.analysis if q else "",
-                "knowledge_points": q.knowledge_points if q else [],
-                "difficulty": q.difficulty.value if q and hasattr(q.difficulty, 'value') else (q.difficulty if q else ""),
-                "your_answer": wa.student_answer,
-                "wrong_count": sum(1 for w in wrong_answers if w.question_id == wa.question_id),
-                "last_error_at": wa.answered_at.strftime("%Y-%m-%d") if wa.answered_at else None
-            })
-
-    return {
-        "success": True,
-        "count": len(unique_wrong),
-        "wrong_questions": unique_wrong
-    }
-
-
-@router.post("/wrong/{question_id}/master")
-async def mark_wrong_question_mastered(
-    question_id: str,
-    student_id: Optional[str] = None,
-    db: Session = Depends(get_db)
-):
-    """标记错题已掌握"""
-    question = db.query(Question).filter(Question.question_id == question_id).first()
-    if not question:
-        raise HTTPException(status_code=404, detail=f"题目 {question_id} 不存在")
-
-    # 记录到ReviewTask掌握状态
-    from app.models.review_task import ReviewTask
-    if student_id:
-        existing = db.query(ReviewTask).filter(
-            ReviewTask.student_id == student_id,
-            ReviewTask.question_id == question_id
-        ).first()
-        if existing:
-            existing.status = "done"
-            existing.completed_at = datetime.utcnow()
-        else:
-            review_task = ReviewTask(
-                task_id=f"review_{student_id}_{question_id}",
-                student_id=student_id,
-                question_id=question_id,
-                review_level=5,
-                status="done",
-                completed_at=datetime.utcnow()
-            )
-            db.add(review_task)
-        db.commit()
-
-    return {
-        "success": True,
-        "message": "题目已标记为已掌握",
-        "question_id": question_id
-    }
-
-
-@router.get("/review/list")
-async def get_review_question_list(
-    student_id: Optional[str] = None,
-    limit: int = 20,
-    db: Session = Depends(get_db)
-):
-    """获取待复习题目列表"""
-    from app.models.review_task import ReviewTask
-
-    query = db.query(ReviewTask).filter(ReviewTask.status == "pending")
-
-    if student_id:
-        query = query.filter(ReviewTask.student_id == student_id)
-
-    tasks = query.order_by(ReviewTask.next_review_at.asc()).limit(limit).all()
-
-    review_list = []
-    for t in tasks:
-        q = db.query(Question).filter(Question.question_id == t.question_id).first()
-        student = db.query(Student).filter(Student.student_id == t.student_id).first()
-        review_list.append({
-            "task_id": t.task_id,
-            "student_id": t.student_id,
-            "student_name": student.name if student else "",
-            "question_id": t.question_id,
-            "question_content": q.content if q else "",
-            "knowledge_points": q.knowledge_points if q else [],
-            "review_level": t.review_level,
-            "next_review_at": t.next_review_at.strftime("%Y-%m-%d") if t.next_review_at else None,
-            "consecutive_correct": t.consecutive_correct,
-            "consecutive_errors": t.consecutive_errors
-        })
-
-    return {
-        "success": True,
-        "count": len(review_list),
-        "review_list": review_list
-    }
-
-
-@router.get("/historical")
-async def get_practice_historical_questions(
-    source: Optional[str] = None,
-    year: Optional[int] = None,
-    knowledge_point: Optional[str] = None,
-    difficulty: Optional[str] = None,
-    keyword: Optional[str] = None,
-    limit: int = 20
-):
-    """获取历史真题（练习场景）
-    委托给 exam_bank_service 查询历年真题
-    """
-    from app.services.exam_bank import exam_bank_service
-
-    questions = exam_bank_service.search_questions(
-        source=source,
-        year=str(year) if year else None,
-        knowledge_point=knowledge_point,
-        difficulty=difficulty,
-        keyword=keyword
-    )
-
-    # 按limit限制返回
-    result = questions[:limit]
-
-    return {
-        "success": True,
-        "count": len(result),
-        "questions": [
-            {
-                "exam_id": q.exam_id,
-                "source": q.source,
-                "year": q.year,
-                "question_number": q.question_number,
-                "content": q.content,
-                "answer": q.answer,
-                "analysis": q.analysis,
-                "knowledge_points": q.knowledge_points,
-                "difficulty": q.difficulty
-            }
-            for q in result
-        ]
-    }
+# ── wrong/list, wrong/master, review/list, historical 已迁至 practice_wrong.py ──

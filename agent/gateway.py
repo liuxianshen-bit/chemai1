@@ -96,6 +96,11 @@ _ALL_TOOL_DESCRIPTIONS = {
     "show_diagnosis": "在聊天中展示诊断结果图表",
     "list_banks": "列出所有题库文件夹",
     "delete_bank": "删除题库文件夹",
+    "generate_learning_plan": "生成学生个性化学习计划",
+    "send_learning_plan": "发送学习计划给学生",
+    "generate_parent_report": "生成发给家长的学习报告",
+    "send_report_to_parent": "推送学习报告给家长",
+    "memory_student_get": "获取学生长期学情记忆",
 }
 
 
@@ -192,7 +197,17 @@ class IntentClassifier:
                 temperature=0.1,
                 max_tokens=512,
             )
-            return self._parse(result.content)
+            llm_result = self._parse(result.content)
+            # 合并关键词建议 — LLM 可能漏掉关键工具
+            kw_result = self._keyword_fallback(user_input)
+            if kw_result.tools and llm_result.tools:
+                merged = list(set(llm_result.tools + kw_result.tools))
+            elif kw_result.tools:
+                merged = kw_result.tools
+            else:
+                merged = llm_result.tools
+            llm_result.tools = merged
+            return llm_result
         except Exception:
             logger.warning("IntentClassifier: LLM call failed", exc_info=True)
             return self._keyword_fallback(user_input)
@@ -273,6 +288,10 @@ class IntentClassifier:
             tools.append("show_exam_workbench")
         if any(kw in text for kw in ["自适应", "布置练习", "针对性练习"]):
             tools.append("assign_adaptive_practice")
+        if any(kw in text for kw in ["学习计划", "学习方案", "学习规划", "制定计划"]):
+            tools.append("generate_learning_plan")
+        if any(kw in text for kw in ["发给家长", "家长报告", "学习报告发给家长"]):
+            tools.append("generate_parent_report")
         if any(kw in text for kw in ["什么是", "什么意思", "怎么做", "原理", "为什么", "怎么理解",
                                       "讲解", "解释一下", "帮我讲", "怎么算"]):
             tools.append("chemistry_tutor")

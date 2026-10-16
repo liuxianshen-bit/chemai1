@@ -1,8 +1,8 @@
-# ChemAI × Hermes Agent 集成方案
+# ChemAI × ChemAI Agent 集成方案
 
 ## 一、集成背景
 
-### Hermes Agent 核心能力
+### ChemAI Agent 核心能力
 
 | 能力 | 说明 |
 |------|------|
@@ -32,15 +32,15 @@
 
 ### 方案A: MCP协议集成（推荐）
 
-**原理**: ChemAI作为MCP Server，Hermes Agent通过MCP协议调用ChemAI功能
+**原理**: ChemAI作为MCP Server，ChemAI Agent通过MCP协议调用ChemAI功能
 
 ```
-Hermes Agent ←→ MCP Protocol ←→ ChemAI MCP Server
+ChemAI Agent ←→ MCP Protocol ←→ ChemAI MCP Server
 ```
 
 **优势**:
 - 标准化协议，开箱即用
-- 无需修改Hermes Agent源码
+- 无需修改ChemAI Agent源码
 - 解耦设计，各自独立演进
 
 **MCP Server能力**:
@@ -65,10 +65,10 @@ Hermes Agent ←→ MCP Protocol ←→ ChemAI MCP Server
 
 ### 方案B: 直接API集成
 
-**原理**: Hermes Agent通过HTTP调用ChemAI REST API
+**原理**: ChemAI Agent通过HTTP调用ChemAI REST API
 
 ```
-Hermes Agent → REST API → ChemAI Backend
+ChemAI Agent → REST API → ChemAI Backend
 ```
 
 **优势**:
@@ -88,10 +88,10 @@ hermes config set chemai.api_key xxx
 
 ### 方案C: Skill技能封装
 
-**原理**: 为ChemAI功能创建Hermes Skill技能包
+**原理**: 为ChemAI功能创建Chem Skill技能包
 
 ```
-Hermes Agent → Skill → ChemAI
+ChemAI Agent → Skill → ChemAI
 ```
 
 **示例Skill**: `chemai-tutor.skill.md`
@@ -126,10 +126,10 @@ Hermes Agent → Skill → ChemAI
 
 ### 场景1: 智能助教对话
 
-**描述**: 学生通过Telegram/Discord向Hermes Agent提问化学问题
+**描述**: 学生通过Telegram/Discord向ChemAI Agent提问化学问题
 
 ```
-学生(Telegram) → Hermes Agent → ChemAI(OCR/诊断/出题) → 回复学生
+学生(Telegram) → ChemAI Agent → ChemAI(OCR/诊断/出题) → 回复学生
 ```
 
 **功能点**:
@@ -147,7 +147,7 @@ Hermes Agent → Skill → ChemAI
 
 ### 场景2: 自动学情监控
 
-**描述**: Hermes Agent定时检查学生学情，异常时通知
+**描述**: ChemAI Agent定时检查学生学情，异常时通知
 
 ```
 Hermes Cron(每日8:00) → ChemAI预警检测 → 通知教师/家长
@@ -169,7 +169,7 @@ hermes cron add "每天8点检查学生学情" \
 
 ### 场景3: 家长周报推送
 
-**描述**: 每周五Hermes Agent汇总学生周报推送给家长
+**描述**: 每周五ChemAI Agent汇总学生周报推送给家长
 
 ```
 Hermes Cron(周五18:00) → ChemAI获取周报 → 推送家长
@@ -191,7 +191,7 @@ hermes cron add "每周五18点推送家长周报" \
 
 ### 场景4: 自适应复习调度
 
-**描述**: Hermes Agent管理复习任务，适时提醒学生
+**描述**: ChemAI Agent管理复习任务，适时提醒学生
 
 ```
 Hermes Cron → ChemAI获取到期复习 → 提醒学生 → 收集结果 → 更新复习计划
@@ -257,7 +257,7 @@ app/mcp/
 
 ---
 
-### Phase 2: Hermes Skill封装 (2天)
+### Phase 2: Chem Skill封装 (2天)
 
 **目标**: 创建ChemAI Tutor技能包
 

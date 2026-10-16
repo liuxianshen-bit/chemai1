@@ -27,6 +27,7 @@ from agent.memory import MemoryStack
 
 
 _agent_cache: dict[str, object] = {}
+_guard_state_cache: dict[str, object] = {}  # 按 conversation_id 缓存 guard_state, resume 时复用
 
 
 async def _get_or_create_agent(persona: str = "tutor", provider: str = "deepseek",
@@ -118,6 +119,10 @@ async def agent_chat_langgraph_stream(request: ChatRequest):
         version=request.version, store=store,
     )
 
+    # Cache guard_state for resume — 避免 resume 时创建全新 GuardState 丢失 approved 状态
+    if cid and guard_state:
+        _guard_state_cache[cid] = guard_state
+
     adapter = AdapterClass()
     full_reply = []
     config = {"configurable": {"thread_id": cid or "default"}, "recursion_limit": 12}
@@ -153,8 +158,11 @@ async def agent_chat_langgraph_stream(request: ChatRequest):
                 return
 
             # Finalize: use guard_state for v2, graph state for v1
-            final_state = await agent.aget_state(config)
-            state_values = final_state.values if final_state else {}
+            try:
+                final_state = await agent.aget_state(config)
+                state_values = final_state.values if final_state else {}
+            except Exception:
+                state_values = {}
             gs = guard_state
             result_text = state_values.get("last_result_text")
             # Fallback: use collected streaming text if state has no result_text (v2)
@@ -172,8 +180,10 @@ async def agent_chat_langgraph_stream(request: ChatRequest):
 
         except Exception as e:
             import traceback; traceback.print_exc()
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
-            yield f"data: {json.dumps({'type': 'done'}, ensure_ascii=False)}\n\n"
+            err_msg = str(e)
+            if 'recursion' in err_msg.lower():
+                err_msg = '处理超时，Agent 重试次数用尽。请重试或换个方式提问。'
+            yield f"data: {json.dumps({'type': 'error', 'message': err_msg, 'recoverable': True}, ensure_ascii=False)}\n\n"
             yield "data: [DONE]\n\n"
 
     return StreamingResponse(
@@ -287,8 +297,14 @@ async def agent_chat_langgraph_resume(request: ChatRequest):
     user_response = request.message or ""
 
     store3 = await _get_app_store()
+    # 复用缓存的 guard_state, 避免 approved 状态丢失
+    cached_guard = _guard_state_cache.get(cid)
     agent, guard_state, AdapterClass = await _get_or_create_agent(
         request.persona, request.provider, version=request.version, store=store3)
+    if cached_guard:
+        guard_state = cached_guard  # 覆盖新建的, 保留原 approved/seen_calls 状态
+    elif guard_state and cid:
+        _guard_state_cache[cid] = guard_state
     adapter = AdapterClass()
     config = {"configurable": {"thread_id": cid}, "recursion_limit": 12}
 
@@ -454,3 +470,4 @@ async def agent_upload(file: UploadFile = File(...)):
             {"id": "search", "label": "搜题解析"},
         ],
     }
+# reload trigger 2026-07-05T02:27:17.669215

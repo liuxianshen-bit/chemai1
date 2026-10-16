@@ -428,6 +428,65 @@ async def export_report(
         raise HTTPException(status_code=400, detail=f"不支持的格式: {format}")
 
 
+@router.get("/exam-analytics/{exam_record_id}")
+async def get_exam_analytics(exam_record_id: str, db: Session = Depends(get_db)):
+    """考试分析：分数分布 + 完成情况 + 每题错误率."""
+    exam = db.query(ExamRecord).filter(ExamRecord.record_id == exam_record_id).first()
+    if not exam:
+        raise HTTPException(status_code=404, detail="考试不存在")
+
+    students = db.query(Student).filter(Student.class_id == exam.class_id).all()
+    total_students = len(students)
+    completed = 0
+    scores = []
+
+    for s in students:
+        answers = db.query(StudentAnswer).filter(
+            StudentAnswer.exam_record_id == exam_record_id,
+            StudentAnswer.student_id == s.student_id,
+        ).all()
+        if answers:
+            completed += 1
+            correct = sum(1 for a in answers if a.is_correct)
+            scores.append((s.name, correct, len(answers)))
+
+    avg_score = round(sum(s[1] for s in scores) / len(scores), 1) if scores else 0
+    completion_pct = round(completed / total_students * 100) if total_students else 0
+
+    # Per-question error rate
+    questions = db.query(Question).filter(Question.record_id == exam_record_id).all()
+    question_stats = []
+    for q in questions:
+        answers = db.query(StudentAnswer).filter(
+            StudentAnswer.question_id == q.question_id,
+            StudentAnswer.exam_record_id == exam_record_id,
+        ).all()
+        total_ans = len(answers)
+        correct_ans = sum(1 for a in answers if a.is_correct)
+        error_rate = round((1 - correct_ans / total_ans) * 100) if total_ans else 0
+        question_stats.append({
+            "question_id": q.question_id,
+            "content": (q.content or "")[:80],
+            "knowledge_points": q.knowledge_points or [],
+            "error_rate": error_rate,
+            "answer_count": total_ans,
+        })
+
+    question_stats.sort(key=lambda x: x["error_rate"], reverse=True)
+
+    return {
+        "success": True,
+        "exam_name": exam.name,
+        "class_name": exam.class_id,
+        "total_students": total_students,
+        "completed": completed,
+        "completion_pct": completion_pct,
+        "avg_score": avg_score,
+        "scores": [{"name": s[0], "correct": s[1], "total": s[2]} for s in scores[:30]],
+        "top_errors": question_stats[:5],
+    }
+
+
 # ============================================================
 # P5-4: 报告模块补充端点
 # ============================================================

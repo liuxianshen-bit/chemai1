@@ -69,7 +69,7 @@ class LLMService:
             if i < max_retries - 1: time.sleep(2 ** i)
         return {"success": False, "error": last or "retries exhausted"}
 
-    def generate_text(self, prompt: str, system_prompt: Optional[str] = None, temperature: float = 0.7, max_tokens: int = 2000, provider: str = "auto", enable_search: bool = False) -> Dict:
+    def generate_text(self, prompt: str, system_prompt: Optional[str] = None, temperature: float = 0.7, max_tokens: int = 2000, provider: str = "auto", enable_search: bool = False, **kw) -> Dict:
         if not self.enabled: return self._mock_generate(prompt)
         if not _check_rate_limit("llm", settings.LLM_RATE_LIMIT_PER_MINUTE):
             return {"success": False, "error": "请求过于频繁，请稍后再试"}
@@ -98,6 +98,8 @@ class LLMService:
         for name, key, url, model in order:
             if not key: continue
             p = {"model": model, "messages": messages, "temperature": temperature, "max_tokens": max_tokens}
+            if kw.get("response_format"):
+                p["response_format"] = kw["response_format"]
             # MiMo web search
             if name == "mimo" and enable_search:
                 p["enable_search"] = True
@@ -210,9 +212,101 @@ class LLMService:
             "你是教育心理学专家。分析学生障碍类型: concept(概念理解偏差)/reading(审题信息不全)/expression(无法规范表述)。", temperature=0.3)
 
     def generate_learning_plan(self, student_name: str, barrier_type: str, weak_knowledge_points: List[str], recent_performance: Optional[Dict] = None) -> Dict:
-        bd = {"concept": "概念理解型-概念理解偏差", "reading": "审题障碍型-读取信息不全", "expression": "表述障碍型-无法规范表述"}.get(barrier_type, barrier_type)
-        return self.generate_text(f"为学生{student_name}生成学习计划:\n障碍类型: {bd}\n薄弱知识点: {', '.join(weak_knowledge_points) if weak_knowledge_points else '暂无'}\n返回JSON: {{'plan_title':'标题','plan_period':'2周','daily_tasks':[...],'weekly_goals':[...],'barrier_interventions':[...],'motivation_tips':[...]}}",
-            "你是资深高中化学教师，根据学生障碍和薄弱点制定个性化学习计划。计划需具体可执行。", temperature=0.7)
+        bd = {"concept": "概念理解型-基础概念和原理掌握不扎实", "reading": "审题障碍型-读题时容易忽略关键条件或掉入陷阱选项", "expression": "表述障碍型-化学用语书写不规范或答题逻辑不清晰"}.get(barrier_type, barrier_type)
+        perf_info = ""
+        if recent_performance and isinstance(recent_performance, dict):
+            perf_info = f"\n学生近期数据: 已完成{recent_performance.get('exercises_completed', 0)}道练习。"
+        result = self.generate_text(
+            f"你是资深高中化学教师，正在为高一学生{student_name}制定个性化学习提升计划。"
+            f"学生水平: 高中化学高一阶段，知识点范围为高考大纲必修内容。{perf_info}\n"
+            f"主要障碍类型: {bd}\n薄弱知识点: {', '.join(weak_knowledge_points) if weak_knowledge_points else '暂无'}\n\n"
+            "请按以下Markdown格式输出（严格遵循标题层级，不要用代码块包裹）:\n\n"
+            "## 计划标题\n{10字以内标题}\n\n"
+            "## 周期\n{如: 2周}\n\n"
+            "## 周目标\n- {目标1}\n- {目标2}\n\n"
+            "## 每日任务\n- Day 1: {具体可执行的任务}\n- Day 2: {具体可执行的任务}\n...\n\n"
+            "## 障碍干预\n- {障碍类型}: {干预策略}\n\n"
+            "## 激励建议\n- {建议1}\n- {建议2}\n\n"
+            "要求: 1.知识点必须是高中化学内容 2.每日任务具体可执行 3.障碍干预结合化学学科特点 4.激励建议真诚不空洞",
+            "你是资深高中化学教师，在制定学习计划时始终围绕高考化学大纲和高中生的实际学习需求。",
+            temperature=0.3,
+            max_tokens=4096)
+        # Parse markdown into structured data
+        return self._parse_plan_markdown(result, student_name)
+
+    def _parse_plan_markdown(self, result: Dict, student_name: str) -> Dict:
+        """解析 LLM 返回的 Markdown 为结构化学习计划"""
+        content = result.get("content", "")
+        if not content:
+            return {"success": False, "error": "LLM returned empty content"}
+
+        import re
+        plan = {
+            "plan_title": f"{student_name} 个性化学习计划",
+            "plan_period": "1-2周",
+            "daily_tasks": [],
+            "weekly_goals": [],
+            "barrier_interventions": {},
+            "motivation_tips": [],
+        }
+
+        # Extracting sections by ## headers
+        sections = re.split(r'\n##\s+', content)
+        for sec in sections:
+            sec = sec.strip()
+            if not sec:
+                continue
+
+            # Title
+            if sec.startswith('计划标题') or sec.startswith('标题'):
+                lines = sec.split('\n', 1)
+                if len(lines) > 1 and lines[1].strip():
+                    plan["plan_title"] = lines[1].strip()[:60]
+
+            # Period
+            elif sec.startswith('周期'):
+                lines = sec.split('\n', 1)
+                if len(lines) > 1 and lines[1].strip():
+                    plan["plan_period"] = lines[1].strip()[:20]
+
+            # Weekly goals
+            elif sec.startswith('周目标'):
+                items = re.findall(r'[-•]\s*(.+)', sec)
+                plan["weekly_goals"] = [i.strip() for i in items[:5] if i.strip()]
+
+            # Daily tasks
+            elif '任务' in sec[:4] or sec.startswith('每日'):
+                items = re.findall(r'[-•]\s*(.+)', sec)
+                for i, item in enumerate(items[:14]):
+                    item = item.strip()
+                    if not item: continue
+                    # Extract Day number if present
+                    day_match = re.match(r'Day\s*(\d+)[:：\s]*(.*)', item, re.I)
+                    if day_match:
+                        plan["daily_tasks"].append({"day": int(day_match.group(1)), "task": day_match.group(2).strip()})
+                    else:
+                        plan["daily_tasks"].append({"day": i + 1, "task": item})
+
+            # Barrier interventions
+            elif '障碍' in sec[:4] or sec.startswith('干预'):
+                items = re.findall(r'[-•]\s*(.+?)[:：]\s*(.+)', sec)
+                bt_map = {"概念理解": "concept", "审题": "reading", "审题仔细": "reading", "审题障碍": "reading",
+                          "表述": "expression", "答题表述": "expression", "规范表述": "expression"}
+                for k, v in items:
+                    bt_key = bt_map.get(k.strip(), k.strip())
+                    plan["barrier_interventions"][bt_key] = v.strip()
+
+            # Motivation tips
+            elif '激励' in sec[:4] or sec.startswith('建议'):
+                items = re.findall(r'[-•]\s*(.+)', sec)
+                plan["motivation_tips"] = [i.strip() for i in items[:5] if i.strip()]
+
+        # If no tasks parsed, keep raw content for rendering
+        if not plan["daily_tasks"] and not plan["weekly_goals"]:
+            plan["raw_text"] = content
+
+        result["content"] = json.dumps(plan, ensure_ascii=False)
+        return result
 
     def analyze_paper_with_vision(self, image_data: str, paper_type: str = "mixed") -> Dict:
         prompt = self._get_vision_prompt(paper_type)

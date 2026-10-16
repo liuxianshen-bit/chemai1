@@ -51,21 +51,24 @@ document.getElementById('tabbar').appendChild(renderTabBar('wrong'))
 var el=document.getElementById('content')
 var expanded=null
 
-// Load wrong questions from student answers
+// Load wrong questions from dedicated wrong/list API
 function loadWrongs(){
   el.innerHTML='<div class="loading">加载中...</div>'
-  // Try to get from recent exam results or practice history
-  api('/api/practice/student/'+u.id+'/tasks?page_size=50').then(function(d){
-    if(!d.success||!d.data){el.innerHTML='<div class="loading">暂无错题</div>';return}
-    var tasks=(d.data.tasks)||d.tasks||[]
-    // Look for completed tasks with wrong answers
+  api('/api/practice/wrong/list?student_id='+u.id+'&limit=30').then(function(d){
+    var qs=(d.data&&d.data.wrong_questions)||d.wrong_questions||[]
+    if(!qs.length){el.innerHTML='<div class="loading" style="color:#888">暂无错题记录</div>';return}
     var wrongs=[]
-    tasks.forEach(function(t){
-      if(t.status==='completed'&&(t.wrong_count>0||t.incorrect_count>0)){
-        wrongs.push({q:t.title||'练习题目',ans:'—',mine:'—',kp:(t.knowledge_points||[])[0]||'综合',date:formatDate(t.completed_at||t.deadline),reason:'得分: '+(t.score||'?')+'/'+(t.total||'?')})
-      }
+    qs.forEach(function(q){
+      wrongs.push({
+        q:q.content||'',
+        ans:q.answer||'—',
+        mine:q.your_answer||'—',
+        kp:(q.knowledge_points||[])[0]||'综合',
+        date:formatDate(q.last_error_at||''),
+        reason:(q.analysis||'')+' · 做错'+q.wrong_count+'次',
+        qid:q.question_id
+      })
     })
-    if(!wrongs.length){el.innerHTML='<div class="loading" style="color:#888">暂无错题记录 🎉</div>';return}
     renderList(wrongs)
   }).catch(function(e){el.innerHTML='<div class="loading">加载失败: '+e.message+'</div>'})
 }

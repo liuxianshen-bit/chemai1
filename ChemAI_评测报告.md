@@ -64,7 +64,7 @@
                                   │
                                   ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│              Hermes Agent → chemistry_parser Skill               │
+│              ChemAI Agent → chemistry_parser Skill               │
 │                                                                 │
 │  ┌─────────────────────────────────────────────────────────┐   │
 │  │  ParserHandler (已集成智能解析能力)                     │   │
@@ -150,7 +150,7 @@ ParserHandler.smart_parse_document(image_data, file_type="auto")
 **调用链**:
 1. `frontend/ocr.js` → `hermesService.executeStream(TaskType.OCR_RECOGNIZE, {image})`
 2. `hermes.js` → `_buildPrompt(OCR_RECOGNIZE)` 生成指令
-3. `Hermes Agent` → 调用 `smart_parse_document` 工具
+3. `ChemAI Agent` → 调用 `smart_parse_document` 工具
 4. `chemistry_parser.handler.smart_parse_document()` → 自动选择解析方式
 5. 返回结果 → 前端显示预览
 
@@ -184,8 +184,8 @@ ParserHandler.import_question_bank(questions, metadata)
 **调用链**:
 1. `frontend/ocr.js` → `hermesService.executeStream(TaskType.IMPORT_QUESTIONS, {file_data})`
 2. `hermes.js` → `_buildPrompt(IMPORT_QUESTIONS)` 生成指令
-3. `Hermes Agent` → 调用 `smart_parse_document` 智能解析
-4. `Hermes Agent` → 调用 `import_question_bank` 导入到题库
+3. `ChemAI Agent` → 调用 `smart_parse_document` 智能解析
+4. `ChemAI Agent` → 调用 `import_question_bank` 导入到题库
 5. 返回导入结果 → 前端显示导入成功
 
 ##### 2.2.5.3 工具选择策略

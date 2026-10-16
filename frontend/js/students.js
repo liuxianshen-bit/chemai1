@@ -52,6 +52,18 @@
     // 检查来自学情面板的跳转
     var focusId = sessionStorage.getItem('chemai_focus_student')
     if (focusId) { sessionStorage.removeItem('chemai_focus_student'); setTimeout(function(){ openDrawerById(focusId) }, 600) }
+    // 检查来自 Agent 的学习方案跳转（URL 参数 ?focus=SID&action=plan）
+    var urlParams = new URLSearchParams(location.search)
+    var agentFocus = urlParams.get('focus')
+    var agentAction = urlParams.get('action')
+    if (agentFocus && agentAction === 'plan') {
+      setTimeout(function() {
+        if (allStudents.length > 0) {
+          openDrawerById(agentFocus)
+          setTimeout(function() { if (typeof genPlan === 'function') genPlan() }, 500)
+        }
+      }, 800)
+    }
     // ESC 关闭 Drawer
     document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeDrawer() })
   })
@@ -69,8 +81,7 @@
       } else if (Array.isArray(sData) && sData.length > 0) {
         allStudents = sData
       } else {
-        allStudents = mockStudents()
-        document.getElementById('page-badge').innerHTML = 'STUDENT DIRECTORY <span style="font-size:10px;background:rgba(180,60,40,.1);color:#b43c28;padding:2px 8px;border-radius:3px;margin-left:8px">MOCK</span>'
+        allStudents = []
       }
       renderClassFilter()
       renderStats()
@@ -200,6 +211,7 @@
         '<button class="btn btn-sm" onclick="openTransfer()">转班</button>'+
         '<button class="btn btn-sm" onclick="resetPassword()">重置密码</button>'+
         '<button class="btn btn-sm" onclick="genPlan()">生成学习计划</button>'+
+        '<button class="btn btn-sm" onclick="showPlanHistory()">历史计划</button>'+
       '</div>'+
 
       '<div class="section"><div class="section-label">学习统计</div>'+
@@ -221,15 +233,44 @@
       '</div>'+
 
       '<div class="section"><div class="section-label">薄弱知识点</div>'+
-        '<div class="tag-row">'+(wkp.length?wkp.map(function(k){return'<span class="tag" style="background:rgba(0,0,0,.04);color:#555">'+escHtml(k)+'</span>'}).join(''):'<span style="color:#bbb;font-size:12px">暂无数据</span>')+'</div>'+
+        '<div class="tag-row" id="drawer-wkp"><span style="color:#bbb;font-size:12px">加载中…</span></div>'+
       '</div>'+
 
       '<div class="section"><div class="section-label">最近活动</div>'+
-        '<ul class="timeline">'+mockActivityTimeline(s).map(function(a){return'<li><span class="tl-date">'+a.date+'</span>'+a.desc+'</li>'}).join('')+'</ul>'+
+        '<ul class="timeline" id="drawer-activity"><li style="color:#bbb;font-size:12px">加载中…</li></ul>'+
       '</div>'
 
     document.getElementById('drawer-content').innerHTML = html
-    setTimeout(renderMiniTrend, 200)
+
+    // Load detail data (weak KPs + activity + accuracy trend)
+    api('/api/users/student/'+(s.student_id||s.id)+'/detail').then(function(d) {
+      if (!d.success) return
+      // Weak KPs
+      var wkpEl = document.getElementById('drawer-wkp')
+      if (wkpEl && d.weak_knowledge_points && d.weak_knowledge_points.length) {
+        wkpEl.innerHTML = d.weak_knowledge_points.map(function(k) {
+          return '<span class="tag" style="background:rgba(0,0,0,.04);color:#555">'+escHtml(k)+'</span>'
+        }).join('')
+      } else if (wkpEl) { wkpEl.innerHTML = '<span style="color:#bbb;font-size:12px">暂无数据</span>' }
+      // Recent activity
+      var actEl = document.getElementById('drawer-activity')
+      if (actEl && d.recent_activity && d.recent_activity.length) {
+        actEl.innerHTML = d.recent_activity.map(function(a) {
+          var icon = a.is_correct ? '✓' : '✗'
+          var color = a.is_correct ? '#3d8b5e' : '#b45a4a'
+          return '<li><span class="tl-date">'+a.date+'</span><span style="color:'+color+'">'+icon+'</span> '+escHtml(a.desc)+'</li>'
+        }).join('')
+      } else if (actEl) { actEl.innerHTML = '<li style="color:#bbb;font-size:12px">暂无活动</li>' }
+      // Store accuracy trend data for chart
+      currentStudent._detail = d
+      setTimeout(renderMiniTrend, 100)
+    }).catch(function() {
+      var wkpEl = document.getElementById('drawer-wkp')
+      if (wkpEl) wkpEl.innerHTML = '<span style="color:#bbb;font-size:12px">暂无数据</span>'
+      var actEl = document.getElementById('drawer-activity')
+      if (actEl) actEl.innerHTML = '<li style="color:#bbb;font-size:12px">暂无活动</li>'
+      setTimeout(renderMiniTrend, 100)
+    })
   }
 
   function barrierBar(label, val, color, bg) {
@@ -241,13 +282,28 @@
     var ctx = document.getElementById('trend-mini-chart')
     if (!ctx) return
     if (trendChart) trendChart.destroy()
-    // Generate mock trend from accuracy baseline
-    var base = (currentStudent.accuracy||0.65)*100
-    var scores = [Math.round(base-8),Math.round(base-4),Math.round(base+1),Math.round(base-3),Math.round(base+2),Math.round(base+5),Math.round(base-2),Math.round(base+4)]
+    // Use real accuracy from detail data, or fallback
+    var detail = currentStudent._detail || {}
+    var activities = detail.recent_activity || []
+    var scores = [], labels = []
+    var correct = 0, total = 0
+    // Build rolling accuracy from recent activity (newest first → reverse for chart)
+    var reversed = activities.slice().reverse()
+    reversed.forEach(function(a) {
+      total++
+      if (a.is_correct) correct++
+      scores.push(total > 0 ? Math.round(correct/total*100) : 0)
+      labels.push(a.date)
+    })
+    // Fallback: use overall accuracy
+    if (scores.length === 0) {
+      var acc = (currentStudent.accuracy||0)*100
+      scores = [acc]; labels = ['当前']
+    }
     trendChart = new Chart(ctx.getContext('2d'), {
       type: 'line',
       data: {
-        labels: ['9月','10月','11月','12月','1月','3月','4月','5月'],
+        labels: labels,
         datasets: [{data:scores,borderColor:'#b43c28',backgroundColor:'rgba(180,60,40,.06)',tension:.3,borderWidth:2,pointBackgroundColor:'#b43c28',pointRadius:2,pointHoverRadius:4,fill:true}]
       },
       options: {
@@ -415,16 +471,390 @@
   }
 
   // ─── 生成学习计划 ───
+  var _planData = null  // current plan data in memory
+
+  var _planTips = [
+    '正在分析学生的学习特点…', '根据障碍类型匹配教学策略…', '生成个性化周目标和每日任务…',
+    '设计针对性干预方案…', '准备激励建议…', '整理薄弱知识点强化路径…',
+    '结合最近发展区理论优化难度…', '教师可在生成后手动修改任意内容…',
+  ]
+  var _planTipIdx = 0, _planTipTimer = null
+
   window.genPlan = function() {
     if (!currentStudent) return
+    var sid = currentStudent.student_id || currentStudent.id
+    var bt = currentStudent.barrier_type || {}
+    var dominant = 'concept'
+    if (bt && typeof bt === 'object') {
+      var maxVal = 0
+      for (var k in bt) { if (bt[k] > maxVal) { maxVal = bt[k]; dominant = k } }
+    }
+    var wkp = currentStudent.weak_kps || currentStudent.weak_knowledge_points || []
+
+    // Open modal overlay
+    var overlay = document.createElement('div')
+    overlay.id = 'plan-overlay'
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center'
+    overlay.innerHTML = '<div id="plan-modal" style="background:#fdfbf7;border-radius:16px;width:90%;max-width:520px;max-height:85vh;overflow-y:auto;padding:24px;box-shadow:0 8px 32px rgba(0,0,0,.15)">'+
+      '<div style="text-align:center;padding:30px 0">'+
+        '<div style="display:inline-block;width:40px;height:40px;border:3px solid #f0ece0;border-top-color:#2d5a4b;border-radius:50%;animation:genPlanSpin .8s linear infinite;margin-bottom:16px"></div>'+
+        '<div id="plan-tip" style="font-size:14px;color:#8a8a8a;transition:opacity .3s">正在生成学习计划…</div>'+
+      '</div></div>'
+    document.body.appendChild(overlay)
+    // Rotate tips
+    _planTipIdx = 0
+    _planTipTimer = setInterval(function() {
+      _planTipIdx = (_planTipIdx + 1) % _planTips.length
+      var tipEl = document.getElementById('plan-tip')
+      if (tipEl) { tipEl.style.opacity = '0'; setTimeout(function() { tipEl.textContent = _planTips[_planTipIdx]; tipEl.style.opacity = '1' }, 200) }
+    }, 2500)
+
     api('/api/diagnosis/learning-plan/generate', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({student_id:currentStudent.student_id||currentStudent.id,barrier_type:'concept',weak_knowledge_points:[]})
-    }).then(function() { alert('学习计划已生成!') })
-      .catch(function(e) { alert('生成失败: '+e.message) })
+      body:JSON.stringify({student_id:sid, barrier_type:dominant, weak_knowledge_points:wkp})
+    }).then(function(d) {
+      clearInterval(_planTipTimer)
+      var overlay = document.getElementById('plan-overlay')
+      if (d.plan) {
+        _planData = d.plan
+        // Save to plan history
+        try {
+          var allPlans = JSON.parse(localStorage.getItem('chemai_plans') || '[]')
+          if (!Array.isArray(allPlans)) allPlans = []
+          allPlans.push({ student_id: sid, student_name: currentStudent.name, plan_title: d.plan.plan_title || '学习计划', plan: d.plan, generated_at: new Date().toISOString().slice(0,16) })
+          if (allPlans.length > 20) allPlans = allPlans.slice(-20)
+          localStorage.setItem('chemai_plans', JSON.stringify(allPlans))
+        } catch(e) {}
+        if (overlay) renderPlanInModal(d.plan, sid, overlay)
+      } else {
+        if (overlay) overlay.innerHTML = '<div id="plan-modal" style="background:#fdfbf7;border-radius:16px;width:90%;max-width:520px;padding:24px;text-align:center">'+
+          '<p style="color:#b45a4a;margin-bottom:16px">生成失败: 未返回有效计划</p>'+
+          '<button class="btn btn-sm" onclick="document.getElementById(\'plan-overlay\').remove();genPlan()" style="background:#2d5a4b;color:#fff">🔄 重试</button></div>'
+      }
+    }).catch(function(e) {
+      clearInterval(_planTipTimer)
+      var overlay = document.getElementById('plan-overlay')
+      if (overlay) overlay.innerHTML = '<div id="plan-modal" style="background:#fdfbf7;border-radius:16px;width:90%;max-width:520px;padding:24px;text-align:center">'+
+        '<p style="color:#b45a4a;margin-bottom:16px">生成失败: ' + (e.message||'网络错误') + '</p>'+
+        '<button class="btn btn-sm" onclick="document.getElementById(\'plan-overlay\').remove();genPlan()" style="background:#2d5a4b;color:#fff">🔄 重试</button></div>'
+    })
   }
+
+  function renderPlanInModal(plan, sid, overlay) {
+    var plan_title = safeStr(plan.plan_title) || '个性化学习计划'
+    var plan_period = safeStr(plan.plan_period) || ''
+    var daily_tasks = Array.isArray(plan.daily_tasks) ? plan.daily_tasks : []
+    var weekly_goals = Array.isArray(plan.weekly_goals) ? plan.weekly_goals : []
+    var interventions = (plan.barrier_interventions && typeof plan.barrier_interventions === 'object' && !Array.isArray(plan.barrier_interventions)) ? plan.barrier_interventions : {}
+    var tips = Array.isArray(plan.motivation_tips) ? plan.motivation_tips : []
+
+    var html = '<div id="plan-modal" style="background:#fdfbf7;border-radius:16px;width:90%;max-width:520px;max-height:85vh;overflow-y:auto;padding:24px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'+
+        '<h3 style="font-size:18px;margin:0">📋 '+escHtml(plan_title)+'</h3>'+
+        '<button onclick="document.getElementById(\'plan-overlay\').remove()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#888">&times;</button>'+
+      '</div>'+
+      (plan_period ? '<div style="font-size:13px;color:#888;margin-bottom:14px">周期: '+escHtml(plan_period)+'</div>' : '')
+
+    // 降级: 无结构化字段时用raw_text渲染
+    if (!daily_tasks.length && !weekly_goals.length && plan.raw_text) {
+      html += '<div class="plan-editable" contenteditable="true" '+
+        'style="padding:8px;margin:3px 0;border:1px solid transparent;border-radius:6px;font-size:14px;background:#faf8f3;white-space:pre-wrap;line-height:1.7" '+
+        'onfocus="this.style.borderColor=\'#2d5a4b\';this.style.background=\'#fff\'" '+
+        'onblur="this.style.borderColor=\'transparent\';this.style.background=\'#faf8f3\'">'+renderMD(safeStr(plan.raw_text))+'</div>'
+    }
+
+    html += '<div style="margin-bottom:12px"><strong>🎯 周目标</strong></div>'
+    weekly_goals.forEach(function(g, i) {
+      html += '<div class="plan-editable" data-path="weekly_goals.'+i+'" contenteditable="true" '+
+        'style="padding:8px;margin:3px 0;border:1px solid transparent;border-radius:6px;font-size:14px;background:#faf8f3;transition:.15s" '+
+        'onfocus="this.style.borderColor=\'#2d5a4b\';this.style.background=\'#fff\'" '+
+        'onblur="this.style.borderColor=\'transparent\';this.style.background=\'#faf8f3\';savePlanEdit(this)">'+renderMD(safeStr(g))+'</div>'
+    })
+
+    html += '<div style="margin:14px 0 10px"><strong>📅 每日任务</strong></div>'
+    daily_tasks.slice(0, 14).forEach(function(t, j) {
+      var day = (typeof t === 'object' && t.day) ? t.day : ''
+      var task = (typeof t === 'object' && t.task) ? t.task : (typeof t === 'string' ? t : '')
+      html += '<div style="display:flex;gap:8px;margin:3px 0;align-items:flex-start">'+
+        '<span style="color:#888;font-size:13px;white-space:nowrap;padding-top:8px">'+(day?'Day '+day:'•')+'</span>'+
+        '<div class="plan-editable" data-path="daily_tasks.'+j+'.task" contenteditable="true" '+
+        'style="flex:1;padding:8px;border:1px solid transparent;border-radius:6px;font-size:14px;background:#faf8f3;transition:.15s" '+
+        'onfocus="this.style.borderColor=\'#2d5a4b\';this.style.background=\'#fff\'" '+
+        'onblur="this.style.borderColor=\'transparent\';this.style.background=\'#faf8f3\';savePlanEdit(this)">'+renderMD(safeStr(task))+'</div></div>'
+    })
+
+    if (Object.keys(interventions).length) {
+      html += '<div style="margin:14px 0 10px"><strong>🧠 障碍干预</strong></div>'
+      var btLabels = {concept:'概念理解', reading:'审题仔细', expression:'答题表述'}
+      for (var bt in interventions) {
+        if (!interventions.hasOwnProperty(bt)) continue
+        html += '<div style="display:flex;gap:8px;margin:3px 0;align-items:flex-start">'+
+          '<span style="color:#888;font-size:13px;white-space:nowrap;padding-top:8px">'+(btLabels[bt]||bt)+'</span>'+
+          '<div class="plan-editable" data-path="barrier_interventions.'+bt+'" contenteditable="true" '+
+          'style="flex:1;padding:8px;border:1px solid transparent;border-radius:6px;font-size:14px;background:#faf8f3;transition:.15s" '+
+          'onfocus="this.style.borderColor=\'#2d5a4b\';this.style.background=\'#fff\'" '+
+          'onblur="this.style.borderColor=\'transparent\';this.style.background=\'#faf8f3\';savePlanEdit(this)">'+renderMD(safeStr(interventions[bt]))+'</div></div>'
+      }
+    }
+
+    if (tips.length) {
+      html += '<div style="margin:14px 0 10px"><strong>💡 激励建议</strong></div>'
+      tips.forEach(function(tip, k) {
+        html += '<div class="plan-editable" data-path="motivation_tips.'+k+'" contenteditable="true" '+
+          'style="padding:8px;margin:3px 0;border:1px solid transparent;border-radius:6px;font-size:14px;background:#faf8f3;transition:.15s" '+
+          'onfocus="this.style.borderColor=\'#2d5a4b\';this.style.background=\'#fff\'" '+
+          'onblur="this.style.borderColor=\'transparent\';this.style.background=\'#faf8f3\';savePlanEdit(this)">'+renderMD(safeStr(tip))+'</div>'
+      })
+    }
+
+    html += '<div style="display:flex;gap:8px;margin-top:18px;padding-top:14px;border-top:1px solid rgba(0,0,0,.08)">'+
+      '<button class="btn btn-sm" onclick="savePlan()" style="flex:1">💾 保存修改</button>'+
+      '<button class="btn btn-sm" onclick="sendPlan()" style="flex:1">📤 发给学生</button>'+
+      '<button class="btn btn-sm" onclick="document.getElementById(\'plan-overlay\').remove()" style="background:rgba(0,0,0,.04)">关闭</button>'+
+    '</div></div>'
+
+    overlay.innerHTML = html
+  }
+
+  // renderPlanCard replaced by renderPlanInModal above
+  function _OLD_renderPlanCard(plan, sid) {
+    // Remove old card if exists
+    var old = document.getElementById('plan-card')
+    if (old) old.remove()
+
+    var plan_title = safeStr(plan.plan_title) || '个性化学习计划'
+    var plan_period = safeStr(plan.plan_period) || ''
+    var daily_tasks = Array.isArray(plan.daily_tasks) ? plan.daily_tasks : []
+    var weekly_goals = Array.isArray(plan.weekly_goals) ? plan.weekly_goals : []
+    var interventions = (plan.barrier_interventions && typeof plan.barrier_interventions === 'object' && !Array.isArray(plan.barrier_interventions)) ? plan.barrier_interventions : {}
+    var tips = Array.isArray(plan.motivation_tips) ? plan.motivation_tips : []
+
+    var html = '<div id="plan-card" class="section" style="border-top:1px solid rgba(0,0,0,.06);margin-top:12px;padding-top:12px">'+
+      '<div class="section-label" style="display:flex;justify-content:space-between;align-items:center">'+
+        '<span>📋 '+escHtml(plan_title)+'</span>'+
+        '<span style="font-size:12px;color:#8a8a8a">'+escHtml(plan_period)+'</span>'+
+      '</div>'+
+      '<div style="font-size:13px;color:#8a8a8a;margin-bottom:10px">点击任意字段直接编辑, 失焦自动保存</div>'
+
+    // Weekly goals
+    html += '<div style="margin-bottom:10px"><strong>🎯 周目标</strong></div>'
+    for (var i=0; i<weekly_goals.length; i++) {
+      html += '<div class="plan-editable" data-path="weekly_goals.'+i+'" contenteditable="true" '+
+        'style="padding:6px 8px;margin:3px 0;border:1px solid transparent;border-radius:6px;font-size:14px;background:#fdfbf7;transition:.15s" '+
+        'onfocus="this.style.borderColor=\'#2d5a4b\';this.style.background=\'#fff\'" '+
+        'onblur="this.style.borderColor=\'transparent\';this.style.background=\'#fdfbf7\';savePlanEdit(this)">'+
+        escHtml(weekly_goals[i])+'</div>'
+    }
+
+    // Daily tasks
+    html += '<div style="margin:12px 0 10px"><strong>📅 每日任务</strong></div>'
+    for (var j=0; j<Math.min(daily_tasks.length, 14); j++) {
+      var t = daily_tasks[j]
+      var day = (typeof t === 'object' && t.day) ? t.day : ''
+      var task = (typeof t === 'object' && t.task) ? t.task : (typeof t === 'string' ? t : '')
+      html += '<div style="display:flex;gap:8px;margin:3px 0;align-items:flex-start">'+
+        '<span style="color:#8a8a8a;font-size:13px;white-space:nowrap;padding-top:6px">'+(day?'Day '+day:'•')+'</span>'+
+        '<div class="plan-editable" data-path="daily_tasks.'+j+'.task'+(typeof t==='object'?'" data-day="'+(t.day||'') : '')+'" '+
+        'contenteditable="true" '+
+        'style="flex:1;padding:6px 8px;border:1px solid transparent;border-radius:6px;font-size:14px;background:#fdfbf7;transition:.15s" '+
+        'onfocus="this.style.borderColor=\'#2d5a4b\';this.style.background=\'#fff\'" '+
+        'onblur="this.style.borderColor=\'transparent\';this.style.background=\'#fdfbf7\';savePlanEdit(this)">'+
+        escHtml(task)+'</div></div>'
+    }
+
+    // Interventions
+    html += '<div style="margin:12px 0 10px"><strong>🧠 障碍干预</strong></div>'
+    var btLabels = {concept:'概念理解', reading:'审题仔细', expression:'答题表述'}
+    for (var bt in interventions) {
+      if (!interventions.hasOwnProperty(bt)) continue
+      var btLabel = btLabels[bt] || bt
+      html += '<div style="display:flex;gap:8px;margin:3px 0;align-items:flex-start">'+
+        '<span style="color:#8a8a8a;font-size:13px;white-space:nowrap;padding-top:6px">'+btLabel+'</span>'+
+        '<div class="plan-editable" data-path="barrier_interventions.'+bt+'" contenteditable="true" '+
+        'style="flex:1;padding:6px 8px;border:1px solid transparent;border-radius:6px;font-size:14px;background:#fdfbf7;transition:.15s" '+
+        'onfocus="this.style.borderColor=\'#2d5a4b\';this.style.background=\'#fff\'" '+
+        'onblur="this.style.borderColor=\'transparent\';this.style.background=\'#fdfbf7\';savePlanEdit(this)">'+
+        renderMD(safeStr(interventions[bt]))+'</div></div>'
+    }
+
+    // Tips
+    if (tips.length) {
+      html += '<div style="margin:12px 0 10px"><strong>💡 激励建议</strong></div>'
+      for (var k=0; k<Math.min(tips.length, 3); k++) {
+        html += '<div class="plan-editable" data-path="motivation_tips.'+k+'" contenteditable="true" '+
+          'style="padding:6px 8px;margin:3px 0;border:1px solid transparent;border-radius:6px;font-size:14px;background:#fdfbf7;transition:.15s" '+
+          'onfocus="this.style.borderColor=\'#2d5a4b\';this.style.background=\'#fff\'" '+
+          'onblur="this.style.borderColor=\'transparent\';this.style.background=\'#fdfbf7\';savePlanEdit(this)">'+
+          renderMD(safeStr(tips[k]))+'</div>'
+      }
+    }
+
+    // Action buttons
+    html += '<div style="display:flex;gap:8px;margin-top:14px;padding-top:10px;border-top:1px solid rgba(0,0,0,.06)">'+
+      '<button class="btn btn-sm" onclick="savePlan()" style="flex:1">💾 保存修改</button>'+
+      '<button class="btn btn-sm" onclick="sendPlan()" style="flex:1">📤 发给学生</button>'+
+      '<button class="btn btn-sm" onclick="cancelPlan()" style="background:rgba(0,0,0,.04)">✕</button>'+
+    '</div>'
+
+    html += '</div>'
+    var dc = document.getElementById('drawer-content')
+    dc.insertAdjacentHTML('beforeend', html)
+  }
+
+  window.savePlanEdit = function(el) {
+    if (!_planData) return
+    var path = el.getAttribute('data-path')
+    if (!path) return
+    var val = (el.innerText || el.textContent || '').trim()
+    var parts = path.split('.')
+
+    // Deep set
+    var obj = _planData
+    for (var i = 0; i < parts.length - 1; i++) {
+      var key = parts[i]
+      // Handle array index (digits)
+      if (/^\d+$/.test(parts[i+1])) {
+        if (!obj[key]) obj[key] = []
+        obj = obj[key]
+      } else {
+        if (!obj[key] || typeof obj[key] !== 'object') obj[key] = {}
+        obj = obj[key]
+      }
+    }
+    var lastKey = parts[parts.length-1]
+    if (/^\d+$/.test(lastKey)) {
+      obj[parseInt(lastKey)] = val
+    } else {
+      obj[lastKey] = val
+    }
+  }
+
+  window.savePlan = function() {
+    if (!_planData || !currentStudent) return
+    var key = 'chemai_plan_' + (currentStudent.student_id||currentStudent.id)
+    try { localStorage.setItem(key, JSON.stringify(_planData)) } catch(e) {}
+    var el = document.createElement('div')
+    el.style.cssText = 'position:fixed;bottom:30px;left:50%;transform:translateX(-50%);background:#2d5a4b;color:#fff;padding:8px 20px;border-radius:20px;font-size:14px;z-index:999'
+    el.textContent = '✓ 已保存'
+    document.body.appendChild(el)
+    setTimeout(function() { el.remove() }, 1500)
+  }
+
+  window.sendPlan = function() {
+    if (!_planData || !currentStudent) { alert('没有可发送的计划'); return }
+    var sid = currentStudent.student_id || currentStudent.id
+    api('/api/diagnosis/learning-plan/apply/'+sid, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(_planData)
+    }).then(function(d) {
+      if (d.success) {
+        // Sync to shared plan history (used by diagnosis page)
+        try {
+          var allPlans = JSON.parse(localStorage.getItem('chemai_plans') || '[]')
+          if (!Array.isArray(allPlans)) allPlans = []
+          allPlans.push({ student_id: sid, student_name: currentStudent.name, plan_title: _planData.plan_title || '学习计划', plan: _planData, generated_at: new Date().toISOString().slice(0,16) })
+          // Keep last 20 plans
+          if (allPlans.length > 20) allPlans = allPlans.slice(-20)
+          localStorage.setItem('chemai_plans', JSON.stringify(allPlans))
+        } catch(e) {}
+        alert('✅ 已发送给 '+(d.student_name||currentStudent.name))
+      }
+      else alert('发送失败: '+(d.message||''))
+    }).catch(function(e) { alert('发送失败: '+e.message) })
+  }
+
+  window.showPlanHistory = function() {
+    if (!currentStudent) return
+    var sid = currentStudent.student_id || currentStudent.id
+
+    // Loading overlay
+    var overlay = document.createElement('div')
+    overlay.id = 'plan-overlay'
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center'
+    overlay.innerHTML = '<div id="plan-modal" style="background:#fdfbf7;border-radius:16px;width:90%;max-width:520px;max-height:85vh;overflow-y:auto;padding:24px;box-shadow:0 8px 32px rgba(0,0,0,.15)"><div style="text-align:center;padding:30px">加载中...</div></div>'
+    document.body.appendChild(overlay)
+
+    api('/api/diagnosis/learning-plan/'+sid+'/history').then(function(d) {
+      if (!d.success || !d.history || !d.history.length) {
+        overlay.innerHTML = '<div id="plan-modal" style="background:#fdfbf7;border-radius:16px;width:90%;max-width:520px;padding:24px;text-align:center"><p style="margin-bottom:16px">暂无历史学习计划</p><button class=\"btn btn-sm\" onclick=\"document.getElementById(\'plan-overlay\').remove()\" style=\"background:#2d5a4b;color:#fff\">关闭</button></div>'
+        return
+      }
+      var html = '<div id="plan-modal" style="background:#fdfbf7;border-radius:16px;width:90%;max-width:520px;max-height:85vh;overflow-y:auto;padding:24px;box-shadow:0 8px 32px rgba(0,0,0,.15)">'
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'
+      html += '<h3 style="font-size:18px;margin:0">历史学习计划 — '+escHtml(currentStudent.name)+'</h3>'
+      html += '<button onclick="document.getElementById(\'plan-overlay\').remove()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#888">&times;</button>'
+      html += '</div>'
+      d.history.forEach(function(p, i) {
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px;margin-bottom:8px;background:#faf8f3;border-radius:8px;cursor:pointer" onclick="viewHistoryPlan('+i+')">'
+        html += '<div><div style="font-weight:600;font-size:14px">'+escHtml(p.plan_title||'学习计划')+'</div>'
+        html += '<div style="font-size:12px;color:#888">'+escHtml(p.created_at||'')+'</div></div>'
+        html += '<span style="color:#2d5a4b;font-size:13px">查看 →</span></div>'
+      })
+      html += '</div>'
+      overlay.innerHTML = html
+      window._historyPlans = d.history
+    }).catch(function() {
+      overlay.innerHTML = '<div id="plan-modal" style="background:#fdfbf7;border-radius:16px;width:90%;max-width:520px;padding:24px;text-align:center"><p style="color:#b45a4a;margin-bottom:16px">加载失败</p><button class=\"btn btn-sm\" onclick=\"document.getElementById(\'plan-overlay\').remove()\">关闭</button></div>'
+    })
+  }
+
+  window.viewHistoryPlan = function(idx) {
+    var p = window._historyPlans && window._historyPlans[idx]
+    if (!p || !p.plan_data) return
+    var overlay = document.getElementById('plan-overlay')
+    var sid = currentStudent && (currentStudent.student_id || currentStudent.id)
+    if (overlay) renderPlanInModal(p.plan_data, sid, overlay)
+  }
+
+  window.cancelPlan = function() {
+    var card = document.getElementById('plan-card')
+    if (card) card.remove()
+    _planData = null
+  }
+
+  function showPlanError(msg, sid, dominant, wkp) {
+    var el = document.createElement('div')
+    el.id = 'plan-card'
+    el.className = 'section'
+    el.style.cssText = 'border-top:1px solid rgba(0,0,0,.06);margin-top:12px;padding-top:12px'
+    el.innerHTML = '<div style="text-align:center;color:#b45a4a;font-size:14px;padding:16px">'+
+      escHtml(msg)+'</div>'+
+      '<div style="text-align:center">'+
+      '<button class="btn btn-sm" onclick="genPlan()" style="background:#2d5a4b;color:#fff">🔄 重试</button></div>'
+    var dc = document.getElementById('drawer-content')
+    dc.appendChild(el)
+  }
+
+  // Spinner animation
+  var planSpinStyle = document.createElement('style')
+  planSpinStyle.textContent = '@keyframes genPlanSpin{to{transform:rotate(360deg)}}'
+  document.head.appendChild(planSpinStyle)
 
   // ─── Helpers ───
   function escHtml(s) { if (!s) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') }
   function esc(s) { if (!s) return ''; return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'") }
+
+  // Safe stringify — never returns [object Object]
+  function safeStr(v) {
+    if (v === null || v === undefined) return ''
+    if (typeof v === 'string') return v
+    if (typeof v === 'object') {
+      if (Array.isArray(v)) return v.map(safeStr).join(', ')
+      // Object — try common text fields
+      return v.text || v.content || v.name || v.title || v.strategy || v.task || ''
+    }
+    return String(v)
+  }
+
+  // Simple markdown render for plan display
+  function renderMD(text) {
+    if (!text) return ''
+    var s = escHtml(String(text))
+    s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    s = s.replace(/\*(.+?)\*/g, '<em>$1</em>')
+    s = s.replace(/### (.+)/g, '<h4>$1</h4>')
+    s = s.replace(/^- (.+)/gm, '<li>$1</li>')
+    s = s.replace(/\n\n/g, '<br><br>')
+    return s
+  }
 })()

@@ -9,6 +9,7 @@ available_skills:
   - web_search
   - show_exam_workbench
   - diagnose_barrier
+  - show_diagnosis
+  - show_students
   - balance_equation
-  - import_exam_paper
   - assign_adaptive_practice

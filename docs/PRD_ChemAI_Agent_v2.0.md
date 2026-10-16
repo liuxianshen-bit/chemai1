@@ -355,9 +355,9 @@ ChemAI Agent v2.0 提供六大核心功能：
 ```
 ChemAI Agent v2.0
 ├── 智能体层 (Agent)
-│   ├── Hermes Agent (核心调度)
+│   ├── ChemAI Agent (核心调度)
 │   └── ReAct 推理引擎
-├── 技能层 (Hermes Skills)
+├── 技能层 (Chem Skills)
 │   ├── chemistry_exam
 │   ├── chemistry_diagnosis
 │   ├── chemistry_parser

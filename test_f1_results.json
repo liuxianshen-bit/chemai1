@@ -6,7 +6,7 @@
     {
       "name": "服务状态检测",
       "passed": true,
-      "detail": "OCR:True, MinerU:True, Vision:True"
+      "detail": "OCR:False, MinerU:True, Vision:False"
     },
     {
       "name": "文件类型检测-JPEG",

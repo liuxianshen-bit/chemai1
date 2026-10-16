@@ -170,7 +170,15 @@ async def diagnose_barrier_types(
         # 计算障碍类型占比
         total_errors = sum(errors_by_type.values())
         if total_errors == 0:
-            barrier_type = {"concept": 0.33, "reading": 0.33, "expression": 0.34}
+            # 无该考试数据 → 用学生表已有的累计障碍数据
+            stored_bt = student.barrier_type
+            if isinstance(stored_bt, str):
+                try: stored_bt = json.loads(stored_bt)
+                except: stored_bt = None
+            if stored_bt and isinstance(stored_bt, dict) and sum(stored_bt.values()) > 0:
+                barrier_type = {k: round(v, 2) for k, v in stored_bt.items()}
+            else:
+                barrier_type = {"concept": 0.33, "reading": 0.33, "expression": 0.34}
         else:
             barrier_type = {
                 k: round(v / total_errors, 2)
@@ -179,8 +187,6 @@ async def diagnose_barrier_types(
 
         # 确定主要障碍
         dominant = max(barrier_type, key=barrier_type.get)
-        if errors_by_type[dominant] == 0:
-            dominant = "concept"  # 默认
 
         diagnoses.append(StudentDiagnosis(
             student_id=student.student_id,
@@ -518,21 +524,15 @@ async def generate_student_learning_plan(
         recent_performance=request.recent_performance
     )
 
-    if not result.get("success"):
-        raise HTTPException(status_code=500, detail=f"学习计划生成失败: {result.get('error', '未知错误')}")
+    if not result.get("success") or not result.get("content", "").strip():
+        raise HTTPException(status_code=500, detail=f"学习计划生成失败: LLM返回为空，请重试")
 
-    # 解析LLM返回的JSON计划
+    # llm_service.generate_learning_plan 已通过Markdown解析器返回结构化JSON
     plan_content = result.get("content", "{}")
-    try:
-        # 尝试提取JSON（处理可能的markdown格式）
-        import re
-        json_match = re.search(r'\{[\s\S]*\}', plan_content)
-        if json_match:
-            plan_data = json.loads(json_match.group())
-        else:
-            plan_data = {"raw_plan": plan_content}
-    except json.JSONDecodeError:
-        plan_data = {"raw_plan": plan_content}
+    plan_data = json.loads(plan_content)
+
+    if not plan_data.get("plan_title"):
+        raise HTTPException(status_code=500, detail="LLM返回的计划内容不完整，请重试")
 
     return LearningPlanResponse(
         student_id=request.student_id,
@@ -550,19 +550,55 @@ async def apply_student_learning_plan(
 ):
     """
     应用学习计划到学生
-    将生成的学习计划保存并推送给学生
+    将生成的学习计划保存到 SqliteStore 长期记忆，学生端即刻可见
     """
     student = db.query(Student).filter(Student.student_id == student_id).first()
     if not student:
         raise HTTPException(status_code=404, detail=f"学生 {student_id} 不存在")
 
-    # TODO: 将学习计划保存到学生记录中
-    # 目前仅返回成功状态
+    # 直接写 students 表
+    student.current_plan = plan_data
+    db.commit()
+
+    # 写入历史记录
+    try:
+        from app.models.database import LearningPlanHistory
+        db.add(LearningPlanHistory(
+            student_id=student_id,
+            plan_title=plan_data.get("plan_title", "学习计划"),
+            plan_data=plan_data,
+        ))
+        db.commit()
+    except Exception:
+        pass
+
+    # 更新内存缓存
+    import time as _t
+    _plan_cache[student_id] = {"plan": plan_data, "expires_at": _t.time() + 86400}
 
     return {
         "success": True,
-        "message": "学习计划已应用到学生",
-        "student_id": student_id
+        "message": f"学习计划已保存，{student.name} 可在学生端查看",
+        "student_id": student_id,
+        "student_name": student.name,
+    }
+
+
+@router.get("/learning-plan/{student_id}/history")
+async def get_plan_history(student_id: str, db: Session = Depends(get_db)):
+    """获取学生学习计划历史"""
+    from app.models.database import LearningPlanHistory
+    records = db.query(LearningPlanHistory).filter(
+        LearningPlanHistory.student_id == student_id
+    ).order_by(LearningPlanHistory.created_at.desc()).limit(20).all()
+    return {
+        "success": True,
+        "history": [{
+            "id": r.id,
+            "plan_title": r.plan_title,
+            "plan_data": r.plan_data,
+            "created_at": r.created_at.strftime("%Y-%m-%d %H:%M") if r.created_at else "",
+        } for r in records]
     }
 
 
@@ -619,73 +655,83 @@ async def send_plan_to_parent(
     }
 
 
+# In-memory plan cache with TTL (24h)
+import time as _time
+_plan_cache = {}  # student_id → {"plan": ..., "expires_at": ...}
+
 @router.get("/learning-plan/{student_id}")
 async def get_student_learning_plan(
     student_id: str,
     db: Session = Depends(get_db)
 ):
-    """
-    获取学生当前学习计划
-    """
+    """获取学生当前学习计划。有缓存返回缓存，无则调 LLM 生成。"""
     student = db.query(Student).filter(Student.student_id == student_id).first()
     if not student:
         raise HTTPException(status_code=404, detail=f"学生 {student_id} 不存在")
 
-    # TODO: 从学生记录中获取已保存的学习计划
-    # 目前返回模拟数据用于测试
-    return {
-        "success": True,
-        "data": {
-            "student_id": student_id,
-            "student_name": student.name,
-            "plan": {
-                "plan_title": "氧化还原反应专项提升计划",
-                "plan_period": "2周",
-                "barrier_interventions": [
-                    {
-                        "barrier": "concept",
-                        "strategy": "通过动画理解电子转移过程，建立化合价变化与电子转移的关联",
-                        "practice_tips": "每天完成5道化合价判断练习"
-                    }
-                ],
-                "daily_tasks": [
-                    {
-                        "day": "第1-3天",
-                        "content": "理解氧化还原反应概念",
-                        "duration": "约30分钟",
-                        "resource_type": "视频"
-                    },
-                    {
-                        "day": "第4-7天",
-                        "content": "化合价变化判断专项练习",
-                        "duration": "约40分钟",
-                        "resource_type": "练习"
-                    },
-                    {
-                        "day": "第2周",
-                        "content": "电子转移方向综合练习",
-                        "duration": "约45分钟",
-                        "resource_type": "综合练习"
-                    }
-                ],
-                "weekly_goals": [
-                    {
-                        "week": "第一周",
-                        "goals": ["掌握化合价变化判断", "理解电子转移方向"],
-                        "milestone": "能够快速判断常见反应的化合价变化"
-                    },
-                    {
-                        "week": "第二周",
-                        "goals": ["熟练配平氧化还原方程式", "综合应用"],
-                        "milestone": "能够独立完成中等难度的氧化还原计算题"
-                    }
-                ],
-                "motivation_tips": ["每天进步一点点！", "坚持就是胜利！"],
-                "parent_communication_suggestion": "建议每天检查孩子完成情况，给予适当的鼓励"
-            },
-            "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M")
+    now = _time.time()
+    cached = _plan_cache.get(student_id)
+    if cached and cached.get("expires_at", 0) > now:
+        return {"success": True, "data": {"student_id": student_id, "student_name": student.name, "plan": cached["plan"]}}
+
+    # Check students.current_plan (persisted by POST /apply)
+    if student.current_plan and isinstance(student.current_plan, dict) and student.current_plan.get("plan_title"):
+        _plan_cache[student_id] = {"plan": student.current_plan, "expires_at": now + 86400}
+        return {"success": True, "data": {"student_id": student_id, "student_name": student.name, "plan": student.current_plan}}
+
+    # Build barrier info from student data
+    barrier = student.barrier_type or {}
+    if isinstance(barrier, str):
+        import json as _j; barrier = _j.loads(barrier)
+    dominant = max(barrier.items(), key=lambda x: x[1]) if barrier else ("concept", 1.0)
+
+    # Get weak knowledge points from recent wrong answers
+    weak_kps = []
+    try:
+        from app.models.database import StudentAnswer, Question
+        from collections import Counter
+        wrong_answers = db.query(StudentAnswer).filter(
+            StudentAnswer.student_id == student_id, StudentAnswer.is_correct == False
+        ).order_by(StudentAnswer.answered_at.desc()).limit(30).all()
+        kp_counter = Counter()
+        for wa in wrong_answers:
+            q = db.query(Question).filter(Question.question_id == wa.question_id).first()
+            if q and q.knowledge_points:
+                for kp in q.knowledge_points:
+                    kp_counter[kp] += 1
+        weak_kps = [kp for kp, _ in kp_counter.most_common(5)]
+    except Exception:
+        pass
+
+    # Generate via LLM
+    from app.services.llm_service import llm_service
+    result = llm_service.generate_learning_plan(
+        student_name=student.name,
+        barrier_type=dominant[0],
+        weak_knowledge_points=weak_kps or ["化学基础"],
+        recent_performance={"exercises_completed": student.exercises_completed or 0},
+    )
+
+    plan_data = {}
+    if result.get("success"):
+        content = result.get("content", "{}")
+        import re as _re, json as _j
+        m = _re.search(r'\{[\s\S]*\}', content)
+        if m:
+            try:
+                plan_data = _j.loads(m.group())
+            except _j.JSONDecodeError:
+                plan_data = {"plan_title": "AI 生成计划", "content": content[:500]}
+    if not plan_data:
+        plan_data = {
+            "plan_title": f"{dominant[0]} 专项提升计划",
+            "plan_period": "1周",
+            "weak_kps": weak_kps,
+            "dominant_barrier": dominant[0],
         }
-    }
+
+    _plan_cache[student_id] = {"plan": plan_data, "expires_at": now + 86400}
+    return {"success": True, "data": {"student_id": student_id, "student_name": student.name, "plan": plan_data}}
 
 
 # ============================================================
@@ -697,7 +743,7 @@ async def get_student_learning_plan(
 async def get_student_diagnosis_plan(student_id: str, db: Session = Depends(get_db)):
     """
     获取学生已有的诊断学习计划
-    由Hermes Agent生成后存储，本端点仅做检索
+    由ChemAI Agent生成后存储，本端点仅做检索
     """
     student = db.query(Student).filter(Student.student_id == student_id).first()
     if not student:
@@ -722,6 +768,19 @@ async def get_student_diagnosis_plan(student_id: str, db: Session = Depends(get_
     sorted_kps = sorted(kp_error_count.items(), key=lambda x: x[1], reverse=True)
     weak_kps = [kp for kp, _ in sorted_kps[:5]]
 
+    # 答题统计
+    total_answers = db.query(StudentAnswer).filter(StudentAnswer.student_id == student_id).count()
+    correct_answers = db.query(StudentAnswer).filter(StudentAnswer.student_id == student_id, StudentAnswer.is_correct == True).count()
+    accuracy = round(correct_answers / total_answers, 2) if total_answers > 0 else 0
+
+    # 确保有绑定码
+    bind_code = getattr(student, 'bind_code', None)
+    if not bind_code:
+        import random
+        bind_code = str(random.randint(100000, 999999))
+        student.bind_code = bind_code
+        db.commit()
+
     return {
         "success": True,
         "data": {
@@ -730,8 +789,11 @@ async def get_student_diagnosis_plan(student_id: str, db: Session = Depends(get_
             "barrier_type": barrier_type,
             "dominant_barrier": dominant,
             "weak_knowledge_points": weak_kps,
+            "total_answers": total_answers,
+            "accuracy": accuracy,
+            "bind_code": bind_code,
             "recommended_intervention": _INTERVENTIONS.get(dominant, ""),
-            "last_updated": student.barrier_last_updated.strftime("%Y-%m-%d") if student.barrier_last_updated else datetime.now().strftime("%Y-%m-%d")
+            "last_updated": student.barrier_last_updated.strftime("%Y-%m-%d") if getattr(student, 'barrier_last_updated', None) else datetime.now().strftime("%Y-%m-%d")
         }
     }
 

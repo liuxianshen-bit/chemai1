@@ -70,8 +70,8 @@ var el=document.getElementById('content')
 function loadTasks(){
   el.innerHTML='<div class="loading">加载中...</div>'
   api('/api/practice/student/'+u.id+'/tasks?page_size=50').then(function(d){
-    if(!d.success){el.innerHTML='<div class="loading">暂无练习任务</div>';return}
     state.tasks=(d.data&&d.data.tasks)||d.tasks||[]
+    if(!state.tasks.length){el.innerHTML='<div class="loading">暂无练习任务</div>';return}
     renderList()
   }).catch(function(e){el.innerHTML='<div class="loading">加载失败: '+e.message+'</div>'})
 }
@@ -104,8 +104,8 @@ function escAttr(s){return String(s||'').replace(/"/g,'&quot;').replace(/'/g,'&#
 function startPractice(pid){
   el.innerHTML='<div class="loading">加载题目...</div>'
   api('/api/practice/student/'+u.id+'/practice/'+pid).then(function(d){
-    if(!d.success){el.innerHTML='<div class="loading">加载失败</div>';return}
     state.view='quiz';state.quiz=(d.data&&d.data.questions)||d.questions||[]
+    if(!state.quiz.length){el.innerHTML='<div class="loading">暂无题目</div>';return}
     state.qIdx=0;state.answers={};state.practiceId=pid
     renderQuiz()
   }).catch(function(e){el.innerHTML='<div class="loading">加载失败: '+e.message+'</div>'})
@@ -151,18 +151,13 @@ function submitAnswers(){
   api('/api/practice/submit',{method:'POST',body:JSON.stringify({
     practice_id:state.practiceId,student_id:u.id,answers:answers
   })}).then(function(d){
-    if(d.success){
-      var data=d.data||d
-      var correct=data.correct_count||data.correct||0
-      var total=data.total_count||state.quiz.length
-      el.innerHTML='<div class="result">'
-      el.innerHTML+='<div class="score">'+correct+'/'+total+'</div>'
-      el.innerHTML+='<div style="font-size:16px;color:#888;margin:4px 0 20px">正确率 '+(total>0?Math.round(correct/total*100):0)+'%</div>'
-      el.innerHTML+='<button class="btn primary" onclick="backToList()">返回练习列表</button>'
-      el.innerHTML+='</div>'
-    }else{
-      el.innerHTML='<div class="loading">提交失败: '+(d.message||'')+'</div>'
-    }
+    var correct=d.correct_count||d.correct||0
+    var total=d.total_count||state.quiz.length
+    el.innerHTML='<div class="result">'
+    el.innerHTML+='<div class="score">'+correct+'/'+total+'</div>'
+    el.innerHTML+='<div style="font-size:16px;color:#888;margin:4px 0 20px">正确率 '+(total>0?Math.round(correct/total*100):0)+'%</div>'
+    el.innerHTML+='<button class="btn primary" onclick="backToList()">返回练习列表</button>'
+    el.innerHTML+='</div>'
   }).catch(function(e){el.innerHTML='<div class="loading">提交失败: '+e.message+'</div>'})
 }
 

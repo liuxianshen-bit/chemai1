@@ -1,6 +1,6 @@
 # ChemAI Agent 化 Phase 1 详细设计
 
-> 本文档定义 ChemAI 与 Hermes Agent 集成的 Phase 1 工作：API 分析与 Skill 架构设计
+> 本文档定义 ChemAI 与 ChemAI Agent 集成的 Phase 1 工作：API 分析与 Skill 架构设计
 
 ---
 
@@ -88,13 +88,13 @@
 
 ---
 
-## 2. Hermes Agent Skill 架构设计
+## 2. ChemAI Agent Skill 架构设计
 
 ### 2.1 Skill 架构概览
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                        Hermes Agent                             │
+│                        ChemAI Agent                             │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐            │
 │  │  Memory     │  │  Skills     │  │  Tools      │            │
 │  │  System     │  │  Hub        │  │  Registry   │            │
@@ -376,7 +376,7 @@ AI 生成的题目存在以下风险，必须有人工审核环节：
 │       │                                                         │
 │       ▼                                                         │
 │  ┌─────────────┐                                                │
-│  │ AI生成题目   │ ← Hermes Agent 可介入预审                       │
+│  │ AI生成题目   │ ← ChemAI Agent 可介入预审                       │
 │  └─────────────┘                                                │
 │       │                                                         │
 │       ▼                                                         │
@@ -386,7 +386,7 @@ AI 生成的题目存在以下风险，必须有人工审核环节：
 │       │                                                         │
 │       ▼                                                         │
 │  ┌─────────────┐     ┌─────────────┐                            │
-│  │ 进入审核队列 │ ──► │ Hermes Agent │                           │
+│  │ 进入审核队列 │ ──► │ ChemAI Agent │                           │
 │  └─────────────┘     │ 预标记可疑题目 │                           │
 │                      └─────────────┘                            │
 │       │                                                         │
@@ -406,7 +406,7 @@ AI 生成的题目存在以下风险，必须有人工审核环节：
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-### 3.3 Hermes Agent 在审核中的角色
+### 3.3 ChemAI Agent 在审核中的角色
 
 | 阶段 | Agent 行为 | 说明 |
 |-----|----------|------|
@@ -503,7 +503,7 @@ ALTER TABLE questions ADD COLUMN reviewed_at DATETIME;
 |-----|-----|-----|
 | 数据库表改动 | 0.5天 | - |
 | 审核 API 开发 | 2天 | 数据库改动 |
-| Hermes Agent 预审 Skill | 2天 | chemistry-exam |
+| ChemAI Agent 预审 Skill | 2天 | chemistry-exam |
 | 人工审核界面 | 1天 | 审核 API |
 
 ### Phase 1.3: 集成测试（约0.5周）
@@ -1534,7 +1534,7 @@ AI 生成题目
     ↓
 四维安全审核
     ↓
-进入审核队列 ← Hermes Agent 预审（可选）
+进入审核队列 ← ChemAI Agent 预审（可选）
     ↓
 人工审核（必须）
     ├─ 通过 → 布置作业/考试
@@ -1544,9 +1544,9 @@ AI 生成题目
 审核记录存档
 ```
 
-### 5. Hermes Agent 辅助审核
+### 5. ChemAI Agent 辅助审核
 
-在人工审核之前，Hermes Agent 可以进行预审，帮助老师快速定位可疑题目：
+在人工审核之前，ChemAI Agent 可以进行预审，帮助老师快速定位可疑题目：
 
 **预审任务**：
 1. 扫描所有生成题目，标记疑似问题
@@ -2099,7 +2099,7 @@ tools:
 
   exam_review_pre_scan:
     name: exam_review_pre_scan
-    description: Hermes Agent 预审扫描（标记可疑题目）
+    description: ChemAI Agent 预审扫描（标记可疑题目）
     parameters:
       type: object
       properties:
@@ -2174,7 +2174,7 @@ tools:
 # hermes-skills/chemistry-exam/engine/balance_checker.py
 """
 化学方程式配平检测引擎
-基于 ChemAI chemical_balance.py 封装，供 Hermes Skill 调用
+基于 ChemAI chemical_balance.py 封装，供 Chem Skill 调用
 """
 
 import re
@@ -2699,7 +2699,7 @@ class ExamHandler:
         questions: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
         """
-        Hermes Agent 预审扫描
+        ChemAI Agent 预审扫描
 
         对题目列表进行快速扫描，标记可疑题目
         """
@@ -2933,7 +2933,7 @@ async def exam_review_regenerate(
 
 ### 3-1.1 记忆系统概述
 
-Hermes Agent 的记忆系统是其核心能力之一，支持：
+ChemAI Agent 的记忆系统是其核心能力之一，支持：
 - **FTS5 Session Search** - 跨会话全文搜索
 - **LLM Summarization** - 自动摘要压缩
 - **Honcho User Modeling** - 用户画像建模
@@ -3003,7 +3003,7 @@ ChemAI 将利用这套记忆系统管理学生的学情历史，使 Agent 能够
 - 进步最快领域: {improved_area}
 - 作业完成率: {completion_rate}%
 
-## Hermes Agent 观察
+## ChemAI Agent 观察
 {agent_observations_from_conversations}
 
 ## 最近更新时间
@@ -3481,7 +3481,7 @@ class MemoryUpdater:
 
 ### 3-2.1 消息网关概述
 
-Hermes Agent 支持多种消息网关：
+ChemAI Agent 支持多种消息网关：
 - **Telegram** - 即时通讯
 - **Discord** - 社区/班级群
 - **Slack** - 企业协作
@@ -4449,7 +4449,7 @@ ALTER TABLE classes ADD COLUMN notification_config JSON;
 
 ### 4-1.1 什么是自改进循环
 
-自改进循环是让 Hermes Agent 能够从历史数据中学习，自动优化出题策略的机制：
+自改进循环是让 ChemAI Agent 能够从历史数据中学习，自动优化出题策略的机制：
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -4467,7 +4467,7 @@ ALTER TABLE classes ADD COLUMN notification_config JSON;
 │         │                                                       │
 │         ▼                                                       │
 │  ┌─────────────┐     ┌─────────────┐                           │
-│  │ 人工审核   │ ───► │ Hermes Agent│                           │
+│  │ 人工审核   │ ───► │ ChemAI Agent│                           │
 │  │ (必须)     │     │ 记录反馈    │                           │
 │  └──────┬──────┘     └─────────────┘                           │
 │         │                   │                                   │
@@ -6509,13 +6509,13 @@ MinerU（3.0.0）是一款高精度文档解析引擎，核心能力：
 | **PDF/DOCX/PPT 解析** | 版面分析、语义顺序还原 | 提取历年真题原题 |
 | **VLM + OCR 双引擎** | 109语言、扫描件、手写体 | 增强答题卡识别 |
 | **表格提取 → HTML** | 答题卡表格数据提取 | 批量答题数据处理 |
-| **MCP Server 原生集成** | 可作为 Agent Tool 直接调用 | 与 Hermes Agent 无缝集成 |
+| **MCP Server 原生集成** | 可作为 Agent Tool 直接调用 | 与 ChemAI Agent 无缝集成 |
 
 ### 5-1-3 整合架构
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                        Hermes Agent                               │
+│                        ChemAI Agent                               │
 │  ┌────────────────┐  ┌────────────────┐  ┌────────────────┐      │
 │  │ chemistry-     │  │ chemistry-     │  │ chemistry-     │      │
 │  │ diagnosis      │  │ exam           │  │ parser (NEW)   │      │
@@ -7073,7 +7073,7 @@ CREATE TABLE question_versions (
 
 ---
 
-## Phase 5-6: 与 Hermes Agent 集成
+## Phase 5-6: 与 ChemAI Agent 集成
 
 ### 5-6-1 Skill 间协作
 
@@ -7092,7 +7092,7 @@ chemistry-parser Skill
 ### 5-6-2 Tool 调用示例
 
 ```yaml
-# Hermes Skill 配置
+# Chem Skill 配置
 skills:
   - name: chemistry-exam
     tools:

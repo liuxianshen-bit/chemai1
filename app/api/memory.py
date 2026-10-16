@@ -45,7 +45,7 @@ async def memory_diagnosis_complete(request: DiagnosisCompleteRequest):
         project_root = Path(__file__).parent.parent.parent
         sys.path.insert(0, str(project_root))
 
-        from hermes_skills.chemistry_memory.handler import MemoryHandler
+        from chem_skills.chemistry_memory.handler import MemoryHandler
 
         handler = MemoryHandler()
 
@@ -89,7 +89,7 @@ async def get_student_memory(student_id: str):
         project_root = Path(__file__).parent.parent.parent
         sys.path.insert(0, str(project_root))
 
-        from hermes_skills.chemistry_memory.handler import MemoryHandler
+        from chem_skills.chemistry_memory.handler import MemoryHandler
 
         handler = MemoryHandler()
         result = handler.memory_student_get(student_id, memory_type="all")
@@ -111,7 +111,7 @@ async def get_memory_stats():
         project_root = Path(__file__).parent.parent.parent
         sys.path.insert(0, str(project_root))
 
-        from hermes_skills.chemistry_memory.handler import MemoryHandler
+        from chem_skills.chemistry_memory.handler import MemoryHandler
 
         handler = MemoryHandler()
         result = handler.memory_stats()

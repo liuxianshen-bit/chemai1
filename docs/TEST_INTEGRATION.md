@@ -1,4 +1,4 @@
-# ChemAI Hermes Agent 集成测试指南
+# ChemAI ChemAI Agent 集成测试指南
 
 > 本文档描述如何验证 Phase 1-3 的实施结果
 
@@ -15,7 +15,7 @@ python -m app.main
 # 预期输出: Uvicorn running on http://0.0.0.0:8001
 ```
 
-**终端 2: 启动 Hermes Agent API Server**
+**终端 2: 启动 ChemAI Agent API Server**
 ```bash
 cd D:\化学\hermes-agent-main
 python -m gateway.run --platform api_server
@@ -26,7 +26,7 @@ python -m gateway.run --platform api_server
 
 ## 测试步骤
 
-### Step 1: 验证 Hermes Agent 启动成功
+### Step 1: 验证 ChemAI Agent 启动成功
 
 ```bash
 curl http://localhost:8642/health
@@ -77,13 +77,13 @@ curl -X POST http://localhost:8642/v1/chat/completions \
 
 ### Step 3: 验证 chemistry_tools.py 导入
 
-在 **终端 2** (Hermes Agent) 中查看启动日志，应该看到:
+在 **终端 2** (ChemAI Agent) 中查看启动日志，应该看到:
 
 ```
-Registered 22 chemistry tools to Hermes Agent
+Registered 22 chemistry tools to ChemAI Agent
 ```
 
-如果看到警告信息如 `Could not import hermes_skills`，检查:
+如果看到警告信息如 `Could not import chem_skills`，检查:
 1. `D:\化学\chemai-backend` 是否存在
 2. Python 路径是否正确
 
@@ -157,18 +157,18 @@ npm run dev
 
 ## 常见问题排查
 
-### Q1: Hermes Agent 启动失败，提示 "aiohttp not installed"
+### Q1: ChemAI Agent 启动失败，提示 "aiohttp not installed"
 
 **解决**:
 ```bash
 pip install aiohttp
 ```
 
-### Q2: hermes_skills 导入失败
+### Q2: chem_skills 导入失败
 
 **检查**:
 1. `D:\化学\chemai-backend` 目录存在
-2. `D:\化学\chemai-backend\hermes_skills` 目录存在
+2. `D:\化学\chemai-backend\chem_skills` 目录存在
 3. Python 路径正确
 
 **解决**: 在 `chemistry_tools.py` 中已添加路径:
@@ -208,12 +208,12 @@ sys.path.insert(0, r"D:\化学\hermes-agent-main")
 # 测试导入
 print("Testing imports...")
 try:
-    from hermes_skills.chemistry_parser.handler import ParserHandler
-    from hermes_skills.chemistry_exam.handler import ExamHandler
-    from hermes_skills.chemistry_diagnosis.handler import DiagnosisHandler
-    print("✓ hermes_skills imported successfully")
+    from chem_skills.chemistry_parser.handler import ParserHandler
+    from chem_skills.chemistry_exam.handler import ExamHandler
+    from chem_skills.chemistry_diagnosis.handler import DiagnosisHandler
+    print("✓ chem_skills imported successfully")
 except ImportError as e:
-    print(f"✗ hermes_skills import failed: {e}")
+    print(f"✗ chem_skills import failed: {e}")
 
 # 测试 chemistry_tools
 try:
@@ -243,7 +243,7 @@ python test_chemistry_tools.py
 
 ## 验证清单
 
-- [ ] Step 1: Hermes Agent 健康检查通过
+- [ ] Step 1: ChemAI Agent 健康检查通过
 - [ ] Step 2: /v1/models 返回成功
 - [ ] Step 3: chemistry_tools.py 导入成功，日志显示 "Registered 22 chemistry tools"
 - [ ] Step 4: SSE 流式输出正常
@@ -256,9 +256,9 @@ python test_chemistry_tools.py
 
 ### 成功的标志
 
-1. **Hermes Agent 日志**:
+1. **ChemAI Agent 日志**:
    ```
-   Registered 22 chemistry tools to Hermes Agent
+   Registered 22 chemistry tools to ChemAI Agent
    API server listening on http://127.0.0.1:8642
    ```
 
@@ -276,7 +276,7 @@ python test_chemistry_tools.py
 ## 联系支持
 
 如果遇到问题，请提供:
-1. Hermes Agent 启动日志
+1. ChemAI Agent 启动日志
 2. curl 测试的完整输出
 3. 浏览器 Console 的错误信息
 4. Network 标签中失败的请求详情

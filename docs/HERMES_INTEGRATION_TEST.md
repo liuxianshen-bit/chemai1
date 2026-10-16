@@ -1,4 +1,4 @@
-# ChemAI × Hermes Agent 集成测试指南
+# ChemAI × ChemAI Agent 集成测试指南
 
 ## 测试前准备
 
@@ -26,7 +26,7 @@ curl http://localhost:8001/api/mcp/tools
 }
 ```
 
-### 3. 启动 Hermes Agent
+### 3. 启动 ChemAI Agent
 
 ```bash
 hermes

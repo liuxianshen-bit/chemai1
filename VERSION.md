@@ -127,7 +127,7 @@ chemai-backend/
 │   ├── knowledge_graph/  # 知识图谱 (50+知识点)
 │   └── sample_answer_sheets/  # 示例答题卡 (128文件)
 ├── frontend/          # 前端资源
-├── hermes_skills/     # Agent技能
+├── chem_skills/     # Agent技能
 └── docs/              # 文档
 ```
 

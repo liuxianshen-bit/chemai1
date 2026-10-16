@@ -280,7 +280,7 @@ CLASS_2_STUDENTS = [
 # 67个学生的真实姓名（常见中文姓名）
 STUDENT_NAMES = [
     # 高一(1)班34人
-    "李雨萱", "王思远", "张梦琪", "刘子轩", "陈浩然", "杨静怡", "黄志强", "周吴昊",
+    "陈思雨", "王思远", "张梦琪", "刘子轩", "陈浩然", "杨静怡", "黄志强", "周吴昊",
     "吴林峰", "郑晓峰", "王秀英", "李俊杰", "张雪梅", "刘佳伟", "陈思思", "杨浩然",
     "黄雨彤", "周涛", "吴敏", "郑建华", "王磊", "李婷", "张勇", "刘芳", "陈志强",
     "杨超", "黄丽", "周伟", "吴艳", "郑云", "王强", "李娟", "张强", "刘军",
@@ -382,7 +382,7 @@ def create_demo_parents(db):
     # 2. 创建家长账号
     parent_account = Account(
         account_id="acc_parent_demo",
-        username="13800138000",
+        username="lgh",
         password_hash=hash_password("123456"),
         role="parent",
         parent_id=parent.parent_id,
@@ -390,10 +390,10 @@ def create_demo_parents(db):
     )
     db.add(parent_account)
 
-    # 3. 绑定到学生 202610101（李雨萱）
+    # 3. 绑定到学生 202610201（李雨萱）
     binding = StudentParentBinding(
-        binding_id=f"bind_{parent.parent_id}_202610101",
-        student_id="202610101",
+        binding_id=f"bind_{parent.parent_id}_202610201",
+        student_id="202610201",
         parent_id=parent.parent_id,
         relation="父亲",
         status="active",
@@ -402,7 +402,7 @@ def create_demo_parents(db):
     db.add(binding)
 
     db.commit()
-    print(f"已创建家长账号: 13800138000 / 123456 (李国华 → 李雨萱)")
+    print(f"已创建家长账号: lgh / 123456 (李国华 → 李雨萱)")
 
 
 def create_demo_exam_data(db):

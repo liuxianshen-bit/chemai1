@@ -8,7 +8,7 @@
 | 评测对象 | ChemAI Agent (智辅化学 Agent) |
 | 评测依据 | Product_Specification_v2.0.md |
 | 评测日期 | 2026-04-14 |
-| 核心定位 | 基于 Hermes Agent + MinerU 的高中化学智能教学闭环 |
+| 核心定位 | 基于 ChemAI Agent + MinerU 的高中化学智能教学闭环 |
 
 ---
 
@@ -21,7 +21,7 @@
 5. [障碍诊断评测集](#5-障碍诊断评测集)
 6. [历年真题关联评测集](#6-历年真题关联评测集)
 7. [自改进系统评测集](#7-自改进系统评测集)
-8. [Hermes Skills 专项评测](#8-hermes-skills-专项评测)
+8. [Chem Skills 专项评测](#8-hermes-skills-专项评测)
 9. [评测执行方案](#9-评测执行方案)
 10. [验收标准汇总](#10-验收标准汇总)
 
@@ -43,7 +43,7 @@
 | **F7** | 学情面板 | P2 | Agent趋势预测 + 预警提醒 |
 | **P1** | 消息推送 | P1 | 多端自动推送 |
 | **P2** | 自改进循环 | P1 | 数据驱动学习 |
-| **Agent** | Hermes Skills | P0 | 6大Skill协同工作 |
+| **Agent** | Chem Skills | P0 | 6大Skill协同工作 |
 
 ### 1.2 评测类型
 
@@ -571,7 +571,7 @@
 
 ---
 
-## 8. Hermes Skills 专项评测
+## 8. Chem Skills 专项评测
 
 ### 8.1 chemistry-exam Skill 评测
 
@@ -748,7 +748,7 @@ class TestChemistryImprovement:
 2. ✅ LLM核心评测指标全部达标
 3. ✅ 化学专业评测指标全部达标
 4. ✅ 性能评测指标全部达标
-5. ✅ Hermes Skills 评测全部通过
+5. ✅ Chem Skills 评测全部通过
 6. ✅ 无阻断级安全问题
 
 **未通过处理：**
@@ -779,8 +779,8 @@ class TestChemistryImprovement:
 | P95 | 95%分位数，表示95%的请求响应时间低于此值 |
 | TP/FP/FN/TN | 真阳性/假阳性/假阴性/真阴性 |
 | RAG | Retrieval Augmented Generation，检索增强生成 |
-| Skill | Hermes Agent 的能力模块 |
-| Hermes Agent | NousResearch 开源的 AI Agent 框架 |
+| Skill | ChemAI Agent 的能力模块 |
+| ChemAI Agent | NousResearch 开源的 AI Agent 框架 |
 | MinerU | 高精度文档解析引擎 |
 | LaTeX | 一种排版系统，用于标准化化学式表达 |
 

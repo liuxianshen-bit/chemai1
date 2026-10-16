@@ -37,10 +37,10 @@
 
   // ─── 历史对话管理 ───
   function getConversations() {
-    try { return JSON.parse(localStorage.getItem('chemai_convs') || '[]') } catch(e) { return [] }
+    try { return JSON.parse(sessionStorage.getItem('chemai_convs') || '[]') } catch(e) { return [] }
   }
-  function saveConversations(convs) { localStorage.setItem('chemai_convs', JSON.stringify(convs)) }
-  function newConvId() { return 'c' + Date.now() }
+  function saveConversations(convs) { sessionStorage.setItem('chemai_convs', JSON.stringify(convs)) }
+  function newConvId() { return 't-' + Date.now() }
 
   function renderHistory() {
     // Now rendered in the sidebar via refreshSidebarConvs()
@@ -56,19 +56,53 @@
   }
 
   window.loadConversation = function(id) {
+    currentConvId = id
     var convs = getConversations(); var c = convs.find(function(x){return x.id===id})
-    if (!c) return
-    currentConvId = id; history = c.messages || []
+    if (!c) { history = []; renderEmptyChat(); renderHistory(); return }
+
+    // 优先从服务端加载, 有数据则直接展示
+    if (c._has_server) {
+      loadHistoryFromServer(id)
+      renderHistory()
+      return
+    }
+
+    // sessionStorage 兜底
     var chat = document.getElementById('chat-messages')
-    chat.innerHTML = '<div class="msg-ai"><div class="avatar">CHEMAI · 教研助手</div><p>你好，老师。</p><p style="font-size:13px;color:#555;margin-top:4px;line-height:1.7">我能帮你：配平化学方程式 · 生成练习题 · 诊断学习障碍 · 搜索历年真题 · 模拟化学实验 · 生成学习报告</p></div>'
+    history = c.messages || []
+    if (!history.length) { renderEmptyChat(); renderHistory(); return }
+    chat.innerHTML = ''
     history.forEach(function(m){
       var el = document.createElement('div')
       el.className = m.role === 'user' ? 'msg-user' : 'msg-ai'
       if (m.role === 'user') { el.textContent = m.content }
-      else { el.innerHTML = '<div class="avatar">CHEMAI · 教研助手</div>' + renderMarkdown(m.content) }
+      else { el.innerHTML = '<div class="avatar">CHEMAI · 教研助手</div>' + renderChemMD(m.content) }
       chat.appendChild(el)
     })
     renderHistory()
+  }
+
+  // ── Approval card ──
+  function addApprovalCard(message, callback) {
+    var chat = document.getElementById('chat-messages') || document.getElementById('chatBody')
+    if (!chat) return
+    var card = document.createElement('div')
+    card.className = 'msg-system'
+    card.style.cssText = 'background:#fef9f0;border:1px solid #f0d89c;border-radius:12px;padding:14px 16px;margin:8px 0;text-align:center;max-width:90%;align-self:center'
+    card.innerHTML = '<div style="font-size:14px;color:#8a6d3b;margin-bottom:10px">⚠ ' + escHtml(message) + '</div>' +
+      '<div style="display:flex;gap:8px;justify-content:center">' +
+        '<button class="approve-yes" style="padding:8px 20px;background:#2d5a4b;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px">确认</button>' +
+        '<button class="approve-no" style="padding:8px 20px;background:#f5f0e8;color:#8a6d3b;border:1px solid #d5c89c;border-radius:6px;cursor:pointer;font-size:14px">取消</button>' +
+      '</div>'
+    chat.appendChild(card)
+    chat.scrollTop = chat.scrollHeight
+    card.querySelector('.approve-yes').onclick = function() { card.remove(); callback(true) }
+    card.querySelector('.approve-no').onclick = function() { card.remove(); callback(false) }
+  }
+
+  function renderEmptyChat() {
+    var chat = document.getElementById('chat-messages')
+    chat.innerHTML = '<div class="msg-ai"><div class="avatar">CHEMAI · 教研助手</div><p>你好，老师。</p><p style="font-size:13px;color:#555;margin-top:4px;line-height:1.7">我能帮你：配平化学方程式 · 生成练习题 · 诊断学习障碍 · 搜索历年真题 · 模拟化学实验 · 生成学习报告</p></div>'
   }
 
   window.deleteConversation = function(id) {
@@ -77,17 +111,97 @@
     if (currentConvId === id) { currentConvId = null; history = [] }
     renderHistory()
     refreshSidebarConvs()
+    // 同步删除后端数据
+    fetch('/api/agent/chat/conversations/' + id, { method: 'DELETE' }).catch(function(){})
+  }
+
+  // ── 从服务端同步对话列表 (checkpointer 是数据源, sessionStorage 是缓存) ──
+  function syncFromServer() {
+    fetch('/api/agent/chat/conversations?prefix=t-,c')
+      .then(function(r) { return r.json() })
+      .then(function(d) {
+        if (!d.conversations || !d.conversations.length) return
+        var localConvs = getConversations()
+        var merged = {}
+        // 先加载本地 (sessionStorage)
+        localConvs.forEach(function(c) { merged[c.id] = c })
+        // 服务端数据覆盖 (source of truth)
+        d.conversations.forEach(function(svc) {
+          var id = svc.thread_id
+          merged[id] = merged[id] || {}
+          merged[id].id = id
+          merged[id].title = svc.title || merged[id].title || '新对话'
+          merged[id].server_updated = svc.last_at
+          merged[id].message_count = svc.message_count
+          // 用服务端时间戳保持顺序稳定，避免全刷新在同一时刻导致乱序
+          merged[id].updated = merged[id].updated || ((svc.last_at ? new Date(svc.last_at).getTime() : 0) || Date.now())
+          // 标记有服务端数据
+          merged[id]._has_server = true
+        })
+        // 写回 sessionStorage cache
+        var mergedList = Object.values(merged)
+        if (mergedList.length > 0) {
+          saveConversations(mergedList)
+          refreshSidebarConvs()
+          // 自动加载对话（没有选中对话或聊天区为空时触发）
+          if (!currentConvId || !history.length) {
+            mergedList.sort(function(a, b) { return (b.updated || 0) - (a.updated || 0) })
+            var best = mergedList.find(function(c) { return c.messages && c.messages.length > 0 }) || mergedList[0]
+            if (best) { currentConvId = best.id; sessionStorage.setItem('chemai_active_cid', best.id); loadConversation(best.id) }
+          }
+        }
+      })
+      .catch(function() { /* 服务端不可用时用 sessionStorage 兜底 */ })
+  }
+
+  // ── 从服务端加载对话消息 ──
+  function loadHistoryFromServer(threadId) {
+    fetch('/api/agent/chat/history/' + threadId)
+      .then(function(r) { return r.json() })
+      .then(function(d) {
+        if (!d.messages || !d.messages.length) return
+        var msgs = []
+        d.messages.forEach(function(m) {
+          if (m.role === 'human' || m.role === 'user') {
+            msgs.push({ role: 'user', content: m.content })
+          } else if (m.role === 'assistant' || m.role === 'ai') {
+            msgs.push({ role: 'assistant', content: m.content })
+          }
+        })
+        if (msgs.length > 0) {
+          history = msgs
+          // 渲染消息
+          var chat = document.getElementById('chat-messages')
+          chat.innerHTML = ''
+          msgs.forEach(function(m) {
+            var el = document.createElement('div')
+            el.className = m.role === 'user' ? 'msg-user' : 'msg-ai'
+            if (m.role === 'user') { el.textContent = m.content }
+            else { el.innerHTML = '<div class="avatar">CHEMAI · 教研助手</div>' + renderChemMD(m.content) }
+            chat.appendChild(el)
+          })
+          // 更新 sessionStorage 缓存
+          var convs = getConversations()
+          var c = convs.find(function(x) { return x.id === threadId })
+          if (c) { c.messages = msgs; c._has_server = true; saveConversations(convs) }
+        }
+      })
+      .catch(function() {})
   }
 
   function refreshSidebarConvs() {
     var el = document.getElementById('conv-list')
-    if (!el) return
+    if (!el) {
+      if (typeof renderSidebar === 'function') { renderSidebar('chat'); el = document.getElementById('conv-list') }
+      if (!el) return
+    }
     var convs = getConversations()
     convs.sort(function(a, b) { return (b.updated || 0) - (a.updated || 0) })
     var html = ''
     convs.forEach(function(c) {
       html += '<div class="history-item' + (c.id === currentConvId ? ' active' : '') + '" onclick="loadConversation(\'' + c.id + '\')">' +
         '<span class="title">' + (c.title || '新对话') + '</span>' +
+        (c._has_server ? '<span style="font-size:10px;color:#3d8b5e;margin-left:4px">☁</span>' : '') +
         '<button class="del" onclick="event.stopPropagation();deleteConversation(\'' + c.id + '\')" title="删除">×</button></div>'
     })
     el.innerHTML = html || '<div style="padding:20px 12px;text-align:center;color:#999;font-size:13px">暂无对话记录</div>'
@@ -370,6 +484,26 @@
 
         switch (evt.type) {
           case 'phase':
+            if (evt.phase === 'awaiting_approval') {
+              var thinkEl = bubble.querySelector('.think-status');
+              if (thinkEl) thinkEl.remove();
+              var msg = evt.message || '请确认操作'
+              addApprovalCard(msg, function(approved) {
+                isSending = true
+                fetch('/api/agent/chat/langgraph/resume', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ persona: 'teacher', message: approved ? 'approved' : 'cancelled', provider: 'deepseek', conversation_id: currentConvId, version: 'v2' })
+                }).then(function(resp) {
+                  if (!resp.ok) throw new Error('HTTP ' + resp.status)
+                  return streamResponse(resp, bubble)
+                }).catch(function(e) {
+                  ChemAI.stopTimer()
+                  bubble.insertAdjacentHTML('beforeend', '<div style="color:#b43c28;font-size:13px;padding:8px 0">操作失败: ' + escHtml(e.message) + '</div>')
+                  resetSendState()
+                })
+              })
+            }
             var st = bubble.querySelector('.think-status')
             var phaseLabels = {thinking:'分析中...', executing:'执行中...', reply:'回复中...', planning:'生成计划...'}
             if (st) st.innerHTML = '<span class="dot"></span>' + (phaseLabels[evt.phase] || evt.phase)
@@ -493,17 +627,18 @@
             }
             if (evt.component === 'exam-workbench') renderExamWorkbench(evt.params || {}, bubble)
             else if (evt.component === 'diagnosis') renderDiagnosis(evt.params || {}, bubble)
+            else if (evt.component === 'learning_plan') renderLearningPlanPanel(evt.params || {}, bubble)
             else if (evt.component === 'student-list') renderStudentList(evt.params || {}, bubble)
             break
 
           case 'error':
-            var errHtml = '<div style="color:#b43c28;padding:8px 0;font-size:13px">' +
-              '<span style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:#999">' + (evt.code || 'ERROR') + '</span><br>' +
+            var errHtml = '<div style="color:#b43c28;padding:8px 0;font-size:13px;border-top:1px solid #fecaca;margin-top:8px">' +
               escHtml(evt.message || '未知错误') + '</div>'
             if (evt.recoverable) {
               errHtml += '<button class="btn btn-sm" onclick="ChemAI.retryLastMessage()" style="margin-top:6px;font-size:12px">重试</button>'
             }
-            bubble.innerHTML = errHtml
+            bubble.insertAdjacentHTML('beforeend', errHtml)
+            ChemAI.stopTimer()
             resetSendState()
             break
         }
@@ -515,7 +650,7 @@
     if (thinkEl) thinkEl.remove()
     var hasPanel = bubble.querySelector('.inline-exam-panel, .inline-diag-panel')
     if (reply && !hasPanel) {
-      bubble.innerHTML = renderMarkdown(reply)
+      bubble.innerHTML = renderChemMD(reply)
     }
     // Inject collected exam images — match by q_index to question position
     if (_pendingImages && _pendingImages.length > 0) {
@@ -523,32 +658,63 @@
         var urls = evt.urls || []
         var qIdx = evt.q_index || 0
         if (urls.length > 0) {
-          // Find the Nth question heading in the rendered bubble (LLM may use h3/strong/p)
           var qLabel = '第' + (qIdx + 1) + '题'
-          var allEls = bubble.querySelectorAll('h1, h2, h3, h4, h5, h6, strong, b, p')
-          var targetEl = null
+          var nextLabel = '第' + (qIdx + 2) + '题'
+          var allEls = bubble.querySelectorAll('*')
+          var targetEl = null, nextEl = null
+
+          // Pass 1: find question heading by exact label match
           for (var h = 0; h < allEls.length; h++) {
-            var txt = allEls[h].textContent || ''
-            if (txt.indexOf(qLabel) !== -1) {
-              targetEl = allEls[h]
-              break
+            var el = allEls[h]
+            // Only check leaf-level elements (avoid matching whole bubble)
+            if (el.children.length > 0) continue
+            var txt = el.textContent || ''
+            if (!targetEl && txt.indexOf(qLabel) !== -1) {
+              targetEl = el.parentElement  // insert after the line containing the label
+            }
+            if (!nextEl && txt.indexOf(nextLabel) !== -1) {
+              nextEl = el.parentElement
+            }
+            if (targetEl) break  // found our question, stop
+          }
+
+          // Pass 2: broader search — match by question text anywhere
+          if (!targetEl) {
+            for (var j = 0; j < allEls.length; j++) {
+              var ej = allEls[j]
+              if (ej.children.length > 0) continue
+              if ((ej.textContent||'').indexOf(qLabel) !== -1) {
+                targetEl = ej; break
+              }
             }
           }
+
+          // Image container
           var container = document.createElement('div')
-          container.style.cssText = 'margin:8px 0;display:flex;flex-wrap:wrap;gap:8px'
+          container.style.cssText = 'margin:6px 0;display:flex;flex-wrap:wrap;gap:8px'
           urls.forEach(function(url) {
             var img = document.createElement('img')
             img.src = url
-            img.style.cssText = 'max-width:100%;max-height:400px;border:1px solid #ddd;border-radius:6px;cursor:pointer;background:#fff'
+            img.style.cssText = 'max-width:100%;max-height:400px;border:1px solid #e5e0d8;border-radius:8px;cursor:pointer;background:#fff'
             img.title = evt.title || ''
             img.onclick = function() { window.open(url, '_blank') }
+            img.onerror = function() { this.style.display = 'none' }
             container.appendChild(img)
           })
-          // Insert after the question heading element
+
+          // Insert at best position
           if (targetEl) {
             targetEl.insertAdjacentElement('afterend', container)
+          } else if (nextEl) {
+            nextEl.insertAdjacentElement('beforebegin', container)
           } else {
-            bubble.appendChild(container)
+            // Last resort: insert before the closing hint paragraph
+            var hints = bubble.querySelectorAll('blockquote')
+            if (hints.length > 0) {
+              hints[hints.length-1].insertAdjacentElement('beforebegin', container)
+            } else {
+              bubble.appendChild(container)
+            }
           }
         }
       })
@@ -572,9 +738,11 @@
         var nav = JSON.parse(navigateTo)
         if (nav.page) {
           if (currentConvId) sessionStorage.setItem('chemai_active_cid', currentConvId)
-          setTimeout(function() {
-            window.location.href = '/pages/' + nav.page + '.html'
-          }, 500)
+          var url = '/pages/' + nav.page + '.html'
+          if (nav.params && Object.keys(nav.params).length) {
+            url += '?' + Object.keys(nav.params).map(function(k) { return encodeURIComponent(k) + '=' + encodeURIComponent(nav.params[k]) }).join('&')
+          }
+          setTimeout(function() { window.location.href = url }, 500)
         }
       } catch(e) {}
     }
@@ -858,189 +1026,9 @@
     if (stBar) setTimeout(function() { stBar.style.display = 'none' }, 2000)
   }
 
-  // ─── Markdown 渲染（自包含解析器 + KaTeX） ───
-  var _latexBlocks = []
+  // KaTeX + Markdown rendering provided by shared /js/chem-markdown.js (renderChemMD)
 
-  function renderMarkdown(text) {
-    if (!text) return ''
-    _latexBlocks = []
-
-    // Step 0: protect raw HTML tags (img, br) from escaping
-    var _htmlBlocks = []
-    var safe = text
-      .replace(/<img\b[^>]*\/?>/gi, function(m) { _htmlBlocks.push(m); return '\x00H' + (_htmlBlocks.length-1) + '\x00' })
-      .replace(/<br\s*\/?>/gi, function(m) { _htmlBlocks.push(m); return '\x00H' + (_htmlBlocks.length-1) + '\x00' })
-
-    // Step 1: protect LaTeX / chemistry before parsing
-    safe = safe
-      .replace(/\$\$([\s\S]*?)\$\$/g, function(m, f) { _latexBlocks.push({t:'d',f:f}); return '\x00L' + (_latexBlocks.length-1) + '\x00' })
-      .replace(/\\\[([\s\S]*?)\\\]/g, function(m, f) { _latexBlocks.push({t:'d',f:f}); return '\x00L' + (_latexBlocks.length-1) + '\x00' })
-      .replace(/\\\(([\s\S]*?)\\\)/g, function(m, f) { _latexBlocks.push({t:'i',f:f}); return '\x00l' + (_latexBlocks.length-1) + '\x00' })
-      .replace(/\$([^$]+?)\$/g, function(m, f) { _latexBlocks.push({t:'i',f:f}); return '\x00l' + (_latexBlocks.length-1) + '\x00' })
-      .replace(/\\ce\{([^}]+)\}/g, function(m, f) { _latexBlocks.push({t:'c',f:f}); return '\x00c' + (_latexBlocks.length-1) + '\x00' })
-
-    // Step 2: line-by-line parser: tables first, then other elements
-    var lines = safe.split('\n')
-    var html = '', i = 0
-    while (i < lines.length) {
-      var line = lines[i], trimmed = line.trim()
-
-      // Skip empty
-      if (!trimmed) { i++; continue }
-
-      // Table: if current line is |...| and next line is separator |---|
-      if (/^\|.*\|$/.test(trimmed)) {
-        var next = i + 1 < lines.length ? lines[i + 1].trim() : ''
-        if (/^\|[\s\-:|]+\|$/.test(next)) {
-          html += parseTable(lines, i)
-          while (i < lines.length && lines[i].trim() && /^\|.*\|$/.test(lines[i].trim())) i++
-          continue
-        }
-      }
-
-      // Fenced code block ```
-      if (/^```/.test(trimmed)) {
-        html += '<pre><code>'
-        i++
-        while (i < lines.length && !/^```/.test(lines[i].trim())) {
-          html += escHtml(lines[i]) + '\n'
-          i++
-        }
-        html += '</code></pre>'
-        i++
-        continue
-      }
-
-      // Heading
-      var hm = trimmed.match(/^(#{1,6})\s+(.+)$/)
-      if (hm) {
-        var lvl = hm[1].length
-        html += '<h' + lvl + '>' + renderInline(hm[2]) + '</h' + lvl + '>'
-        i++; continue
-      }
-
-      // Horizontal rule
-      if (/^(---|\*\*\*|___)\s*$/.test(trimmed)) {
-        html += '<hr>'
-        i++; continue
-      }
-
-      // Blockquote
-      if (trimmed.startsWith('> ')) {
-        html += '<blockquote><p>' + renderInline(trimmed.slice(2)) + '</p></blockquote>'
-        i++; continue
-      }
-
-      // Unordered list — group adjacent
-      if (/^[\-\*\+]\s+/.test(trimmed)) {
-        html += '<ul>'
-        while (i < lines.length && /^[\-\*\+]\s+/.test(lines[i].trim())) {
-          html += '<li>' + renderInline(lines[i].trim().replace(/^[\-\*\+]\s+/, '')) + '</li>'
-          i++
-        }
-        html += '</ul>'
-        continue
-      }
-
-      // Ordered list — group adjacent
-      if (/^\d+\.\s+/.test(trimmed)) {
-        html += '<ol>'
-        while (i < lines.length && /^\d+\.\s+/.test(lines[i].trim())) {
-          html += '<li>' + renderInline(lines[i].trim().replace(/^\d+\.\s+/, '')) + '</li>'
-          i++
-        }
-        html += '</ol>'
-        continue
-      }
-
-      // Paragraph
-      html += '<p>' + renderInline(trimmed) + '</p>'
-      i++
-    }
-
-    // Step 3: restore KaTeX placeholders
-    if (typeof katex !== 'undefined') {
-      html = html.replace(/\x00L(\d+)\x00/g, function(m, idx) {
-        var b = _latexBlocks[parseInt(idx)]
-        try { return katex.renderToString(b.f, {throwOnError:false, displayMode:true, trust:true, strict:false}) }
-        catch(e) { return '<code>' + escHtml(b.f) + '</code>' }
-      })
-      html = html.replace(/\x00l(\d+)\x00/g, function(m, idx) {
-        var b = _latexBlocks[parseInt(idx)]
-        try { return katex.renderToString(b.f, {throwOnError:false, displayMode:false, trust:true, strict:false}) }
-        catch(e) { return '<code>' + escHtml(b.f) + '</code>' }
-      })
-      html = html.replace(/\x00c(\d+)\x00/g, function(m, idx) {
-        var b = _latexBlocks[parseInt(idx)]
-        try { return katex.renderToString('\\ce{' + b.f + '}', {throwOnError:false, displayMode:false, trust:true, strict:false}) }
-        catch(e) { return '<code>\\ce{' + escHtml(b.f) + '}</code>' }
-      })
-    } else {
-      html = html.replace(/\x00[Ll](\d+)\x00/g, function(m, i) { return '<code>' + escHtml(_latexBlocks[parseInt(i)].f) + '</code>' })
-      html = html.replace(/\x00c(\d+)\x00/g, function(m, i) { return '<code>\\ce{' + escHtml(_latexBlocks[parseInt(i)].f) + '}</code>' })
-    }
-
-    // Restore protected HTML blocks (img, br)
-    html = html.replace(/\x00H(\d+)\x00/g, function(m, idx) { return _htmlBlocks[parseInt(idx)] })
-
-    // Step 4: auto-detect chemical equations in text nodes
-    if (typeof katex !== 'undefined') {
-      html = html.replace(/>([^<]+)</g, function(m, text) {
-        return '>' + text.replace(/([A-Z][a-z]?\d*(?:[+\-]\d*)?(?:\s*[→=⇌＋+]\s*[A-Z][a-z]?\d*(?:[+\-]\d*)?)+)/g, function(eq) {
-          try {
-            var fixed = eq.replace(/=/g, '=').replace(/→/g, '->').replace(/⇌/g, '<=>')
-            return katex.renderToString('\\ce{' + fixed + '}', {throwOnError:false, trust:true, strict:false})
-          } catch(e) { return '<code>' + escHtml(eq) + '</code>' }
-        }) + '<'
-      })
-    }
-
-    return html
-  }
-
-  // ─── Table parser ───
-  function parseTable(lines, startIdx) {
-    var headerLine = lines[startIdx].trim()
-    // Remove leading/trailing |, split by |
-    var headers = splitTableRow(headerLine)
-    var html = '<table><thead><tr>'
-    for (var h = 0; h < headers.length; h++) {
-      html += '<th>' + renderInline(headers[h].trim()) + '</th>'
-    }
-    html += '</tr></thead><tbody>'
-    // Skip separator line
-    var i = startIdx + 2
-    while (i < lines.length && /^\|.*\|$/.test(lines[i].trim())) {
-      var cells = splitTableRow(lines[i].trim())
-      html += '<tr>'
-      for (var c = 0; c < Math.min(cells.length, headers.length); c++) {
-        html += '<td>' + renderInline(cells[c].trim()) + '</td>'
-      }
-      html += '</tr>'
-      i++
-    }
-    html += '</tbody></table>'
-    return html
-  }
-
-  function splitTableRow(line) {
-    // "| a | b | c |" → ["a", "b", "c"]
-    var parts = line.split('|')
-    // First and last may be empty (leading/trailing |)
-    if (parts[0].trim() === '') parts.shift()
-    if (parts.length && parts[parts.length-1].trim() === '') parts.pop()
-    return parts
-  }
-
-  // ─── Inline renderer (bold/italic/code) ───
-  function renderInline(text) {
-    return escHtml(text)
-      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*(.+?)\*/g, '<em>$1</em>')
-      .replace(/`([^`]+)`/g, '<code>$1</code>')
-  }
-
-  // KaTeX + Markdown 渲染
+  // KaTeX + Markdown 渲染（marked.js 路径）
   window.renderChemistry = function(text) {
     if (!text) return ''
     if (typeof katex === 'undefined' || typeof marked === 'undefined') return escHtml(text)
@@ -1356,27 +1344,214 @@
 
   // ─── Inline Diagnosis Panel ───
   function renderDiagnosis(params, bubble) {
-    var h='<div class="inline-diag-panel" style="border:1px solid #eee;border-radius:8px;padding:14px;margin:8px 0">'
-    h+='<div style="font-weight:700;margin-bottom:10px;font-size:15px">学情诊断: '+escHtml(params.student_name||params.student_id||'')+'</div>'
-    if(params.dominant_barrier){h+='<div style="margin-bottom:8px;font-size:13px">主导障碍: <b>'+escHtml(params.dominant_barrier)+'</b> · 完成练习: '+(params.exercises_completed||0)+'</div>'}
-    var barrier=params.barrier_distribution||{}
-    if(Object.keys(barrier).length){
-      h+='<div class="inline-diag-chart" style="width:100%;height:200px;margin:8px 0"></div>'
-      h+='<div class="inline-diag-fallback" style="display:none">'
-      Object.keys(barrier).forEach(function(k){h+='<div style="margin:4px 0;font-size:13px">'+escHtml(k)+': <b>'+Math.round((barrier[k]||0)*100)+'%</b></div>'})
-      h+='</div>'
-    }
-    h+='<div style="margin-top:8px"><button onclick="ChemAI._diagToExam(this)" class="inline-exam-btn primary">针对障碍出题练习</button></div></div>'
-    bubble.insertAdjacentHTML('beforeend',h)
+    console.log('[DIAG] renderDiagnosis params keys:', Object.keys(params))
+    console.log('[DIAG] total_answers:', params.total_answers, 'accuracy:', params.accuracy, 'wkps:', params.weak_knowledge_points, 'trend:', params.score_trend)
+    var barrierLabels = {concept:'概念理解', reading:'审题能力', expression:'规范表述'}
+    var barrierColors = {concept:'#b43c28', reading:'#d97706', expression:'#2c6e49'}
 
-    // ECharts
-    var chartDiv=bubble.querySelector('.inline-diag-chart:last-child')
-    if(chartDiv&&typeof echarts!=='undefined'){
-      try{var chart=echarts.init(chartDiv);chart.setOption({tooltip:{},xAxis:{type:'category',data:Object.keys(barrier)},yAxis:{type:'value',max:1},series:[{type:'bar',data:Object.values(barrier),itemStyle:{color:'#b43c28'}}]})}catch(e){chartDiv.style.display='none';bubble.querySelector('.inline-diag-fallback:last-child').style.display='block'}
-    }else if(chartDiv){chartDiv.style.display='none';bubble.querySelector('.inline-diag-fallback:last-child').style.display='block'}
+    var barrier = params.barrier_distribution || {}
+    var vals = Object.values(barrier)
+    var isRawCount = vals.length > 0 && Math.max.apply(null, vals) > 1
+
+    var h = '<style>'+
+      '.inline-exam-btn{display:inline-block;padding:6px 14px;border:1px solid #ddd;border-radius:6px;font-size:12px;cursor:pointer;background:#fff;color:#555;transition:all .15s;margin:2px}'+
+      '.inline-exam-btn:hover{background:#f5f5f5;border-color:#bbb}'+
+      '.inline-exam-btn.primary{background:#b43c28;color:#fff;border-color:#b43c28;font-weight:600}'+
+      '.inline-exam-btn.primary:hover{background:#9a3522}'+
+      '.diag-bar-wrap{display:flex;align-items:center;margin:6px 0}'+
+      '.diag-bar-label{width:72px;font-size:13px;color:#555;flex-shrink:0}'+
+      '.diag-bar-track{flex:1;height:18px;background:#f0f0f0;border-radius:4px;overflow:hidden;margin:0 8px}'+
+      '.diag-bar-fill{height:100%;border-radius:4px;transition:width .4s ease}'+
+      '.diag-bar-val{font-size:13px;font-weight:700;min-width:44px;text-align:right}'+
+      '</style>'
+
+    h += '<div class="inline-diag-panel" style="border:1px solid #e0d5c8;border-radius:10px;padding:16px;margin:8px 0;background:#fdfaf5">'
+    var hasNewData = params.total_answers !== undefined
+    h += '<div style="font-weight:700;margin-bottom:12px;font-size:15px;color:#4a3728">学情诊断: ' + escHtml(params.student_name || params.student_id || '') + (hasNewData ? ' <span style=\"font-size:10px;color:#2c6e49;background:#e0f2e0;padding:1px 6px;border-radius:4px\">V2</span>' : ' <span style=\"font-size:10px;color:#b43c28;background:#fef2f2;padding:1px 6px;border-radius:4px\">V1-无新数据</span>') + '</div>'
+
+    if (params.dominant_barrier) {
+      var domLabel = barrierLabels[params.dominant_barrier] || params.dominant_barrier
+      h += '<div style="margin-bottom:12px;font-size:13px;color:#666">主导障碍: <b style="color:#b43c28">' + escHtml(domLabel) + '</b> &middot; 完成练习: <b>' + (params.exercises_completed || 0) + '</b></div>'
+    }
+
+    // 学生列表（班级诊断时）
+    if (params.students && params.students.length) {
+      h += '<div style="font-size:12px;color:#888;margin-bottom:6px">共 ' + params.total_students + ' 名学生，显著障碍分布：</div>'
+    }
+
+    // CSS 柱状条 — 替代 ECharts
+    if (Object.keys(barrier).length && vals.length) {
+      var maxVal = isRawCount ? Math.max.apply(null, vals) : 1
+      Object.keys(barrier).forEach(function (k) {
+        var v = barrier[k] || 0
+        var pct = Math.round((v / maxVal) * 100)
+        var label = barrierLabels[k] || k
+        var color = barrierColors[k] || '#b43c28'
+        var displayVal = isRawCount ? v + '人' : Math.round(v * 100) + '%'
+        h += '<div class="diag-bar-wrap">'
+        h += '<span class="diag-bar-label">' + escHtml(label) + '</span>'
+        h += '<div class="diag-bar-track"><div class="diag-bar-fill" style="width:' + pct + '%;background:' + color + '"></div></div>'
+        h += '<span class="diag-bar-val" style="color:' + color + '">' + displayVal + '</span>'
+        h += '</div>'
+      })
+    }
+
+    // 答题统计
+    if (params.total_answers !== undefined) {
+      h += '<div style="margin-top:10px;border-top:1px solid #eee;padding-top:10px;display:flex;gap:16px;font-size:13px">'
+      h += '<div>答题总数: <b>' + params.total_answers + '</b></div>'
+      h += '<div>正确率: <b style="color:' + ((params.accuracy||0) >= 0.6 ? '#2c6e49' : '#b43c28') + '">' + Math.round((params.accuracy || 0) * 100) + '%</b></div>'
+      h += '</div>'
+    }
+
+    // 薄弱知识点
+    var wkps = params.weak_knowledge_points || []
+    if (wkps.length) {
+      h += '<div style="margin-top:8px;border-top:1px solid #eee;padding-top:8px">'
+      h += '<div style="font-size:12px;color:#888;margin-bottom:4px">薄弱知识点</div>'
+      h += '<div style="display:flex;flex-wrap:wrap;gap:4px">'
+      wkps.forEach(function(k) {
+        h += '<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;background:#fef2f2;color:#b43c28;border:1px solid #fecaca">' + escHtml(k.name) + ' ×' + k.errors + '</span>'
+      })
+      h += '</div></div>'
+    }
+
+    // 成绩趋势 — ECharts 折线图，和學生详情页一致
+    var trend = params.score_trend || []
+    if (trend.length) {
+      h += '<div style="margin-top:8px;border-top:1px solid #eee;padding-top:8px">'
+      h += '<div style="font-size:12px;color:#888;margin-bottom:4px">成绩趋势</div>'
+      h += '<div class="inline-trend-chart" style="width:100%;height:140px" data-trend=\'' + JSON.stringify(trend) + '\'></div>'
+      h += '</div>'
+    }
+
+    h += '<div style="margin-top:12px;border-top:1px solid #eee;padding-top:10px"><button onclick="ChemAI._diagToExam(this)" class="inline-exam-btn primary">针对障碍出题练习</button></div>'
+    h += '</div>'
+
+    bubble.insertAdjacentHTML('beforeend', h)
+
+    // ECharts 折线图 — 成绩趋势（和學生详情页一致）
+    var trendChartEl = bubble.querySelector('.inline-trend-chart')
+    if (trendChartEl && typeof echarts !== 'undefined' && trend.length) {
+      try {
+        var chart = echarts.init(trendChartEl)
+        var dates = trend.map(function(t) { return t.date || t.exam || '' })
+        var rates = trend.map(function(t) { return Math.round((t.cumulative_rate || t.rate || 0) * 100) })
+        chart.setOption({
+          grid: { top: 8, right: 8, bottom: 20, left: 36 },
+          xAxis: { type: 'category', data: dates, axisLabel: { fontSize: 10, color: '#999' } },
+          yAxis: { type: 'value', min: 0, max: 100, axisLabel: { fontSize: 10, color: '#999' } },
+          series: [{
+            type: 'line', data: rates,
+            lineStyle: { color: '#b43c28', width: 2 },
+            itemStyle: { color: '#b43c28' },
+            areaStyle: { color: 'rgba(180,60,40,0.06)' },
+            symbol: 'circle', symbolSize: 4
+          }]
+        })
+      } catch(e) {
+        trendChartEl.style.display = 'none'
+      }
+    }
   }
 
   window.ChemAI._diagToExam = function(btn){sendMessage('针对学习障碍出题练习')}
+
+  // ─── Inline Learning Plan Panel ───
+  function renderLearningPlanPanel(params, bubble) {
+    var plan = params.plan_data || {}
+    var h = '<style>'+
+      '.lp-panel{background:#f8fcf9;border:1px solid #c8e0d0;border-radius:10px;padding:16px;margin:8px 0}'+
+      '.lp-section{margin-top:10px;padding-top:10px;border-top:1px solid #e0ece0}'+
+      '.lp-section-label{font-size:12px;font-weight:600;color:#2c6e49;margin-bottom:6px}'+
+      '.lp-btn{display:inline-block;padding:6px 14px;border-radius:6px;font-size:12px;cursor:pointer;margin:2px;border:1px solid #ddd;background:#fff;color:#555;transition:all .15s}'+
+      '.lp-btn:hover{background:#f5f5f5}'+
+      '.lp-btn.primary{background:#2c6e49;color:#fff;border-color:#2c6e49;font-weight:600}'+
+      '.lp-btn.primary:hover{background:#1e4d32}'+
+      '.lp-btn.warn{background:#b43c28;color:#fff;border-color:#b43c28;font-weight:600}'+
+      '.lp-btn.warn:hover{background:#9a3522}'+
+      '.lp-edit-area{display:none;width:100%;min-height:200px;font-size:13px;font-family:inherit;padding:10px;border:1px solid #ddd;border-radius:6px;margin-top:8px;resize:vertical;box-sizing:border-box}'+
+      '</style>'
+
+    h += '<div class="lp-panel">'
+
+    // Header
+    var title = params.plan_title || plan.plan_title || '个性化学习计划'
+    h += '<div style="font-weight:700;font-size:15px;color:#2c6e49;margin-bottom:4px">'+escHtml(title)+'</div>'
+    h += '<div style="font-size:12px;color:#888">学生: '+escHtml(params.student_name||'') + (params.plan_period||plan.plan_period ? ' · 周期: '+escHtml(params.plan_period||plan.plan_period||'') : '')+'</div>'
+
+    // Content blocks
+    var weeks = params.weekly_goals || plan.weekly_goals || []
+    var tasks = params.daily_tasks || plan.daily_tasks || []
+    var barriers = params.barrier_interventions || plan.barrier_interventions || {}
+    var tips = params.motivation_tips || plan.motivation_tips || []
+
+    function lpContent() {
+      var c = ''
+      if (weeks.length) {
+        c += '<div class="lp-section"><div class="lp-section-label">🎯 周目标</div>'
+        weeks.forEach(function(w){ var g=typeof w==='string'?w:(w.milestone||w.goal||''); c+='<div style="padding:3px 0;font-size:13px;color:#444">• '+escHtml(g)+'</div>' })
+        c += '</div>'
+      }
+      if (tasks.length) {
+        c += '<div class="lp-section"><div class="lp-section-label">📅 每日任务</div>'
+        tasks.slice(0,14).forEach(function(t){ var d=t.day||'',tx=t.task||t.content||(typeof t==='string'?t:''); c+='<div style="padding:2px 0;font-size:13px;color:#444"><span style="font-family:JetBrains Mono;font-size:11px;color:#2c6e49">'+escHtml(d)+'</span> '+escHtml(tx)+'</div>' })
+        c += '</div>'
+      }
+      if (!Array.isArray(barriers) && typeof barriers==='object' && Object.keys(barriers).length) {
+        c += '<div class="lp-section"><div class="lp-section-label">🧠 障碍干预</div>'
+        var bl={concept:'概念理解',reading:'审题仔细',expression:'答题表述'}
+        Object.keys(barriers).forEach(function(b){ c+='<div style="padding:2px 0;font-size:13px;color:#444"><b>'+escHtml(bl[b]||b)+'</b>: '+escHtml(barriers[b])+'</div>' })
+        c += '</div>'
+      }
+      if (tips.length) {
+        c += '<div class="lp-section"><div class="lp-section-label">💡 激励建议</div>'
+        tips.forEach(function(t){ var tx=typeof t==='string'?t:(t.tip||t.text||''); c+='<div style="padding:2px 0;font-size:13px;color:#444">• '+escHtml(tx)+'</div>' })
+        c += '</div>'
+      }
+      return c
+    }
+
+    h += '<div class="lp-content">'+lpContent()+'</div>'
+    h += '<textarea class="lp-edit-area" id="lp-edit-'+Date.now()+'"></textarea>'
+
+    // Buttons
+    var sid = params.student_id || ''
+    var sname = params.student_name || ''
+    h += '<div class="lp-section">'
+    h += '<button class="lp-btn" onclick="ChemAI._editPlan(this)">✏ 修改</button>'
+    h += '<button class="lp-btn warn" onclick="ChemAI._sendPlan(this,\''+sid+'\',\''+escHtml(sname)+'\')" style="margin-left:8px">📤 发送给学生</button>'
+    h += '</div>'
+    h += '</div>'
+
+    bubble.insertAdjacentHTML('beforeend', h)
+  }
+
+  window.ChemAI._editPlan = function(btn) {
+    var panel = btn.closest('.lp-panel')
+    var content = panel.querySelector('.lp-content')
+    var editArea = panel.querySelector('.lp-edit-area')
+    if (editArea.style.display === 'block') {
+      editArea.style.display = 'none'
+      content.style.display = 'block'
+      btn.textContent = '✏ 修改'
+    } else {
+      // Populate edit area with content text
+      editArea.value = content.innerText || content.textContent || ''
+      editArea.style.display = 'block'
+      content.style.display = 'none'
+      btn.textContent = '✓ 完成修改'
+    }
+  }
+
+  window.ChemAI._sendPlan = function(btn, sid, sname) {
+    var panel = btn.closest('.lp-panel')
+    // Check if in edit mode
+    var editArea = panel.querySelector('.lp-edit-area')
+    var planText = editArea.style.display === 'block' ? editArea.value : (panel.querySelector('.lp-content').innerText || '')
+    btn.disabled = true; btn.textContent = '发送中...'
+    sendMessage('将以下学习方案发送给学生 '+sname+'（学号'+sid+'）：\n'+planText.substring(0,500))
+  }
 
   // ─── Inline Student List Panel ───
   function renderStudentList(params, bubble) {
@@ -1437,4 +1612,20 @@
       })
     })
   }
+
+  // ── 清理非教师对话 (m-/p- 前缀是学生/家长的) ──
+  setTimeout(function() {
+    var convs = getConversations()
+    var cleaned = convs.filter(function(c) {
+      var id = (c.id || c.thread_id || '') + ''
+      // 保留教师对话 (t- / c 前缀) 和无前缀的老对话, 删学生(m-)和家长(p-)
+      return !id.startsWith('m-') && !id.startsWith('p-')
+    })
+    if (cleaned.length < convs.length) {
+      saveConversations(cleaned)
+      refreshSidebarConvs()
+    }
+  }, 500)
+  // ── 初始化: 从服务端同步对话列表 ──
+  setTimeout(syncFromServer, 200)
 })()

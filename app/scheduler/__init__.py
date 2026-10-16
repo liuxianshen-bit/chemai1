@@ -27,10 +27,24 @@ def init_scheduler(app):
     # 每6小时检查一次预警
     scheduler.add_job(
         check_warnings_job,
-        CronTrigger(hour=0, minute=0),  # 每天凌晨检查
+        CronTrigger(hour=0, minute=0),
         id='check_warnings',
         name='学情预警检查',
         replace_existing=True
+    )
+
+    # OCR 答题卡轮询 (每5秒)
+    from app.scheduler.ocr_scheduler import process_pending_ocr_tasks
+    import asyncio as _asyncio
+    async def _ocr_wrapper():
+        await _asyncio.to_thread(process_pending_ocr_tasks)
+    scheduler.add_job(
+        _ocr_wrapper,
+        trigger='interval',
+        seconds=5,
+        id='ocr_processor',
+        name='OCR答题卡识别',
+        replace_existing=True,
     )
 
     scheduler.start()

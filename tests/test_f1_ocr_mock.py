@@ -280,7 +280,7 @@ for data, expected in file_type_detection_tests:
 # ==================== 6. 条件审核测试 ====================
 print("\n=== 6. 条件审核测试 ===")
 
-from hermes_skills.chemistry_exam.engine.balance_checker import ChemicalEquationAuditor
+from chem_skills.chemistry_exam.engine.balance_checker import ChemicalEquationAuditor
 
 auditor = ChemicalEquationAuditor()
 

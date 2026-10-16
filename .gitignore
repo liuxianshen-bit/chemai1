@@ -22,6 +22,7 @@ wheels/
 
 # Virtual environments
 venv/
+.venv/
 ENV/
 env/
 
@@ -68,3 +69,16 @@ data/sample_answer_sheets/
 .gstack/
 chemai.db-shm
 chemai.db-wal
+
+# Database (补全)
+*.db-journal
+
+# ChromaDB 向量库 — 本地生成，不入库
+data/chromadb/
+data/chromadb.bak-*/
+
+# Environment (补全)
+.env.*.local
+
+# Cache (补全)
+.cache/

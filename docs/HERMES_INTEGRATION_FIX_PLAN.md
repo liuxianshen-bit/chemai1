@@ -1,8 +1,8 @@
-# ChemAI Hermes Agent 集成修复计划
+# ChemAI ChemAI Agent 集成修复计划
 
 > 创建日期：2026-04-16
 > 项目：智辅化学 ChemAI
-> 目标：修复 Hermes Agent 与 hermes_skills 之间的架构断裂，建立完整工作流
+> 目标：修复 ChemAI Agent 与 chem_skills 之间的架构断裂，建立完整工作流
 
 ---
 
@@ -21,11 +21,11 @@
               │ 8642                                │ 8001
               ▼                                    ▼
 ┌─────────────────────────┐       ┌───────────────────────────────────┐
-│   Hermes Agent Main     │       │       FastAPI Backend              │
+│   ChemAI Agent Main     │       │       FastAPI Backend              │
 │   (hermes-agent-main)   │       │       (chemai-backend)              │
 │                         │       │                                   │
 │  - OpenAI兼容API        │       │  - REST API (OCR/出题/诊断等)       │
-│  - 内置Toolsets         │       │  - hermes_skills/ (独立存在)       │
+│  - 内置Toolsets         │       │  - chem_skills/ (独立存在)       │
 │  - SSE流式事件         │       │    - chemistry_parser              │
 │                         │       │    - chemistry_exam                │
 │  ⚠️ 未加载化学Skills   │       │    - chemistry_diagnosis           │
@@ -38,8 +38,8 @@
                                             │ (base_url:8000)
                                             │
                                   ┌─────────┴─────────────────────────┐
-                                  │        hermes_skills/              │
-                                  │   ⚠️ 未注册到 Hermes Agent        │
+                                  │        chem_skills/              │
+                                  │   ⚠️ 未注册到 ChemAI Agent        │
                                   └───────────────────────────────────┘
 ```
 
@@ -47,7 +47,7 @@
 
 | 问题 | 严重程度 | 说明 |
 |------|----------|------|
-| Skills未注册到Agent | 🔴 严重 | Hermes Agent无法调用化学Skills |
+| Skills未注册到Agent | 🔴 严重 | ChemAI Agent无法调用化学Skills |
 | Agent无化学Tool定义 | 🔴 严重 | 架构设计存在根本性断裂 |
 | 前后端工作流断连 | 🔴 严重 | 前端任务无法正确路由到Skills |
 | 学生端模块未对接 | 🟡 中等 | 部分功能（练习答题、学情报告）待对接 |
@@ -55,16 +55,16 @@
 
 ### 1.3 问题根因
 
-**Hermes Agent 的 Tool 注册机制**：
+**ChemAI Agent 的 Tool 注册机制**：
 
 1. `tools/registry.py` - 中心注册表，所有Tool在此注册
 2. `model_tools.py` - `_discover_tools()` 导入所有 tool 模块
 3. `toolsets.py` - 定义 `_HERMES_CORE_TOOLS` 和各平台toolset
 
 **当前状态**：
-- `hermes_skills/` 目录独立于 `hermes-agent-main/tools/` 之外
+- `chem_skills/` 目录独立于 `hermes-agent-main/tools/` 之外
 - Skills 继承 `BaseSkillHandler`，但**未调用 `registry.register()`**
-- Skills 无法被 Hermes Agent 的 ReAct 循环发现和调用
+- Skills 无法被 ChemAI Agent 的 ReAct 循环发现和调用
 
 ---
 
@@ -72,10 +72,10 @@
 
 ### 2.1 方案概述
 
-**核心思路**：将 `hermes_skills` 包装为 Hermes Agent 的标准 Tools，通过 `tools/chemistry_tools.py` 注册到 Agent。
+**核心思路**：将 `chem_skills` 包装为 ChemAI Agent 的标准 Tools，通过 `tools/chemistry_tools.py` 注册到 Agent。
 
 ```
-hermes_skills/                           hermes-agent-main/
+chem_skills/                           hermes-agent-main/
                                               │
 chemistry_parser/                       tools/
     ├── handler.py (原有)              chemistry_tools.py (新建)
@@ -89,7 +89,7 @@ chemistry_diagnosis/                       │ (注册所有化学Tool)
                                       model_tools.py
                                             │ _discover_tools()
                                             ▼
-                                      Hermes Agent (8642)
+                                      ChemAI Agent (8642)
                                             │
                                             ▼
                                       前端 hermes.js
@@ -97,7 +97,7 @@ chemistry_diagnosis/                       │ (注册所有化学Tool)
 
 ### 2.2 详细方案
 
-#### 阶段一：创建 Hermes Agent 化学工具模块
+#### 阶段一：创建 ChemAI Agent 化学工具模块
 
 **文件**：`D:\化学\hermes-agent-main\tools\chemistry_tools.py`
 
@@ -130,7 +130,7 @@ from typing import Dict, Any, List
 
 #### 阶段三：验证集成
 
-1. 启动 Hermes Agent API Server
+1. 启动 ChemAI Agent API Server
 2. 验证化学Tools可用
 3. 测试端到端工作流
 
@@ -152,8 +152,8 @@ from typing import Dict, Any, List
 
 ```python
 """
-Chemistry Tools for Hermes Agent
-包装 hermes_skills 中的化学领域Skills为Hermes标准Tools
+Chemistry Tools for ChemAI Agent
+包装 chem_skills 中的化学领域Skills为Hermes标准Tools
 """
 
 import sys
@@ -170,9 +170,9 @@ from tools.registry import registry
 
 # 导入 Skills
 try:
-    from hermes_skills.chemistry_parser.handler import ParserHandler
-    from hermes_skills.chemistry_exam.handler import ExamHandler
-    from hermes_skills.chemistry_diagnosis.handler import DiagnosisHandler
+    from chem_skills.chemistry_parser.handler import ParserHandler
+    from chem_skills.chemistry_exam.handler import ExamHandler
+    from chem_skills.chemistry_diagnosis.handler import DiagnosisHandler
     SKILLS_AVAILABLE = True
 except ImportError as e:
     SKILLS_AVAILABLE = False
@@ -263,9 +263,9 @@ registry.register(
 
 确保以下导入路径有效：
 ```python
-from hermes_skills.chemistry_parser.handler import ParserHandler
-from hermes_skills.chemistry_exam.handler import ExamHandler
-from hermes_skills.chemistry_diagnosis.handler import DiagnosisHandler
+from chem_skills.chemistry_parser.handler import ParserHandler
+from chem_skills.chemistry_exam.handler import ExamHandler
+from chem_skills.chemistry_diagnosis.handler import DiagnosisHandler
 ```
 
 ### Phase 2: 更新 Toolsets 配置 [预计 0.5 天]
@@ -320,7 +320,7 @@ _modules = [
 cd D:\化学\chemai-backend
 python -m app.main
 
-# 终端2: 启动 Hermes Agent API Server
+# 终端2: 启动 ChemAI Agent API Server
 cd D:\化学\hermes-agent-main
 python -m gateway.run --platform api_server
 ```
@@ -349,13 +349,13 @@ curl -X POST http://localhost:8642/v1/chat/completions \
 
 #### Step 4.1: 检查 hermes.js 适配
 
-前端 `hermes.js` 需要适配 Hermes Agent 的实际响应格式：
+前端 `hermes.js` 需要适配 ChemAI Agent 的实际响应格式：
 
 ```javascript
 // 当前设计
 hermesService.executeStream(TaskType.OCR_RECOGNIZE, {...})
 
-// 期望的 Hermes Agent 行为
+// 期望的 ChemAI Agent 行为
 // Agent 应能识别 Tool call: parse_pdf_questions
 // 并通过 SSE 返回 tool_call, tool_result, final 等事件
 ```
@@ -364,10 +364,10 @@ hermesService.executeStream(TaskType.OCR_RECOGNIZE, {...})
 
 | 测试场景 | 预期结果 |
 |----------|----------|
-| 教师上传PDF | Hermes Agent 调用 parse_pdf_questions |
-| AI出题请求 | Hermes Agent 调用 exam_generate |
-| 学情诊断请求 | Hermes Agent 调用 diagnosis_barrier_class |
-| 学习计划生成 | Hermes Agent 调用 diagnosis_plan_generate |
+| 教师上传PDF | ChemAI Agent 调用 parse_pdf_questions |
+| AI出题请求 | ChemAI Agent 调用 exam_generate |
+| 学情诊断请求 | ChemAI Agent 调用 diagnosis_barrier_class |
+| 学习计划生成 | ChemAI Agent 调用 diagnosis_plan_generate |
 
 ---
 
@@ -378,7 +378,7 @@ hermesService.executeStream(TaskType.OCR_RECOGNIZE, {...})
 如果不想修改 hermes-agent-main 核心代码，可以使用 MCP (Model Context Protocol) 集成：
 
 ```
-Hermes Agent (MCP Client)
+ChemAI Agent (MCP Client)
         │
         │ MCP Protocol
         ▼
@@ -386,12 +386,12 @@ chemai-backend/mcp_server.py (新建)
         │
         │ 内部调用
         ▼
-hermes_skills/
+chem_skills/
 ```
 
 **优点**：
 - 不修改 hermes-agent-main 核心代码
-- 保持 hermes_skills 独立性
+- 保持 chem_skills 独立性
 
 **缺点**：
 - 需要额外部署 MCP Server
@@ -399,11 +399,11 @@ hermes_skills/
 
 ### 方案C: 直接API调用
 
-前端不通过 Hermes Agent，直接调用 FastAPI 后端：
+前端不通过 ChemAI Agent，直接调用 FastAPI 后端：
 
 ```
-Frontend → FastAPI (8001) → hermes_skills
-          (无需 Hermes Agent)
+Frontend → FastAPI (8001) → chem_skills
+          (无需 ChemAI Agent)
 ```
 
 **优点**：
@@ -412,7 +412,7 @@ Frontend → FastAPI (8001) → hermes_skills
 
 **缺点**：
 - 失去 Agent 的 ReAct 推理能力
-- 无法享受 Hermes Agent 的流式输出和工具编排
+- 无法享受 ChemAI Agent 的流式输出和工具编排
 
 ---
 
@@ -431,7 +431,7 @@ Frontend → FastAPI (8001) → hermes_skills
 
 ### 6.1 集成成功标准
 
-- [ ] Hermes Agent 能成功调用至少 3 个化学Tools
+- [ ] ChemAI Agent 能成功调用至少 3 个化学Tools
 - [ ] 端到端测试：上传PDF → 解析 → 出题 → 完成
 - [ ] SSE流式事件正确返回到前端
 - [ ] 无Python导入错误或路径问题
@@ -439,7 +439,7 @@ Frontend → FastAPI (8001) → hermes_skills
 ### 6.2 性能标准
 
 - [ ] Tool调用响应时间 < 5秒（不含LLM推理时间）
-- [ ] Hermes Agent API Server 内存占用 < 500MB
+- [ ] ChemAI Agent API Server 内存占用 < 500MB
 
 ### 6.3 代码质量标准
 
@@ -483,13 +483,13 @@ Week 2:
 
 | 文件 | 路径 |
 |------|------|
-| Hermes Agent 主目录 | `D:\化学\hermes-agent-main` |
+| ChemAI Agent 主目录 | `D:\化学\hermes-agent-main` |
 | ChemAI Backend | `D:\化学\chemai-backend` |
-| Hermes Skills | `D:\化学\chemai-backend\hermes_skills` |
+| Chem Skills | `D:\化学\chemai-backend\chem_skills` |
 | chemistry_tools.py (待创建) | `D:\化学\hermes-agent-main\tools\chemistry_tools.py` |
 | 前端 Hermes Service | `D:\化学\chemai-backend\frontend\src\services\hermes.js` |
 
-### B. Hermes Agent API 参考
+### B. ChemAI Agent API 参考
 
 - API Server 启动：`python -m gateway.run --platform api_server`
 - 健康检查：`GET http://localhost:8642/health`

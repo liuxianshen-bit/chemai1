@@ -4,7 +4,7 @@
 2026-04-25
 
 ## 架构说明
-本系统集成 Hermes Agent，AI 分析类功能（障碍诊断、学习计划生成、报告生成、出题等）通过 `hermesService.execute(TaskType.xxx)` → Hermes Gateway 处理。本计划只补齐前端直接调用的 REST 数据 CRUD/检索端点。
+本系统集成 ChemAI Agent，AI 分析类功能（障碍诊断、学习计划生成、报告生成、出题等）通过 `hermesService.execute(TaskType.xxx)` → Hermes Gateway 处理。本计划只补齐前端直接调用的 REST 数据 CRUD/检索端点。
 
 ## 修改内容
 

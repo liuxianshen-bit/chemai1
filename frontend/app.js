@@ -44,7 +44,7 @@
     if (active === 'chat') {
       // Chat page: conversation history + compact manual nav
       var convs = []
-      try { convs = JSON.parse(localStorage.getItem('chemai_convs') || '[]') } catch(e) {}
+      try { convs = JSON.parse(sessionStorage.getItem('chemai_convs') || '[]') } catch(e) {}
       convs.sort(function(a, b) { return (b.updated || 0) - (a.updated || 0) })
 
       if (convs.length) {
@@ -57,7 +57,7 @@
         })
         html += '</div>'
       } else {
-        html += '<div style="padding:20px 12px;text-align:center;color:#999;font-size:13px;font-family:\'IBM Plex Sans\',sans-serif">暂无对话记录</div>'
+        html += '<div style="flex:1;overflow-y:auto;padding:0 4px" id="conv-list"><div style="padding:20px 12px;text-align:center;color:#999;font-size:13px;font-family:\'IBM Plex Sans\',sans-serif">暂无对话记录</div></div>'
       }
 
       // Compact manual nav — 5 icon buttons

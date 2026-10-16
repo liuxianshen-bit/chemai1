@@ -37,7 +37,7 @@ class DocumentParseService:
     def _try_init_mineru(self):
         """尝试初始化MinerU客户端"""
         try:
-            from hermes_skills.chemistry_parser.mineru_client import get_mineru_client
+            from chem_skills.chemistry_parser.mineru_client import get_mineru_client
             return get_mineru_client()
         except Exception as e:
             print(f"[MinerU] Init failed: {e}")

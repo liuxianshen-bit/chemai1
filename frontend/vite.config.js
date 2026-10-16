@@ -9,7 +9,8 @@ export default defineConfig({
       main: 'index.html',
       login: 'login.html',
       ocr: 'pages/ocr.html',
-      exam: 'pages/exam.html',
+      'ocr-sheets': 'pages/ocr-sheets.html',
+      exam: 'pages/exam-v2.html',
       diagnosis: 'pages/diagnosis.html',
       students: 'pages/students.html',
     }
@@ -18,7 +19,7 @@ export default defineConfig({
     port: 3000,
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        target: 'http://localhost:8001',
         changeOrigin: true
       }
     }

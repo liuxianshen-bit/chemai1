@@ -48,7 +48,7 @@ tr = TestResult()
 # ==================== 1. 服务状态检测 ====================
 print("\n=== 1. 服务状态检测 ===")
 
-from hermes_skills.chemistry_parser import get_services_status
+from chem_skills.chemistry_parser import get_services_status
 
 status = get_services_status()
 print(f"  OCR服务: {'可用' if status['ocr']['available'] else '不可用'} ({status['ocr']['provider']})")
@@ -64,7 +64,7 @@ tr.add("服务状态检测", all([
 # ==================== 2. 文件类型检测 ====================
 print("\n=== 2. 文件类型检测 ===")
 
-from hermes_skills.chemistry_parser import ParserHandler
+from chem_skills.chemistry_parser import ParserHandler
 handler = ParserHandler()
 
 file_type_tests = [

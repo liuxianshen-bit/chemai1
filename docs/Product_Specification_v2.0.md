@@ -9,7 +9,7 @@
 | 产品名称 | 智辅化学 Agent (ChemAI Agent) |
 | 版本 | v2.0 |
 | 更新日期 | 2026-04-14 |
-| 核心定位 | 基于 Hermes Agent + MinerU 的高中化学智能教学闭环 |
+| 核心定位 | 基于 ChemAI Agent + MinerU 的高中化学智能教学闭环 |
 
 ---
 
@@ -37,7 +37,7 @@ ChemAI Agent 是一款面向高中化学教师和学生的 **AI Agent 驱动** �
 │                     ChemAI Agent 系统架构                        │
 ├─────────────────────────────────────────────────────────────────┤
 │  ┌─────────────────────────────────────────────────────────┐    │
-│  │                   Hermes Agent (大脑)                     │    │
+│  │                   ChemAI Agent (大脑)                     │    │
 │  │   ┌──────────┐  ┌──────────┐  ┌──────────┐           │    │
 │  │   │ Memory   │  │ Skills   │  │ Tools    │           │    │
 │  │   │ System   │  │ Hub      │  │ Registry │           │    │
@@ -76,7 +76,7 @@ ChemAI Agent 是一款面向高中化学教师和学生的 **AI Agent 驱动** �
 
 | 技术 | 选型 | 亮点说明 |
 |------|------|---------|
-| **Hermes Agent** | NousResearch 开源 | 79k+ GitHub stars，自主学习循环，记忆系统，FTS5向量检索 |
+| **ChemAI Agent** | NousResearch 开源 | 79k+ GitHub stars，自主学习循环，记忆系统，FTS5向量检索 |
 | **MinerU** | OpenDataLab 开源 | 公式→LaTeX 精准转换，PDF/DOCX 全格式解析，VLM+OCR 双引擎 |
 | **LLM** | 通义千问 + ChatGLM | 国产大模型，化学术语理解强，成本低 |
 | **向量数据库** | Chroma | 本地部署，¥0成本，支持化学式语义检索 |
@@ -91,7 +91,7 @@ ChemAI Agent 是一款面向高中化学教师和学生的 **AI Agent 驱动** �
 | 功能模块 | 功能点 | 传统软件 | ChemAI Agent | 亮点 |
 |---------|--------|---------|-------------|------|
 | **F1: OCR识别** | 答题卡识别 | 通用OCR | 智普OCR + MinerU 双引擎 | 化学术语识别增强 |
-| **F2: AI出题** | 题目生成 | 仅选择题 | **全题型**（选择/填空/问答/计算） | Hermes Skill 驱动 |
+| **F2: AI出题** | 题目生成 | 仅选择题 | **全题型**（选择/填空/问答/计算） | Chem Skill 驱动 |
 | **F2: AI出题** | 安全审核 | AI单审 | **AI预审 + 人工二审** | 化学方程式零错误 |
 | **F2: AI出题** | 历年真题 | 手动检索 | MinerU **智能提取** + 关联 | PDF 原题解析 |
 | **F3: 错题报告** | 老师版报告 | 静态模板 | AI **动态生成** | 干预建议个性化 |
@@ -243,7 +243,7 @@ AI 预标注（知识点 + 难度）
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### 2.6 Hermes Agent 自主学习循环（核心亮点）
+### 2.6 ChemAI Agent 自主学习循环（核心亮点）
 
 #### 2.6.1 自改进架构
 
@@ -277,11 +277,11 @@ AI 预标注（知识点 + 难度）
 
 ## 三、技术架构
 
-### 3.1 Hermes Agent 集成架构
+### 3.1 ChemAI Agent 集成架构
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                      Hermes Agent                                 │
+│                      ChemAI Agent                                 │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐           │
 │  │  Memory     │  │  Skills      │  │  Tools       │           │
 │  │  System     │  │  Hub         │  │  Registry    │           │
@@ -356,7 +356,7 @@ async def parse_exam_pdf(file_path: str):
 │         ┌─────────┴─────────┐                               │
 │         ↓                   ↓                               │
 │  ┌───────────────┐  ┌───────────────┐                      │
-│  │  ChemAI API    │  │  Hermes Agent │                      │
+│  │  ChemAI API    │  │  ChemAI Agent │                      │
 │  │  (FastAPI)    │  │  (主控制器)   │                      │
 │  └───────┬───────┘  └───────┬───────┘                      │
 │          │                  │                               │
@@ -424,7 +424,7 @@ async def parse_exam_pdf(file_path: str):
 | 版本 | 阶段 | 主要功能 | 预计时间 |
 |------|------|---------|---------|
 | v1.0 | 已上线 | 基础出题 + OCR + 错题报告 | 2026-Q1 |
-| **v2.0** | **本次规划** | **全题型 + MinerU + Hermes Agent** | **2026-Q2** |
+| **v2.0** | **本次规划** | **全题型 + MinerU + ChemAI Agent** | **2026-Q2** |
 | v2.1 | 迭代 | 自改进循环上线 | 2026-Q3 |
 | v3.0 | 规划 | 多 Agent 协作 + 学生端 Agent | 2026-Q4 |
 
@@ -434,7 +434,7 @@ async def parse_exam_pdf(file_path: str):
 
 ### 7.1 参考资料
 
-- [Hermes Agent (NousResearch)](https://github.com/NousResearch/Hermes)
+- [ChemAI Agent (NousResearch)](https://github.com/NousResearch/Hermes)
 - [MinerU (OpenDataLab)](https://github.com/opendatalab/MinerU)
 - [ChemAI PRD v1.0](./高中化学AI辅助教学工具_PRD_v1.0_完整版.md)
 - [Phase 1 详细设计](./Phase1_Agent_Skill_Design.md)
@@ -443,10 +443,10 @@ async def parse_exam_pdf(file_path: str):
 
 | 术语 | 说明 |
 |------|------|
-| Hermes Agent | NousResearch 开源的 AI Agent 框架，具备记忆系统和 Skills 系统 |
+| ChemAI Agent | NousResearch 开源的 AI Agent 框架，具备记忆系统和 Skills 系统 |
 | MinerU | 高精度文档解析引擎，支持公式识别和 PDF 解析 |
 | LaTeX | 一种排版系统，用于标准化化学式表达 |
-| Skill | Hermes Agent 的能力模块，包含 SOUL.md、tools.yaml、handler.py |
+| Skill | ChemAI Agent 的能力模块，包含 SOUL.md、tools.yaml、handler.py |
 | FTS5 | SQLite 的全文搜索索引，用于快速检索 |
 | 自改进循环 | Agent 从教学数据中学习，自动优化出题策略 |
 

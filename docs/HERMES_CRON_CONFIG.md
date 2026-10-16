@@ -1,8 +1,8 @@
-# ChemAI × Hermes Agent Cron 配置指南
+# ChemAI × ChemAI Agent Cron 配置指南
 
 ## Cron 任务配置命令
 
-在 Hermes Agent 中使用以下命令配置定时任务：
+在 ChemAI Agent 中使用以下命令配置定时任务：
 
 ---
 

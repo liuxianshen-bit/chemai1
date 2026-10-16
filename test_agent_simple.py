@@ -66,7 +66,7 @@ tr = TestResult()
 # ==================== 1. Chemistry Exam Handler 测试 ====================
 print("\n=== 1. Chemistry Exam Handler Tests ===")
 
-from hermes_skills.chemistry_exam.engine.balance_checker import ChemicalEquationAuditor
+from chem_skills.chemistry_exam.engine.balance_checker import ChemicalEquationAuditor
 auditor = ChemicalEquationAuditor()
 
 # 配平检测测试
@@ -99,7 +99,7 @@ print(f"\n  Balance Check: {balance_pass}/{len(balance_tests)}")
 tr.add("BalanceCheck_Engine", balance_pass == len(balance_tests), f"{balance_pass}/{len(balance_tests)}")
 
 # ExamHandler API调用测试
-from hermes_skills.chemistry_exam.handler import ExamHandler
+from chem_skills.chemistry_exam.handler import ExamHandler
 handler = ExamHandler()
 
 # 测试 exam_audit
@@ -115,7 +115,7 @@ except Exception as e:
 # ==================== 2. Chemistry Parser Handler 测试 ====================
 print("\n=== 2. Chemistry Parser Handler Tests ===")
 
-from hermes_skills.chemistry_parser.handler import ParserHandler
+from chem_skills.chemistry_parser.handler import ParserHandler
 parser_handler = ParserHandler()
 
 # 化学式标准化测试
@@ -161,7 +161,7 @@ for text, expected_type in classify_tests:
 print(f"\n  Question Classification: {classify_pass}/{len(classify_tests)}")
 
 # MinerU状态测试
-from hermes_skills.chemistry_parser.handler import get_mineru_status
+from chem_skills.chemistry_parser.handler import get_mineru_status
 status = get_mineru_status()
 available = status.get("mineru_available", False)
 print(f"\n  MinerU Status: {'Available' if available else 'Not Available'}")
@@ -235,7 +235,7 @@ modules_to_check = [
 for module_name, functions in modules_to_check:
     print(f"\n  [{module_name}]")
     try:
-        module = __import__(f"hermes_skills.{module_name}.handler", fromlist=functions)
+        module = __import__(f"chem_skills.{module_name}.handler", fromlist=functions)
         for func_name in functions:
             if hasattr(module, func_name):
                 print(f"    PASS {func_name}")

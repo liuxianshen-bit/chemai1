@@ -35,12 +35,8 @@ async def get_store():
         await _store.setup()
     return _store
 
-# ── 铁律：全局化学式渲染 — 所有 JSON 响应中的化学式自动转 Unicode 下标/上标 ──
-from app.utils.chem_render import render_chem_deep
-_original_json_render = JSONResponse.render
-def _patched_render(self, content):
-    return _original_json_render(self, render_chem_deep(content))
-JSONResponse.render = _patched_render
+# ── 化学式渲染中间件 — 所有 JSON 响应中的化学式自动转 Unicode 下标/上标 ──
+from app.middleware.chem_render import ChemRenderMiddleware
 
 # API路由
 from app.api import ocr, exam, question, diagnosis, report, practice, panel, auth, user, class_api, exam_bank, memory, school, grade, teacher_application, log, parent, review, warning, analytics, integration, notification, knowledge
@@ -67,8 +63,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 化学式 Unicode 渲染 — 所有 JSON 响应中自动转换下标/上标
+app.add_middleware(ChemRenderMiddleware)
+
 # 无需认证的路径
-PUBLIC_PREFIXES = ["/api/auth/", "/api/agent/", "/api/ocr/", "/api/classes", "/docs", "/redoc", "/openapi.json", "/health", "/api/knowledge/", "/api/exam-bank/", "/api/question/"]
+PUBLIC_PREFIXES = ["/api/auth/", "/api/agent/", "/api/ocr/", "/api/classes", "/api/parent/", "/docs", "/redoc", "/openapi.json", "/health", "/api/knowledge/", "/api/exam-bank/", "/api/question/"]
 PUBLIC_EXTENSIONS = {".html", ".js", ".css", ".png", ".ico", ".svg", ".woff2"}
 
 @app.middleware("http")
@@ -104,6 +103,8 @@ app.include_router(question.router, prefix="/api/question", tags=["题目管理"
 app.include_router(diagnosis.router, prefix="/api/diagnosis", tags=["障碍诊断"])
 app.include_router(report.router, prefix="/api/report", tags=["报告生成"])
 app.include_router(practice.router, prefix="/api/practice", tags=["自适应练习"])
+from app.api import practice_wrong
+app.include_router(practice_wrong.router, prefix="/api/practice", tags=["错题复习"])
 app.include_router(panel.router, prefix="/api/panel", tags=["学情面板"])
 app.include_router(exam_bank.router, prefix="/api/exam-bank", tags=["真题库管理"])
 app.include_router(memory.router, prefix="/api/memory", tags=["学情记忆"])
@@ -125,9 +126,28 @@ app.include_router(knowledge.router, prefix="/api/knowledge", tags=["知识卡�
 from agent.channel.fastapi_sse import router as agent_router
 app.include_router(agent_router, prefix="/api/agent", tags=["AI Agent"])
 
+# Answer sheet OCR + grading
+from app.api import ocr_sheets, grading
+app.include_router(ocr_sheets.router, prefix="/api/ocr", tags=["答题卡批改"])
+app.include_router(grading.router, prefix="/api/grading", tags=["答题卡批改"])
+
 # ChemAgent (LangGraph ReAct agent)
 from agent.channel.langgraph_channel import router as langgraph_router
 app.include_router(langgraph_router, prefix="/api/agent", tags=["AI Agent (LangGraph)"])
+
+# ── Conversation management routes (registered directly on app) ──
+from agent.channel.conversation import (
+    _extract_msg_role_content,
+    _extract_messages,
+    list_conversations,
+    get_conversation_history,
+    new_conversation,
+    delete_conversation,
+)
+app.get("/api/agent/chat/conversations", tags=["对话管理"])(list_conversations)
+app.get("/api/agent/chat/history/{thread_id}", tags=["对话管理"])(get_conversation_history)
+app.post("/api/agent/chat/new", tags=["对话管理"])(new_conversation)
+app.delete("/api/agent/chat/conversations/{thread_id}", tags=["对话管理"])(delete_conversation)
 
 
 def _nocache_file(path, **kw):
@@ -273,6 +293,17 @@ async def startup_event():
     Base.metadata.create_all(bind=engine)
     print("数据库表已创建/验证")
 
+    # Debug: print all agent routes
+    print("=== Registered agent routes ===")
+    for route in app.routes:
+        if hasattr(route, 'routes'):
+            for sr in route.routes:
+                sp = getattr(sr, 'path', None)
+                sm = getattr(sr, 'methods', None)
+                if sp and '/agent/' in sp:
+                    print(f"  {sm} {sp}")
+    print("=== End agent routes ===")
+
     from app.utils.init_db import init_database
     init_database()
 
@@ -322,4 +353,4 @@ async def shutdown_event():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8001, reload=True)
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)

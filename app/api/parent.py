@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
 import hashlib
+import json
 import uuid
 
 from sqlalchemy.orm import Session
@@ -50,6 +51,7 @@ class BindStudentRequest(BaseModel):
     """绑定学生请求"""
     student_id: str
     bind_code: str
+    parent_id: str = ""
     relation: str = "家长"  # 父亲/母亲/其他
 
 
@@ -166,9 +168,16 @@ async def login_parent(
     if not parent:
         raise HTTPException(status_code=404, detail="家长信息不存在")
 
+    # 生成 JWT token
+    from app.middleware.auth import create_access_token, create_refresh_token
+    token = create_access_token(parent.parent_id, "parent")
+    refresh_token = create_refresh_token(parent.parent_id)
+
     return {
         "success": True,
         "message": "登录成功",
+        "token": token,
+        "refresh_token": refresh_token,
         "parent_id": parent.parent_id,
         "name": parent.name,
         "role": "parent"
@@ -212,13 +221,16 @@ async def bind_student(
     db: Session = Depends(get_db)
 ):
     """绑定学生（通过绑定码）"""
+    if not data.parent_id:
+        raise HTTPException(status_code=400, detail="缺少parent_id")
+
     # 查找学生
     student = db.query(Student).filter(Student.student_id == data.student_id).first()
     if not student:
         raise HTTPException(status_code=404, detail="学生不存在")
 
     # 验证绑定码
-    if student.bind_code != data.bind_code:
+    if not student.bind_code or student.bind_code != data.bind_code:
         raise HTTPException(status_code=400, detail="绑定码错误")
 
     # 检查是否已经绑定
@@ -397,9 +409,71 @@ async def get_child_weekly(
         ParentNotification.created_at >= week_start
     ).all()
 
-    # 计算本周练习情况
-    practice_count = len([n for n in weekly_notifications if n.type == "daily_report"])
-    practice_completed = len([n for n in weekly_notifications if n.type == "daily_report" and n.is_read])
+    # 计算本周真实数据
+    total_answers = 0
+    correct_answers = 0
+    kp_error_count = {}
+
+    try:
+        week_answers = db.query(StudentAnswer).filter(
+            StudentAnswer.student_id == student_id,
+            StudentAnswer.answered_at >= week_start
+        ).all()
+
+        for ans in week_answers:
+            total_answers += 1
+            if ans.is_correct:
+                correct_answers += 1
+            else:
+                # 统计错题知识点
+                q = db.query(Question).filter(Question.question_id == ans.question_id).first()
+                if q and q.knowledge_points:
+                    for kp in q.knowledge_points:
+                        kp_error_count[kp] = kp_error_count.get(kp, 0) + 1
+    except Exception:
+        pass
+
+    accuracy_rate = round(correct_answers / total_answers, 2) if total_answers > 0 else 0
+    weak_kps = [kp for kp, _ in sorted(kp_error_count.items(), key=lambda x: -x[1])[:5]]
+    if not weak_kps:
+        weak_kps = ["暂无薄弱知识点数据"]
+
+    # 计算连续练习天数
+    streak_days = 0
+    try:
+        answers_by_date = db.query(StudentAnswer).filter(
+            StudentAnswer.student_id == student_id
+        ).order_by(StudentAnswer.answered_at.desc()).all()
+        if answers_by_date:
+            current_date = datetime.utcnow().date()
+            streak_set = set()
+            for ans in answers_by_date:
+                if ans.answered_at:
+                    d = ans.answered_at.date() if hasattr(ans.answered_at, 'date') else ans.answered_at
+                    if hasattr(d, 'date'):
+                        d = d.date()
+                    streak_set.add(d)
+            # Count consecutive days from today backwards
+            check_date = current_date
+            while check_date in streak_set:
+                streak_days += 1
+                check_date -= timedelta(days=1)
+            # If no activity today but had activity yesterday, count from yesterday
+            if streak_days == 0 and answers_by_date:
+                first_date = answers_by_date[0].answered_at
+                if hasattr(first_date, 'date'):
+                    first_date = first_date.date()
+                elif hasattr(first_date, 'date'):
+                    first_date = first_date.date()
+                if isinstance(first_date, (datetime,)):
+                    if hasattr(first_date, 'date'):
+                        first_date = first_date.date()
+            if streak_days == 0:
+                streak_days = 1  # at least 1 if they did anything this week
+    except Exception:
+        streak_days = 0
+
+    practice_count = total_answers
 
     return {
         "success": True,
@@ -409,11 +483,11 @@ async def get_child_weekly(
             week_start=week_start.strftime("%Y-%m-%d"),
             week_end=datetime.utcnow().strftime("%Y-%m-%d"),
             practice_count=practice_count,
-            practice_completed=practice_completed,
-            accuracy_rate=0.85,  # TODO: 实际计算
-            weak_knowledge_points=["盐类水解", "电离平衡"],  # TODO: 实际获取
-            barrier_type=student.barrier_type.get("concept", 0.33) if student.barrier_type else "未知",
-            streak_days=student.exercises_completed % 30  # TODO: 实际计算连续天数
+            practice_completed=correct_answers,
+            accuracy_rate=accuracy_rate,
+            weak_knowledge_points=weak_kps,
+            barrier_type=str(student.barrier_type.get("concept", 0.33)) if student.barrier_type else "未知",
+            streak_days=streak_days
         ).model_dump()
     }
 
@@ -468,3 +542,92 @@ async def create_notification(
         "success": True,
         "notification_id": notification.notification_id
     }
+
+
+# ── 教师推送报告给家长 ──
+
+class SendReportRequest(BaseModel):
+    report: Optional[str] = None
+
+@router.post("/send-report/{student_id}")
+async def teacher_send_report(
+    student_id: str,
+    request: SendReportRequest,
+    db: Session = Depends(get_db)
+):
+    """教师端推送学习报告给家长。查绑定家长 → 写通知。"""
+    student = db.query(Student).filter(Student.student_id == student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="学生不存在")
+
+    bindings = db.query(StudentParentBinding).filter(
+        StudentParentBinding.student_id == student_id,
+        StudentParentBinding.status == "active"
+    ).all()
+    if not bindings:
+        return {"success": False, "message": "该学生未绑定家长，无法发送"}
+
+    report_content = request.report or "{}"
+    sent = []
+    for b in bindings:
+        parent = db.query(Parent).filter(Parent.parent_id == b.parent_id).first()
+        if not parent:
+            continue
+        db.add(ParentNotification(
+            notification_id=f"tr_{student_id}_{b.parent_id}_{int(datetime.utcnow().timestamp())}",
+            parent_id=b.parent_id, student_id=student_id,
+            type="weekly_report",
+            title=f"📋 {student.name} 的学习报告",
+            content=report_content,
+            is_read=False, sent_at=datetime.utcnow(),
+        ))
+        sent.append(parent.name)
+        db.commit()
+
+    return {
+        "success": True,
+        "message": f"学习报告已发送给 {len(sent)} 位家长",
+        "student_name": student.name,
+        "parent_names": sent,
+    }
+
+
+# ── AI 报告摘要 ──
+
+class AISummaryRequest(BaseModel):
+    section: str
+    data: dict
+
+@router.post("/child/{student_id}/report/ai-summary")
+async def ai_summary(
+    student_id: str,
+    request: AISummaryRequest,
+    db: Session = Depends(get_db)
+):
+    """对报告某个板块做 AI 摘要，返回 2-3 句通俗总结。"""
+    from app.services.llm_service import llm_service
+
+    section_labels = {
+        "overview": "学习概览（练习量、正确率）",
+        "trends": "进步趋势（本周vs上周对比）",
+        "knowledge_points": "知识点掌握情况",
+        "barrier": "学习特点分析",
+        "suggestions": "家庭配合建议",
+    }
+    section_name = section_labels.get(request.section, request.section)
+
+    prompt = f"""你是 ChemAI 家长助手。用 2-3 句通俗中文总结以下数据。语气鼓励、不制造焦虑。40-55岁家长能看懂。
+
+板块: {section_name}
+数据: {json.dumps(request.data, ensure_ascii=False)}
+
+要求: 不超过 100 字，先说结论再给建议。"""
+
+    result = llm_service.generate_text(prompt, max_tokens=256, temperature=0.7)
+    if result.get("success") and result.get("content", "").strip():
+        return {"success": True, "summary": result["content"].strip()}
+    # 重试
+    result = llm_service.generate_text(prompt, max_tokens=256, temperature=0.7, provider="deepseek")
+    if result.get("success") and result.get("content", "").strip():
+        return {"success": True, "summary": result["content"].strip()}
+    return {"success": False, "summary": "服务暂不可用，请稍后重试"}

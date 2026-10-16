@@ -87,6 +87,7 @@ class Student(Base):
     exercises_completed = Column(Integer, default=0)
     last_exercise_at = Column(DateTime, nullable=True)
     bind_code = Column(String(64), nullable=True)  # 家长绑定码
+    current_plan = Column(JSON, nullable=True)  # 当前学习计划 {plan_title, daily_tasks, ...}
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -523,6 +524,16 @@ def get_db():
         yield db
     finally:
         db.close()
+
+class LearningPlanHistory(Base):
+    """学习计划历史记录"""
+    __tablename__ = "learning_plan_history"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    student_id = Column(String(64), ForeignKey("students.student_id"), nullable=False)
+    plan_title = Column(String(256), nullable=False)
+    plan_data = Column(JSON, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
 
 def init_db(database_url: str = "sqlite:///./chemai.db"):
     """初始化数据库（创建所有表）"""
