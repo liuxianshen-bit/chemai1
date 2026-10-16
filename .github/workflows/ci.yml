@@ -2,9 +2,9 @@ name: ChemAI CI
 
 on:
   push:
-    branches: [master, single-agent-v2, agent-prompt-restructure]
+    branches: [main, master, single-agent-v2, agent-prompt-restructure]
   pull_request:
-    branches: [master]
+    branches: [main, master]
 
 jobs:
   # ── Deterministic evals (fast, no API key needed) ──
